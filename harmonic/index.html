@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مدرسة الهارمونيك — أكاديمية الحيتان</title>
+<meta name="description" content="حمّل كتاب مدرسة الهارمونيك مجانًا — الكتاب اللي غيّر طريقة تداول آلاف المتداولين العرب">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Changa:wght@400;500;600;700;800&family=Almarai:wght@300;400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050507;
+  --bg2:#0A0B10;
+  --bg3:#111218;
+  --card:#0E0F16;
+  --accent:#6C5CE7;
+  --accent2:#A29BFE;
+  --accent3:#DCD6FF;
+  --blue:#00B4D8;
+  --blue2:#48CAE4;
+  --green:#00F5A0;
+  --green2:#00D68F;
+  --gold:#FFD93D;
+  --red:#FF6B6B;
+  --w:#F8F9FA;
+  --w80:rgba(248,249,250,0.8);
+  --w50:rgba(248,249,250,0.5);
+  --w30:rgba(248,249,250,0.28);
+  --w10:rgba(248,249,250,0.08);
+  --w05:rgba(248,249,250,0.04);
+  --glow:0 0 60px rgba(108,92,231,0.15);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:'Almarai',sans-serif;background:var(--bg);color:var(--w);overflow-x:hidden;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,.heading{font-family:'Changa',sans-serif}
+
+/* ===== BG ===== */
+.page-bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+.page-bg::before{
+  content:'';position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%,rgba(108,92,231,0.06),transparent 60%),
+    radial-gradient(ellipse 50% 40% at 0% 50%,rgba(0,180,216,0.03),transparent),
+    radial-gradient(ellipse 40% 30% at 100% 80%,rgba(0,245,160,0.02),transparent);
+}
+.grain{
+  position:absolute;inset:0;opacity:0.35;
+  background:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+}
+
+/* ===== NAV ===== */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  padding:11px 20px;
+  display:flex;justify-content:space-between;align-items:center;
+  background:rgba(5,5,7,0.82);backdrop-filter:blur(30px) saturate(1.5);
+  border-bottom:1px solid var(--w05);
+}
+.nav-brand{display:flex;align-items:center;gap:9px}
+.nav-wh{width:30px;height:30px}
+.nav-t{font-family:'Changa',sans-serif;font-size:0.85rem;font-weight:700}
+.nav-t small{display:block;font-size:0.48rem;font-weight:400;color:var(--accent2);letter-spacing:3px}
+.nav-btn{
+  font-size:0.68rem;padding:6px 16px;font-family:'Changa',sans-serif;font-weight:600;
+  color:#fff;background:var(--accent);border:none;border-radius:50px;
+  cursor:pointer;text-decoration:none;transition:all 0.3s;
+}
+.nav-btn:hover{background:var(--accent2);color:var(--bg)}
+
+/* ===== URGENCY TOP ===== */
+.urg{
+  position:relative;z-index:1;margin-top:48px;
+  background:linear-gradient(90deg,rgba(255,107,107,0.03),rgba(255,107,107,0.08),rgba(255,107,107,0.03));
+  padding:9px 20px;display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;
+  border-bottom:1px solid rgba(255,107,107,0.06);
+}
+.urg span{font-size:0.78rem;font-weight:500}
+.urg-timer{display:flex;gap:4px}
+.urg-u{background:rgba(255,107,107,0.08);border-radius:5px;padding:3px 7px;min-width:36px;text-align:center}
+.urg-u .n{font-size:0.9rem;font-weight:800;color:var(--red);font-family:'Changa'}
+.urg-u .l{font-size:0.48rem;color:var(--w30)}
+
+/* ===== SECTIONS ===== */
+.sec{position:relative;z-index:1;padding:80px 20px}
+.sec-in{max-width:1040px;margin:0 auto;width:100%}
+
+/* ===== HERO ===== */
+.hero{min-height:100vh;display:flex;align-items:center;padding-top:70px}
+.hero-grid{display:grid;grid-template-columns:1.2fr 0.8fr;gap:44px;align-items:center}
+
+.hero-text .ri{opacity:0;transform:translateY(20px);animation:ru 0.7s ease-out forwards}
+.ri:nth-child(1){animation-delay:.1s}.ri:nth-child(2){animation-delay:.25s}
+.ri:nth-child(3){animation-delay:.4s}.ri:nth-child(4){animation-delay:.55s}
+.ri:nth-child(5){animation-delay:.7s}.ri:nth-child(6){animation-delay:.85s}
+
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:0.65rem;font-weight:600;font-family:'Changa';
+  color:var(--green);padding:5px 14px;
+  background:rgba(0,245,160,0.06);border:1px solid rgba(0,245,160,0.1);
+  border-radius:50px;margin-bottom:14px;
+}
+.pill-dot{width:6px;height:6px;background:var(--green);border-radius:50%;animation:pulse 1.5s infinite}
+
+.hero-h{
+  font-size:clamp(1.65rem,4.2vw,2.9rem);
+  font-weight:800;line-height:1.35;margin-bottom:14px;
+  letter-spacing:-0.3px;
+}
+.hero-h .highlight{
+  position:relative;display:inline;
+  background:linear-gradient(135deg,var(--accent),var(--blue));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.hero-h .underline-glow{
+  text-decoration:underline;text-decoration-color:var(--accent);
+  text-underline-offset:4px;text-decoration-thickness:3px;
+}
+
+.hero-sub{
+  font-size:1.05rem;line-height:1.85;color:var(--w50);
+  margin-bottom:22px;max-width:460px;
+}
+.hero-sub strong{color:var(--w80);font-weight:700}
+
+.hero-bullets{display:flex;flex-direction:column;gap:8px;margin-bottom:22px}
+.hb{display:flex;align-items:center;gap:8px;font-size:0.88rem;color:var(--w80)}
+.hb-check{color:var(--green);font-size:0.7rem;flex-shrink:0}
+
+/* FOMO bar */
+.fomo{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;background:var(--w05);
+  border:1px solid var(--w10);border-radius:10px;
+  margin-bottom:16px;
+}
+.fomo-avatars{display:flex}
+.fomo-av{
+  width:24px;height:24px;border-radius:50%;border:2px solid var(--bg);
+  margin-left:-6px;font-size:0.48rem;font-weight:700;color:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+}
+.fomo-av:nth-child(1){background:var(--accent2);z-index:4}
+.fomo-av:nth-child(2){background:var(--blue2);z-index:3}
+.fomo-av:nth-child(3){background:var(--green);z-index:2}
+.fomo-av:nth-child(4){background:var(--gold);z-index:1}
+.fomo-txt{font-size:0.75rem;color:var(--w50)}
+.fomo-txt b{color:var(--green)}
+
+.live-bar{
+  display:flex;align-items:center;gap:6px;
+  font-size:0.68rem;color:var(--red);font-weight:600;
+  font-family:'Changa';
+}
+.live-dot{width:7px;height:7px;background:var(--red);border-radius:50%;animation:pulse 1s infinite}
+
+/* ===== HERO SIDE ===== */
+.hero-side{opacity:0;animation:ru .8s ease-out .2s forwards}
+
+.whale-float{display:flex;justify-content:center;margin-bottom:14px}
+.whale-svg{width:110px;height:68px;animation:swim 5s ease-in-out infinite;filter:drop-shadow(0 6px 20px rgba(108,92,231,0.15))}
+
+.book-area{display:flex;justify-content:center;margin-bottom:22px;position:relative}
+.bk{position:relative;width:145px;height:200px;perspective:700px}
+.bk-face{
+  width:100%;height:100%;
+  background:linear-gradient(150deg,#1a1530,#0e0b1a 50%,#08060f);
+  border-radius:2px 10px 10px 2px;
+  transform:rotateY(-7deg);
+  box-shadow:-10px 8px 30px rgba(0,0,0,0.5),inset 0 0 40px rgba(108,92,231,0.03);
+  border:1px solid rgba(108,92,231,0.1);
+  overflow:hidden;transition:transform 0.4s;cursor:pointer;
+}
+.bk-face:hover{transform:rotateY(-2deg) translateY(-4px) scale(1.02)}
+.bk-in{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:16px 12px;text-align:center}
+.bk-wh{width:32px;height:20px;margin-bottom:8px;opacity:.5}
+.bk-h{font-family:'Changa';font-size:.92rem;font-weight:700;color:var(--accent2);line-height:1.3;margin-bottom:2px}
+.bk-s{font-size:.52rem;color:var(--w30);letter-spacing:2px}
+.bk-a{position:absolute;bottom:12px;font-size:.58rem;color:rgba(108,92,231,0.35)}
+.bk-tag{
+  position:absolute;top:-6px;left:-6px;z-index:3;
+  background:var(--red);color:#fff;font-size:.58rem;font-weight:700;
+  padding:4px 9px;border-radius:4px;transform:rotate(3deg);
+  font-family:'Changa';box-shadow:0 2px 10px rgba(255,107,107,0.3);
+  animation:bPop 2.5s ease-in-out infinite;
+}
+.bk-stat{
+  position:absolute;bottom:-2px;right:-10px;
+  background:rgba(14,15,22,0.92);backdrop-filter:blur(8px);
+  border:1px solid var(--w05);border-radius:7px;
+  padding:5px 10px;display:flex;align-items:center;gap:6px;
+  animation:float 3s ease-in-out infinite;
+}
+.bk-stat .bsn{font-size:.78rem;font-weight:800;color:var(--accent2);font-family:'Changa'}
+.bk-stat .bsl{font-size:.5rem;color:var(--w30)}
+
+/* ===== FORM ===== */
+.fc{
+  background:linear-gradient(145deg,rgba(14,15,22,0.8),rgba(10,11,16,0.9));
+  backdrop-filter:blur(20px);
+  border:1px solid var(--w05);border-radius:16px;
+  padding:20px 16px;position:relative;overflow:hidden;
+}
+.fc::before{content:'';position:absolute;top:0;right:0;left:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--blue),var(--green))}
+.fc-h{text-align:center;margin-bottom:12px}
+.fc-h h2{font-size:1.05rem;font-weight:700;margin-bottom:2px}
+.fc-h p{font-size:.7rem;color:var(--w30)}
+
+.steps{display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.sd{
+  width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:.58rem;font-weight:700;font-family:'Changa';transition:all .4s;
+}
+.sd.active{background:var(--accent);color:#fff;box-shadow:0 0 12px rgba(108,92,231,0.3)}
+.sd.pending{background:var(--w05);color:var(--accent2);border:1px solid rgba(108,92,231,0.15)}
+.sd.done{background:var(--green);color:var(--bg)}
+.scon{width:24px;height:1.5px;background:var(--w05);transition:all .4s}
+.scon.done{background:var(--green)}
+
+.fg{margin-bottom:10px}
+.fg label{display:block;font-size:.68rem;font-weight:400;color:var(--w30);margin-bottom:3px}
+.fi{
+  width:100%;padding:11px 12px;font-size:.84rem;font-family:'Almarai';
+  background:rgba(5,5,7,0.5);border:1px solid var(--w05);
+  border-radius:8px;color:var(--w);outline:none;transition:all .3s;
+}
+.fi::placeholder{color:rgba(248,249,250,0.15)}
+.fi:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,92,231,0.08)}
+
+.btn-main{
+  width:100%;padding:12px;margin-top:3px;
+  font-size:.95rem;font-weight:700;font-family:'Changa';
+  color:#fff;
+  background:linear-gradient(135deg,var(--accent),var(--blue));
+  border:none;border-radius:10px;cursor:pointer;
+  transition:all .3s;box-shadow:0 4px 18px rgba(108,92,231,0.2);
+  position:relative;overflow:hidden;
+}
+.btn-main::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 30%,rgba(255,255,255,0.15) 50%,transparent 70%);transform:translateX(-100%);transition:transform .5s}
+.btn-main:hover::after{transform:translateX(100%)}
+.btn-main:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(108,92,231,0.3)}
+.btn-main:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.fnote{text-align:center;font-size:.58rem;color:var(--w30);margin-top:6px}
+
+.spanel{display:none;text-align:center}.spanel.show{display:block;animation:scaleIn .4s ease-out}
+.spanel .sck{width:46px;height:46px;margin:0 auto 8px;background:rgba(0,245,160,0.06);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2rem}
+.spanel h3{font-size:.95rem;font-weight:700;margin-bottom:4px}
+.spanel p{font-size:.75rem;color:var(--w30);margin-bottom:14px;line-height:1.7}
+.btn-tg{
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  width:100%;padding:11px;margin-bottom:7px;
+  font-size:.88rem;font-weight:600;font-family:'Changa';
+  color:#fff;background:linear-gradient(135deg,#2AABEE,#1A8FD0);
+  border:none;border-radius:9px;cursor:pointer;text-decoration:none;transition:all .3s;
+}
+.btn-tg:hover{transform:translateY(-2px)}
+.btn-dl{
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  width:100%;padding:9px;font-size:.8rem;font-weight:500;font-family:'Changa';
+  color:var(--accent2);background:rgba(108,92,231,0.06);
+  border:1px solid rgba(108,92,231,0.1);border-radius:9px;
+  cursor:pointer;text-decoration:none;transition:all .3s;
+}
+.btn-dl:hover{background:rgba(108,92,231,0.12)}
+
+/* ===== NUMBERS STRIP ===== */
+.numbers{
+  position:relative;z-index:1;
+  padding:40px 20px;
+  background:linear-gradient(90deg,var(--w05),rgba(108,92,231,0.04),var(--w05));
+  border-top:1px solid var(--w05);border-bottom:1px solid var(--w05);
+}
+.numbers-grid{
+  max-width:800px;margin:0 auto;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center;
+}
+.num-item .num-v{font-family:'Changa';font-size:clamp(1.3rem,3vw,2rem);font-weight:800;color:var(--accent2);margin-bottom:2px}
+.num-item .num-l{font-size:.68rem;color:var(--w30)}
+
+/* ===== PRODUCT SECTIONS ===== */
+.prod{padding:70px 20px;position:relative;z-index:1}
+.prod-in{max-width:1040px;margin:0 auto}
+.prod-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+
+.prod-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:.58rem;font-weight:600;font-family:'Changa';
+  letter-spacing:2px;text-transform:uppercase;
+  padding:4px 12px;border-radius:50px;margin-bottom:12px;
+}
+.chip-tg{color:#48CAE4;background:rgba(72,202,228,0.06);border:1px solid rgba(72,202,228,0.1)}
+.chip-gold{color:var(--gold);background:rgba(255,217,61,0.06);border:1px solid rgba(255,217,61,0.1)}
+.chip-green{color:var(--green);background:rgba(0,245,160,0.06);border:1px solid rgba(0,245,160,0.1)}
+
+.prod h2{font-size:clamp(1.25rem,2.8vw,1.8rem);font-weight:700;line-height:1.4;margin-bottom:12px}
+.prod .pdesc{font-size:.88rem;line-height:1.85;color:var(--w30);margin-bottom:18px;max-width:430px}
+.prod .pdesc strong{color:var(--w80)}
+
+.pfeats{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+.pf{display:flex;align-items:flex-start;gap:9px;font-size:.82rem;color:var(--w50)}
+.pf-i{
+  width:30px;height:30px;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:.85rem;
+}
+.pf-i-b{background:rgba(72,202,228,0.06)}
+.pf-i-g{background:rgba(255,217,61,0.06)}
+.pf-i-gr{background:rgba(0,245,160,0.06)}
+
+.prod-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:11px 26px;font-size:.88rem;font-weight:600;font-family:'Changa';
+  border:none;border-radius:10px;cursor:pointer;text-decoration:none;transition:all .3s;
+}
+.prod-btn:hover{transform:translateY(-2px)}
+.pbtn-tg{color:#fff;background:linear-gradient(135deg,#2AABEE,#1A8FD0);box-shadow:0 4px 14px rgba(42,171,238,0.2)}
+.pbtn-gold{color:var(--bg);background:linear-gradient(135deg,var(--gold),#FFEA80);box-shadow:0 4px 14px rgba(255,217,61,0.2)}
+.pbtn-green{color:var(--bg);background:linear-gradient(135deg,var(--green),var(--green2));box-shadow:0 4px 14px rgba(0,245,160,0.2)}
+
+/* Visual boxes */
+.vbox{
+  background:var(--card);border:1px solid var(--w05);
+  border-radius:16px;padding:28px;position:relative;overflow:hidden;
+}
+.vbox::before{content:'';position:absolute;top:-50%;right:-50%;width:200%;height:200%;background:radial-gradient(circle,var(--w05),transparent 40%);opacity:.5}
+
+/* Chart mock */
+.chart-mock{position:relative;z-index:1;height:200px;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.chart-bars{display:flex;align-items:flex-end;gap:3px;height:130px}
+.bar{width:7px;border-radius:2px 2px 0 0;transition:height 1s ease-out}
+.bar-p{background:linear-gradient(to top,var(--accent),rgba(108,92,231,0.2))}
+.bar-n{background:linear-gradient(to top,var(--red),rgba(255,107,107,0.2))}
+.zone-ov{
+  position:absolute;left:10%;right:10%;height:34px;
+  border:1px dashed;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.55rem;font-weight:600;font-family:'Changa';
+}
+.zone-s{top:15px;border-color:rgba(255,107,107,0.2);background:rgba(255,107,107,0.03);color:var(--red)}
+.zone-d{bottom:15px;border-color:rgba(0,245,160,0.2);background:rgba(0,245,160,0.03);color:var(--green)}
+
+/* Exness cards */
+.ex-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;position:relative;z-index:1}
+.exb{background:var(--bg);border:1px solid var(--w05);border-radius:10px;padding:16px 12px;text-align:center;transition:all .3s}
+.exb:hover{border-color:var(--w10);transform:translateY(-2px)}
+.exb-ic{font-size:1.3rem;margin-bottom:5px}
+.exb-t{font-size:.72rem;font-weight:600;font-family:'Changa';margin-bottom:2px}
+.exb-d{font-size:.62rem;color:var(--w30)}
+
+/* Divider */
+.div-line{max-width:1040px;margin:0 auto;height:1px;background:linear-gradient(90deg,transparent,var(--w10),transparent)}
+
+/* ===== TESTIMONIALS ===== */
+.social-proof-sec{padding:60px 20px;position:relative;z-index:1}
+.sp-in{max-width:800px;margin:0 auto;text-align:center}
+.sp-in h2{font-size:clamp(1.2rem,2.5vw,1.6rem);font-weight:700;margin-bottom:24px}
+.reviews{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.review{
+  background:var(--card);border:1px solid var(--w05);
+  border-radius:12px;padding:18px 14px;text-align:right;
+  transition:all .3s;
+}
+.review:hover{border-color:var(--w10)}
+.rev-stars{font-size:.7rem;margin-bottom:6px;color:var(--gold)}
+.rev-text{font-size:.78rem;line-height:1.7;color:var(--w50);margin-bottom:10px}
+.rev-name{font-size:.7rem;font-weight:600;color:var(--accent2);font-family:'Changa'}
+.rev-role{font-size:.58rem;color:var(--w30)}
+
+/* ===== FINAL CTA ===== */
+.final-cta{
+  padding:60px 20px;text-align:center;position:relative;z-index:1;
+  background:linear-gradient(180deg,transparent,rgba(108,92,231,0.03));
+}
+.final-cta h2{font-size:clamp(1.3rem,3vw,1.8rem);font-weight:700;margin-bottom:8px}
+.final-cta p{font-size:.88rem;color:var(--w30);margin-bottom:18px;max-width:450px;margin-left:auto;margin-right:auto;line-height:1.7}
+.final-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:13px 34px;font-size:.95rem;font-weight:700;font-family:'Changa';
+  color:#fff;background:linear-gradient(135deg,var(--accent),var(--blue));
+  border:none;border-radius:10px;text-decoration:none;
+  transition:all .3s;box-shadow:var(--glow);
+}
+.final-btn:hover{transform:translateY(-2px);box-shadow:0 0 40px rgba(108,92,231,0.25)}
+
+.foot-copy{padding:16px;font-size:.58rem;color:rgba(248,249,250,0.12);text-align:center}
+.foot-copy a{color:rgba(108,92,231,0.3);text-decoration:none}
+
+/* ===== ANIMATIONS ===== */
+@keyframes ru{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes swim{0%,100%{transform:translateY(0) rotate(0)}30%{transform:translateY(-5px) rotate(1deg)}65%{transform:translateY(3px) rotate(-.5deg)}}
+@keyframes bPop{0%,100%{transform:rotate(3deg) scale(1)}50%{transform:rotate(3deg) scale(1.05)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}60%{transform:translateX(4px)}}
+
+.reveal{opacity:0;transform:translateY(24px);transition:all .8s cubic-bezier(.25,.46,.45,.94)}
+.reveal.vis{opacity:1;transform:translateY(0)}
+.rvd1{transition-delay:.1s}.rvd2{transition-delay:.2s}.rvd3{transition-delay:.3s}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:768px){
+  .hero-grid,.prod-grid{grid-template-columns:1fr;gap:24px;text-align:center}
+  .hero-text{order:1}.hero-side{order:2}
+  .hero-sub,.pdesc{margin-left:auto;margin-right:auto}
+  .hero-bullets,.pfeats{align-items:center}
+  .fomo{justify-content:center}
+  .bk{width:120px;height:165px}
+  .whale-svg{width:85px;height:52px}
+  .hero{min-height:auto;padding-top:60px}
+  .hero-h{font-size:1.45rem}
+  .numbers-grid{grid-template-columns:repeat(2,1fr);gap:12px}
+  .reviews{grid-template-columns:1fr}
+  .prod-grid .vbox{order:-1}
+  .prod{padding:45px 20px}
+  .sec{padding:50px 20px}
+}
+@media(min-width:769px) and (max-width:1024px){
+  .hero-grid,.prod-grid{gap:30px}
+  .reviews{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="page-bg"><div class="grain"></div></div>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-brand">
+    <svg class="nav-wh" viewBox="0 0 36 36" fill="none">
+      <circle cx="18" cy="18" r="16" fill="rgba(108,92,231,0.06)" stroke="var(--accent)" stroke-width=".5" opacity=".4"/>
+      <path d="M9 20c2-9 10-13 18-11-2 4-7 8-12 9l5 5c-5 1-9-.5-11-3z" fill="var(--accent2)" opacity=".8"/>
+      <circle cx="14" cy="17" r="1.3" fill="var(--bg)"/>
+    </svg>
+    <div class="nav-t">MARKET WHALES<small>From Zero To Hero</small></div>
+  </div>
+  <a href="#top" class="nav-btn">حمّل الكتاب مجانًا</a>
+</nav>
+
+<!-- Urgency -->
+<div class="urg">
+  <span>🔥 الكتاب مجاني لفترة محدودة جدًا:</span>
+  <div class="urg-timer">
+    <div class="urg-u"><div class="n" id="cd-h">23</div><div class="l">ساعة</div></div>
+    <div class="urg-u"><div class="n" id="cd-m">59</div><div class="l">دقيقة</div></div>
+    <div class="urg-u"><div class="n" id="cd-s">47</div><div class="l">ثانية</div></div>
+  </div>
+</div>
+
+<!-- ========== HERO ========== -->
+<section class="sec hero" id="top">
+<div class="sec-in hero-grid">
+
+  <div class="hero-text">
+    <div class="pill ri"><span class="pill-dot"></span>+٢,٤٠٠ متداول حمّلوا الكتاب</div>
+
+    <h1 class="hero-h ri">الكتاب ده <span class="highlight">غيّر حياة</span> آلاف<br>المتداولين العرب — <span class="underline-glow">ومجاني</span></h1>
+
+    <p class="hero-sub ri">
+      <strong>مدرسة الهارمونيك</strong> مش مجرد كتاب — ده خلاصة <strong>١٣ سنة</strong> خبرة في الأسواق المالية، مكثّفة في ٦ فصول عملية تاخدك من الصفر لحد ما تقدر تقرأ السوق زي المحترفين.
+    </p>
+
+    <div class="hero-bullets ri">
+      <div class="hb"><span class="hb-check">✦</span>هتفهم ليه الهارمونيك بيكسب وباقي الطرق بتخسّر</div>
+      <div class="hb"><span class="hb-check">✦</span>هتعرف تحدد مناطق الدخول والخروج بدقة متناهية</div>
+      <div class="hb"><span class="hb-check">✦</span>هتتعلم ٥ نماذج أساسية كل واحد فيهم لوحده كنز</div>
+      <div class="hb"><span class="hb-check">✦</span>هتشوف أمثلة حقيقية من السوق — مش كلام نظري</div>
+    </div>
+
+    <div class="fomo ri">
+      <div class="fomo-avatars"><div class="fomo-av">أ</div><div class="fomo-av">م</div><div class="fomo-av">س</div><div class="fomo-av">+</div></div>
+      <div class="fomo-txt"><b>١٧ شخص</b> حمّلوا الكتاب في آخر ساعة</div>
+    </div>
+
+    <div class="live-bar ri">
+      <span class="live-dot"></span>
+      العرض المجاني ممكن يتشال في أي وقت بدون سابق إنذار
+    </div>
+  </div>
+
+  <div class="hero-side">
+    <div class="whale-float">
+      <svg class="whale-svg" viewBox="0 0 150 85" fill="none">
+        <ellipse cx="65" cy="48" rx="42" ry="25" fill="var(--accent)" opacity=".04"/>
+        <path d="M20 48c4-22 24-33 46-28 4 1.3 7 3.2 9 5.5-6 4-15 10-26 12l11 12c-10 3-22-1-26-6-5-1.5-10 .8-13 2.5z" fill="url(#wgr)" opacity=".85"/>
+        <circle cx="33" cy="36" r="3" fill="var(--bg)" opacity=".6"/>
+        <circle cx="34" cy="35" r="1.2" fill="var(--accent2)"/>
+        <path d="M78 23c5-2.5 11-2.5 15 .5-5 1-10 .5-15-.5z" fill="var(--accent)" opacity=".3"/>
+        <path d="M13 56c-3 5.5-6 11-8 17 4-3.5 7-9 11-13" fill="var(--accent)" opacity=".18"/>
+        <circle cx="85" cy="25" r="1.8" fill="none" stroke="var(--accent2)" stroke-width=".4" opacity=".2"><animate attributeName="cy" values="25;16;9" dur="3s" repeatCount="indefinite"/><animate attributeName="opacity" values=".2;.08;0" dur="3s" repeatCount="indefinite"/></circle>
+        <circle cx="90" cy="30" r="1.2" fill="none" stroke="var(--accent2)" stroke-width=".3" opacity=".15"><animate attributeName="cy" values="30;20;12" dur="3.8s" repeatCount="indefinite"/><animate attributeName="opacity" values=".15;.05;0" dur="3.8s" repeatCount="indefinite"/></circle>
+        <defs><linearGradient id="wgr" x1="20" y1="25" x2="75" y2="65"><stop offset="0%" stop-color="var(--accent2)"/><stop offset="100%" stop-color="var(--accent)" stop-opacity=".5"/></linearGradient></defs>
+      </svg>
+    </div>
+
+    <div class="book-area">
+      <div class="bk">
+        <div class="bk-face"><div class="bk-in">
+          <svg class="bk-wh" viewBox="0 0 42 26" fill="none"><path d="M7 14c1.5-7 8-10 15-8.5-1.5 3-5.5 6-9 7l3.5 3.5c-3.5 1-7-.3-8.5-2z" fill="var(--accent2)" opacity=".4"/></svg>
+          <div class="bk-h">مدرسة<br>الهارمونيك</div>
+          <div class="bk-s">Harmonic School</div>
+          <div class="bk-a">سميح عجوة</div>
+        </div></div>
+        <div class="bk-tag">مجاني 🔥</div>
+      </div>
+      <div class="bk-stat"><span style="font-size:.75rem">📥</span><div><div class="bsn" id="dlCount">٢,٤٧٣</div><div class="bsl">تحميل</div></div></div>
+    </div>
+
+    <div class="fc" id="formCard">
+      <div class="fc-h"><h2 id="fTitle">حمّل الكتاب دلوقتي — ببلاش</h2><p id="fSub">سجّل بياناتك وفي ثانية الكتاب عندك</p></div>
+      <div class="steps"><div class="sd active" id="s1">١</div><div class="scon" id="sc1"></div><div class="sd pending" id="s2">٢</div><div class="scon" id="sc2"></div><div class="sd pending" id="s3">٣</div></div>
+      <div id="formFields">
+        <div class="fg"><label>اسمك إيه؟</label><input class="fi" id="fullName" placeholder="مثال: أحمد محمد"></div>
+        <div class="fg"><label>الإيميل بتاعك</label><input class="fi" id="email" placeholder="example@email.com" dir="ltr"></div>
+        <div class="fg"><label>رقم الواتساب (مع كود الدولة)</label><input class="fi" id="whatsapp" placeholder="+20 10x xxx xxxx" dir="ltr"></div>
+        <button class="btn-main" id="submitBtn" onclick="handleSubmit()">حمّل الكتاب مجانًا ←</button>
+        <div class="fnote">🔒 بياناتك في أمان تام — مش هنشاركها مع حد</div>
+      </div>
+      <div class="spanel" id="successPanel">
+        <div class="sck">🐋</div>
+        <h3>مبروك! انت كده من عائلة الحيتان 🎉</h3>
+        <p>انضم لقناتنا على تليجرام عشان توصلك كنوز تانية مجانية كل يوم، وبعدين حمّل الكتاب 👇</p>
+        <a href="https://t.me/samihagwafx" target="_blank" class="btn-tg"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0h-.056zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>انضم لقناة الحيتان 🐋</a>
+        <a href="#" class="btn-dl" onclick="handleDownload(event)">📥 حمّل الكتاب (PDF)</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ========== NUMBERS ========== -->
+<div class="numbers reveal">
+  <div class="numbers-grid">
+    <div class="num-item"><div class="num-v">+١٣</div><div class="num-l">سنة خبرة في السوق</div></div>
+    <div class="num-item"><div class="num-v">+٢,٤٠٠</div><div class="num-l">حمّلوا الكتاب</div></div>
+    <div class="num-item"><div class="num-v">٦</div><div class="num-l">فصول عملية شاملة</div></div>
+    <div class="num-item"><div class="num-v">+١٢,٠٠٠</div><div class="num-l">عضو في المجتمع</div></div>
+  </div>
+</div>
+
+<!-- ========== SIGNALS CHANNEL ========== -->
+<section class="prod" id="signals">
+<div class="prod-in prod-grid">
+  <div class="reveal">
+    <div class="prod-chip chip-tg">📡 قناة التوصيات المجانية</div>
+    <h2>توصيات يومية مجانية على<br>الذهب والعملات — كل يوم!</h2>
+    <p class="pdesc">
+      مش بس كتاب — لما تنضم لأكاديمية الحيتان بتدخل <strong>مجتمع كامل</strong> فيه توصيات يومية على أقوى الأزواج والذهب.
+      تحليلات Smart Money مع <strong>نقاط دخول واضحة</strong> ووقف خسارة وأهداف.
+      <strong>كل ده مجاني</strong> — والناس بتدفع فيه فلوس في أماكن تانية.
+    </p>
+    <div class="pfeats">
+      <div class="pf"><div class="pf-i pf-i-b">📊</div>توصيات يومية على Gold, EUR, GBP وغيرهم</div>
+      <div class="pf"><div class="pf-i pf-i-b">🎯</div>نقاط دخول دقيقة — SL و TP واضحين</div>
+      <div class="pf"><div class="pf-i pf-i-b">📈</div>تحليل أسبوعي شامل لقراءة السوق</div>
+      <div class="pf"><div class="pf-i pf-i-b">👥</div>+١٢,٠٠٠ متداول في القناة وعدد بيزيد كل يوم</div>
+    </div>
+    <a href="https://t.me/samihagwafx" target="_blank" class="prod-btn pbtn-tg">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0h-.056zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+      انضم للقناة — مجانًا
+    </a>
+  </div>
+  <div class="vbox reveal rvd2">
+    <div style="text-align:center;position:relative;z-index:1">
+      <div style="font-size:3.5rem;margin-bottom:8px">📡</div>
+      <div style="font-family:'Changa';font-size:1.6rem;font-weight:800;color:var(--blue2);margin-bottom:4px">+١٢,٠٠٠</div>
+      <div style="font-size:.82rem;color:var(--w30);margin-bottom:16px">متداول في القناة</div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <span style="padding:4px 10px;background:rgba(72,202,228,0.06);border:1px solid rgba(72,202,228,0.1);border-radius:50px;font-size:.65rem;color:var(--blue2)">🥇 Gold</span>
+        <span style="padding:4px 10px;background:rgba(72,202,228,0.06);border:1px solid rgba(72,202,228,0.1);border-radius:50px;font-size:.65rem;color:var(--blue2)">💱 Forex</span>
+        <span style="padding:4px 10px;background:rgba(72,202,228,0.06);border:1px solid rgba(72,202,228,0.1);border-radius:50px;font-size:.65rem;color:var(--blue2)">📊 SMC</span>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<div class="div-line"></div>
+
+<!-- ========== WHALES ZONE V2 ========== -->
+<section class="prod" id="indicator">
+<div class="prod-in prod-grid">
+  <div class="vbox reveal">
+    <div class="chart-mock">
+      <div class="zone-ov zone-s">🔴 Supply Zone — منطقة بيع</div>
+      <div class="chart-bars" id="chartBars">
+        <div class="bar bar-p" style="--h:40px"></div><div class="bar bar-p" style="--h:58px"></div>
+        <div class="bar bar-n" style="--h:32px"></div><div class="bar bar-p" style="--h:70px"></div>
+        <div class="bar bar-p" style="--h:85px"></div><div class="bar bar-n" style="--h:48px"></div>
+        <div class="bar bar-n" style="--h:36px"></div><div class="bar bar-p" style="--h:62px"></div>
+        <div class="bar bar-p" style="--h:78px"></div><div class="bar bar-p" style="--h:92px"></div>
+        <div class="bar bar-n" style="--h:44px"></div><div class="bar bar-p" style="--h:72px"></div>
+        <div class="bar bar-p" style="--h:55px"></div><div class="bar bar-n" style="--h:30px"></div>
+        <div class="bar bar-p" style="--h:80px"></div>
+      </div>
+      <div class="zone-ov zone-d">🟢 Demand Zone — منطقة شراء</div>
+    </div>
+  </div>
+  <div class="reveal rvd2">
+    <div class="prod-chip chip-gold">⚡ مؤشر Whales Zone v2</div>
+    <h2>المؤشر اللي خلّى المتداولين<br>يشوفوا السوق بعيون تانية</h2>
+    <p class="pdesc">
+      <strong>Whales Zone v2</strong> مش مؤشر عادي — ده أقوى أداة Supply & Demand على TradingView.
+      بيرسملك مناطق العرض والطلب تلقائيًا ومعاه محرك <strong>TP/SL ذكي</strong> بيحسبلك كل حاجة.
+      <strong>النسخة الجديدة</strong> فيها تحسينات جبارة هتخليك تتداول بثقة.
+    </p>
+    <div class="pfeats">
+      <div class="pf"><div class="pf-i pf-i-g">🎯</div>محرك TP/SL مدمج — Nearest Zone و On Touch</div>
+      <div class="pf"><div class="pf-i pf-i-g">📐</div>تصنيف قوة المناطق تلقائيًا</div>
+      <div class="pf"><div class="pf-i pf-i-g">🔔</div>تنبيهات فورية لما السعر يلمس منطقة</div>
+      <div class="pf"><div class="pf-i pf-i-g">🎨</div>تصميم نظيف وألوان تقدر تعدّلها على ذوقك</div>
+    </div>
+    <a href="https://t.me/marketwhalesfxsupport" target="_blank" class="prod-btn pbtn-gold">كلّم الدعم لتفعيل نسختك المجانية ←</a>
+  </div>
+</div>
+</section>
+
+<div class="div-line"></div>
+
+<!-- ========== EXNESS ========== -->
+<section class="prod" id="exness">
+<div class="prod-in prod-grid">
+  <div class="reveal">
+    <div class="prod-chip chip-green">🎁 عرض خاص — كل حاجة ببلاش</div>
+    <h2>سجّل في Exness من خلالنا<br>واحصل على كل خدماتنا مجانًا</h2>
+    <p class="pdesc">
+      الموضوع بسيط — <strong>افتح حساب في Exness من اللينك بتاعنا</strong> وكل أدوات وخدمات أكاديمية الحيتان هتكون متاحة ليك مجانًا بالكامل.
+      يعني المؤشرات والكورسات والتوصيات VIP والدعم المباشر — <strong>كل ده من غير ما تدفع جنيه واحد</strong>.
+    </p>
+    <div class="pfeats">
+      <div class="pf"><div class="pf-i pf-i-gr">🆓</div>كل مؤشرات الأكاديمية مجانًا — بما فيهم Whales Zone</div>
+      <div class="pf"><div class="pf-i pf-i-gr">📚</div>دخول كامل لكل الكورسات والدورات</div>
+      <div class="pf"><div class="pf-i pf-i-gr">📡</div>قناة VIP — توصيات حصرية كل يوم</div>
+      <div class="pf"><div class="pf-i pf-i-gr">⚡</div>Exness = سحب فوري + سبريد منخفض + تنفيذ لحظي</div>
+    </div>
+    <a href="https://one.exness-track.com/intl/ar/a/whales" target="_blank" class="prod-btn pbtn-green">افتح حساب Exness دلوقتي ←</a>
+  </div>
+  <div class="vbox reveal rvd2">
+    <div class="ex-grid">
+      <div class="exb"><div class="exb-ic">📊</div><div class="exb-t">مؤشرات مجانية</div><div class="exb-d">Whales Zone + أدوات SMC</div></div>
+      <div class="exb"><div class="exb-ic">📡</div><div class="exb-t">قناة VIP</div><div class="exb-d">توصيات حصرية يومية</div></div>
+      <div class="exb"><div class="exb-ic">🎓</div><div class="exb-t">كورسات كاملة</div><div class="exb-d">من الصفر للاحتراف</div></div>
+      <div class="exb"><div class="exb-ic">🤝</div><div class="exb-t">دعم مباشر</div><div class="exb-d">فريق متخصص يساعدك</div></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<div class="div-line"></div>
+
+<!-- ========== TESTIMONIALS ========== -->
+<section class="social-proof-sec">
+<div class="sp-in">
+  <h2 class="reveal">ناس حقيقية — نتايج حقيقية</h2>
+  <div class="reviews">
+    <div class="review reveal">
+      <div class="rev-stars">⭐⭐⭐⭐⭐</div>
+      <div class="rev-text">الكتاب ده غيّر نظرتي للسوق بالكامل. كنت بتداول عشوائي وبخسر، بعد ما طبّقت نماذج الهارمونيك بقيت أشوف فرص مكنتش بشوفها قبل كده.</div>
+      <div class="rev-name">محمد عبدالله</div>
+      <div class="rev-role">متداول — مصر</div>
+    </div>
+    <div class="review reveal rvd1">
+      <div class="rev-stars">⭐⭐⭐⭐⭐</div>
+      <div class="rev-text">أول مرة ألاقي محتوى عربي بالجودة دي عن الهارمونيك. الشرح بسيط ومباشر والأمثلة العملية خلّت الموضوع واضح جدًا. شكرًا أكاديمية الحيتان!</div>
+      <div class="rev-name">سارة الكعبي</div>
+      <div class="rev-role">متداولة — الإمارات</div>
+    </div>
+    <div class="review reveal rvd2">
+      <div class="rev-stars">⭐⭐⭐⭐⭐</div>
+      <div class="rev-text">حمّلت الكتاب وبعدها سجّلت في Exness وحصلت على المؤشر مجانًا. الصراحة الباقدج كله مع بعض بيعمل فرق كبير في التداول.</div>
+      <div class="rev-name">خالد المطيري</div>
+      <div class="rev-role">متداول — السعودية</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ========== FINAL CTA ========== -->
+<div class="final-cta reveal">
+  <h2>لسه مستني إيه؟ 🐋</h2>
+  <p>كتاب مجاني + قناة توصيات + مؤشر احترافي + كورسات كاملة — كل ده في مكان واحد. ابدأ دلوقتي قبل ما العرض يخلص.</p>
+  <a href="#top" class="final-btn">حمّل الكتاب وابدأ رحلتك ↑</a>
+</div>
+
+<div class="foot-copy">© 2026 أكاديمية الحيتان — Market Whales Academy &nbsp;|&nbsp; <a href="https://linktr.ee/marketwhales">linktr.ee/marketwhales</a></div>
+
+<script>
+// Form
+function handleSubmit(){
+  const name=document.getElementById('fullName').value.trim();
+  const email=document.getElementById('email').value.trim();
+  const wa=document.getElementById('whatsapp').value.trim();
+  const btn=document.getElementById('submitBtn');
+  if(!name||!email||!wa){btn.style.animation='shake .4s ease';setTimeout(()=>btn.style.animation='',400);return}
+  if(!email.includes('@')||!email.includes('.')){alert('أدخل إيميل صحيح');return}
+  if(wa.replace(/\D/g,'').length<10){alert('أدخل رقم واتساب صحيح');return}
+  btn.disabled=true;btn.textContent='ثانية واحدة...';
+  const data={name,email,whatsapp:wa,date:new Date().toISOString(),source:'harmonic-book-landing'};
+  const SCRIPT='https://script.google.com/macros/s/AKfycbwN3fZE0jsN2XHWnzU2gJURY1mH6NQt7Gy5SLhmNMGxwKS8nUjE-CIJro92NB3lqVWeVw/exec';
+  fetch(SCRIPT+'?'+new URLSearchParams(data).toString(),{mode:'no-cors'}).catch(()=>{});
+  const leads=JSON.parse(localStorage.getItem('mw_leads')||'[]');leads.push(data);localStorage.setItem('mw_leads',JSON.stringify(leads));
+  setTimeout(()=>{
+    document.getElementById('s1').className='sd done';document.getElementById('s1').textContent='✓';
+    document.getElementById('sc1').classList.add('done');document.getElementById('s2').className='sd active';
+    document.getElementById('formFields').style.display='none';
+    document.getElementById('successPanel').classList.add('show');
+    document.getElementById('fTitle').textContent='خلاص انت معانا! 🎉';
+    document.getElementById('fSub').textContent='كمّل الخطوتين دول';
+  },800);
+}
+function handleDownload(e){
+  e.preventDefault();
+  document.getElementById('s2').className='sd done';document.getElementById('s2').textContent='✓';
+  document.getElementById('sc2').classList.add('done');document.getElementById('s3').className='sd done';document.getElementById('s3').textContent='✓';
+  window.open('https://drive.google.com/uc?export=download&id=1pZPJr7DdPntKkfbayr-y7htc_s_97kxT','_blank');
+}
+
+// Countdown
+(function(){
+  let e=localStorage.getItem('mw_cd4');
+  if(!e||new Date(e)<new Date()){const d=new Date();d.setHours(d.getHours()+24);e=d.toISOString();localStorage.setItem('mw_cd4',e)}
+  function t(){let d=new Date(e)-new Date();if(d<=0){const x=new Date();x.setHours(x.getHours()+24);e=x.toISOString();localStorage.setItem('mw_cd4',e);d=864e5}
+  document.getElementById('cd-h').textContent=String(Math.floor(d/36e5)).padStart(2,'0');
+  document.getElementById('cd-m').textContent=String(Math.floor((d%36e5)/6e4)).padStart(2,'0');
+  document.getElementById('cd-s').textContent=String(Math.floor((d%6e4)/1e3)).padStart(2,'0')}t();setInterval(t,1e3)})();
+
+// Counter
+(function(){const toAr=n=>n.toString().replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[d]);let c=2473;setInterval(()=>{if(Math.random()>.6){c+=Math.floor(Math.random()*3)+1;const el=document.getElementById('dlCount');if(el)el.textContent=toAr(c.toLocaleString('en'))}},4500)})();
+
+// Nav scroll
+window.addEventListener('scroll',()=>{document.querySelector('.nav').classList.toggle('compact',window.scrollY>60)});
+
+// Scroll reveal
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('vis');obs.unobserve(e.target)}})},{threshold:.1,rootMargin:'0px 0px -30px 0px'});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+
+// Chart bars
+const bObs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){e.target.querySelectorAll('.bar').forEach((b,i)=>{setTimeout(()=>{b.style.height=b.style.getPropertyValue('--h')},i*50)});bObs.unobserve(e.target)}})},{threshold:.3});
+document.querySelectorAll('.chart-bars').forEach(el=>{el.querySelectorAll('.bar').forEach(b=>b.style.height='0');bObs.observe(el)});
+</script>
+</body>
+</html>
