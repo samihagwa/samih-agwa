@@ -229,6 +229,49 @@ h1,h2,h3,h4,.heading{font-family:'Changa',sans-serif}
 .fi::placeholder{color:rgba(248,249,250,0.15)}
 .fi:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,92,231,0.08)}
 
+/* Phone country selector */
+.phone-row{display:flex;gap:0;position:relative}
+.country-select{
+  display:flex;align-items:center;gap:4px;
+  padding:0 10px;min-width:95px;
+  background:rgba(5,5,7,0.5);border:1px solid var(--w05);
+  border-radius:8px 0 0 8px;border-left:none;
+  cursor:pointer;transition:all .3s;
+  font-size:.82rem;color:var(--w);
+}
+.country-select:hover{background:rgba(5,5,7,0.7)}
+.country-flag{font-size:1.1rem}
+.country-code{font-family:'Changa';font-weight:600;font-size:.78rem;color:var(--accent2)}
+.country-arrow{font-size:.55rem;color:var(--w30);margin-right:2px}
+.phone-input{border-radius:0 8px 8px 0 !important;flex:1}
+.country-dropdown{
+  display:none;position:absolute;top:100%;left:0;right:0;
+  background:var(--bg2);border:1px solid var(--w10);
+  border-radius:10px;margin-top:4px;z-index:50;
+  max-height:220px;overflow:hidden;
+  box-shadow:0 10px 30px rgba(0,0,0,0.4);
+}
+.country-dropdown.open{display:block}
+.country-search{
+  width:100%;padding:10px 12px;font-size:.8rem;
+  font-family:'Almarai';background:var(--bg);
+  border:none;border-bottom:1px solid var(--w05);
+  color:var(--w);outline:none;
+}
+.country-search::placeholder{color:var(--w30)}
+.country-list{max-height:170px;overflow-y:auto}
+.country-list::-webkit-scrollbar{width:4px}
+.country-list::-webkit-scrollbar-thumb{background:var(--w10);border-radius:4px}
+.country-item{
+  display:flex;align-items:center;gap:8px;
+  padding:9px 12px;cursor:pointer;transition:background .2s;
+  font-size:.8rem;
+}
+.country-item:hover{background:var(--w05)}
+.country-item .ci-flag{font-size:1.1rem}
+.country-item .ci-name{flex:1;color:var(--w50)}
+.country-item .ci-code{font-family:'Changa';font-weight:600;color:var(--accent2);font-size:.75rem}
+
 .btn-main{
   width:100%;padding:12px;margin-top:3px;
   font-size:.95rem;font-weight:700;font-family:'Changa';
@@ -514,7 +557,20 @@ h1,h2,h3,h4,.heading{font-family:'Changa',sans-serif}
       <div id="formFields">
         <div class="fg"><label>اسمك إيه؟</label><input class="fi" id="fullName" placeholder="مثال: أحمد محمد"></div>
         <div class="fg"><label>الإيميل بتاعك</label><input class="fi" id="email" placeholder="example@email.com" dir="ltr"></div>
-        <div class="fg"><label>رقم الواتساب (مع كود الدولة)</label><input class="fi" id="whatsapp" placeholder="+20 10x xxx xxxx" dir="ltr"></div>
+        <div class="fg"><label>رقم الواتساب</label>
+          <div class="phone-row" dir="ltr">
+            <div class="country-select" id="countryBtn" onclick="toggleDropdown()">
+              <span class="country-flag" id="selectedFlag">🇪🇬</span>
+              <span class="country-code" id="selectedCode">+20</span>
+              <span class="country-arrow">▾</span>
+            </div>
+            <input class="fi phone-input" id="whatsapp" placeholder="1012345678" dir="ltr" type="tel">
+            <div class="country-dropdown" id="countryDropdown">
+              <input class="country-search" id="countrySearch" placeholder="ابحث عن دولة..." oninput="filterCountries()">
+              <div class="country-list" id="countryList"></div>
+            </div>
+          </div>
+        </div>
         <button class="btn-main" id="submitBtn" onclick="handleSubmit()">حمّل الكتاب مجانًا ←</button>
         <div class="fnote">🔒 بياناتك في أمان تام — مش هنشاركها مع حد</div>
       </div>
@@ -688,17 +744,99 @@ h1,h2,h3,h4,.heading{font-family:'Changa',sans-serif}
 <div class="foot-copy">© 2026 أكاديمية الحيتان — Market Whales Academy &nbsp;|&nbsp; <a href="https://linktr.ee/marketwhales">linktr.ee/marketwhales</a></div>
 
 <script>
+// Country codes data
+const countries=[
+{name:'مصر',flag:'🇪🇬',code:'+20'},
+{name:'السعودية',flag:'🇸🇦',code:'+966'},
+{name:'الإمارات',flag:'🇦🇪',code:'+971'},
+{name:'الكويت',flag:'🇰🇼',code:'+965'},
+{name:'قطر',flag:'🇶🇦',code:'+974'},
+{name:'البحرين',flag:'🇧🇭',code:'+973'},
+{name:'عمان',flag:'🇴🇲',code:'+968'},
+{name:'العراق',flag:'🇮🇶',code:'+964'},
+{name:'الأردن',flag:'🇯🇴',code:'+962'},
+{name:'لبنان',flag:'🇱🇧',code:'+961'},
+{name:'فلسطين',flag:'🇵🇸',code:'+970'},
+{name:'سوريا',flag:'🇸🇾',code:'+963'},
+{name:'ليبيا',flag:'🇱🇾',code:'+218'},
+{name:'تونس',flag:'🇹🇳',code:'+216'},
+{name:'الجزائر',flag:'🇩🇿',code:'+213'},
+{name:'المغرب',flag:'🇲🇦',code:'+212'},
+{name:'السودان',flag:'🇸🇩',code:'+249'},
+{name:'اليمن',flag:'🇾🇪',code:'+967'},
+{name:'موريتانيا',flag:'🇲🇷',code:'+222'},
+{name:'الصومال',flag:'🇸🇴',code:'+252'},
+{name:'جيبوتي',flag:'🇩🇯',code:'+253'},
+{name:'جزر القمر',flag:'🇰🇲',code:'+269'},
+{name:'تركيا',flag:'🇹🇷',code:'+90'},
+{name:'بريطانيا',flag:'🇬🇧',code:'+44'},
+{name:'ألمانيا',flag:'🇩🇪',code:'+49'},
+{name:'فرنسا',flag:'🇫🇷',code:'+33'},
+{name:'أمريكا',flag:'🇺🇸',code:'+1'},
+{name:'كندا',flag:'🇨🇦',code:'+1'},
+{name:'ماليزيا',flag:'🇲🇾',code:'+60'},
+{name:'إندونيسيا',flag:'🇮🇩',code:'+62'},
+{name:'باكستان',flag:'🇵🇰',code:'+92'},
+{name:'الهند',flag:'🇮🇳',code:'+91'},
+{name:'نيجيريا',flag:'🇳🇬',code:'+234'},
+{name:'جنوب أفريقيا',flag:'🇿🇦',code:'+27'},
+];
+
+let selectedCountryCode='+20';
+
+// Build country list
+function buildCountryList(filter=''){
+  const list=document.getElementById('countryList');
+  const filtered=filter?countries.filter(c=>c.name.includes(filter)||c.code.includes(filter)):countries;
+  list.innerHTML=filtered.map(c=>
+    '<div class="country-item" onclick="selectCountry(\''+c.flag+'\',\''+c.code+'\')">'+
+    '<span class="ci-flag">'+c.flag+'</span>'+
+    '<span class="ci-name">'+c.name+'</span>'+
+    '<span class="ci-code">'+c.code+'</span></div>'
+  ).join('');
+}
+
+function toggleDropdown(){
+  const dd=document.getElementById('countryDropdown');
+  dd.classList.toggle('open');
+  if(dd.classList.contains('open')){
+    buildCountryList();
+    document.getElementById('countrySearch').value='';
+    document.getElementById('countrySearch').focus();
+  }
+}
+
+function selectCountry(flag,code){
+  document.getElementById('selectedFlag').textContent=flag;
+  document.getElementById('selectedCode').textContent=code;
+  selectedCountryCode=code;
+  document.getElementById('countryDropdown').classList.remove('open');
+  document.getElementById('whatsapp').focus();
+}
+
+function filterCountries(){
+  buildCountryList(document.getElementById('countrySearch').value);
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.phone-row')){
+    document.getElementById('countryDropdown').classList.remove('open');
+  }
+});
+
 // Form
 function handleSubmit(){
   const name=document.getElementById('fullName').value.trim();
   const email=document.getElementById('email').value.trim();
-  const wa=document.getElementById('whatsapp').value.trim();
+  const phoneRaw=document.getElementById('whatsapp').value.trim().replace(/^0+/,'');
+  const fullPhone=selectedCountryCode+phoneRaw;
   const btn=document.getElementById('submitBtn');
-  if(!name||!email||!wa){btn.style.animation='shake .4s ease';setTimeout(()=>btn.style.animation='',400);return}
+  if(!name||!email||!phoneRaw){btn.style.animation='shake .4s ease';setTimeout(()=>btn.style.animation='',400);return}
   if(!email.includes('@')||!email.includes('.')){alert('أدخل إيميل صحيح');return}
-  if(wa.replace(/\D/g,'').length<10){alert('أدخل رقم واتساب صحيح');return}
+  if(phoneRaw.replace(/\D/g,'').length<7){alert('أدخل رقم واتساب صحيح');return}
   btn.disabled=true;btn.textContent='ثانية واحدة...';
-  const data={name,email,whatsapp:wa,date:new Date().toISOString(),source:'harmonic-book-landing'};
+  const data={name,email,whatsapp:fullPhone,date:new Date().toISOString(),source:'harmonic-book-landing'};
   const SCRIPT='https://script.google.com/macros/s/AKfycbwevGi3qUSW4N2DpUC7bu39n-yU-UNmI0wNeloKgt8lqmq4i4Rxv20f3j5cwp-pvkZb9w/exec';
   fetch(SCRIPT+'?'+new URLSearchParams(data).toString(),{mode:'no-cors'}).catch(()=>{});
   const leads=JSON.parse(localStorage.getItem('mw_leads')||'[]');leads.push(data);localStorage.setItem('mw_leads',JSON.stringify(leads));
@@ -717,6 +855,29 @@ function handleDownload(e){
   document.getElementById('sc2').classList.add('done');document.getElementById('s3').className='sd done';document.getElementById('s3').textContent='✓';
   window.open('https://drive.google.com/uc?export=download&id=1pZPJr7DdPntKkfbayr-y7htc_s_97kxT','_blank');
 }
+
+// Auto-detect country from timezone
+(function(){
+  try{
+    const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';
+    const tzMap={
+      'Africa/Cairo':['🇪🇬','+20'],'Asia/Riyadh':['🇸🇦','+966'],
+      'Asia/Dubai':['🇦🇪','+971'],'Asia/Kuwait':['🇰🇼','+965'],
+      'Asia/Qatar':['🇶🇦','+974'],'Asia/Bahrain':['🇧🇭','+973'],
+      'Asia/Muscat':['🇴🇲','+968'],'Asia/Baghdad':['🇮🇶','+964'],
+      'Asia/Amman':['🇯🇴','+962'],'Asia/Beirut':['🇱🇧','+961'],
+      'Asia/Damascus':['🇸🇾','+963'],'Africa/Tripoli':['🇱🇾','+218'],
+      'Africa/Tunis':['🇹🇳','+216'],'Africa/Algiers':['🇩🇿','+213'],
+      'Africa/Casablanca':['🇲🇦','+212'],'Africa/Khartoum':['🇸🇩','+249'],
+      'Asia/Aden':['🇾🇪','+967'],'Europe/Istanbul':['🇹🇷','+90'],
+    };
+    if(tzMap[tz]){
+      document.getElementById('selectedFlag').textContent=tzMap[tz][0];
+      document.getElementById('selectedCode').textContent=tzMap[tz][1];
+      selectedCountryCode=tzMap[tz][1];
+    }
+  }catch(e){}
+})();
 
 // Countdown
 (function(){
