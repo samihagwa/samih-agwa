@@ -699,7 +699,7 @@ function handleSubmit(){
   if(wa.replace(/\D/g,'').length<10){alert('أدخل رقم واتساب صحيح');return}
   btn.disabled=true;btn.textContent='ثانية واحدة...';
   const data={name,email,whatsapp:wa,date:new Date().toISOString(),source:'harmonic-book-landing'};
-  const SCRIPT='https://script.google.com/macros/s/AKfycbwN3fZE0jsN2XHWnzU2gJURY1mH6NQt7Gy5SLhmNMGxwKS8nUjE-CIJro92NB3lqVWeVw/exec';
+  const SCRIPT='https://script.google.com/macros/s/AKfycbwevGi3qUSW4N2DpUC7bu39n-yU-UNmI0wNeloKgt8lqmq4i4Rxv20f3j5cwp-pvkZb9w/exec';
   fetch(SCRIPT+'?'+new URLSearchParams(data).toString(),{mode:'no-cors'}).catch(()=>{});
   const leads=JSON.parse(localStorage.getItem('mw_leads')||'[]');leads.push(data);localStorage.setItem('mw_leads',JSON.stringify(leads));
   setTimeout(()=>{
