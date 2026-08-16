@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Bell, Search } from "lucide-react";
+import { SessionChip } from "../auth/SessionChip";
 import { SidebarNav } from "./SidebarNav";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -13,7 +14,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarNav />
         <div className="sidebar-note">
           <span className="signal-dot" aria-hidden="true" />
-          <div><strong>نسخة تأسيسية</strong><small>لا توجد بيانات تشغيل حقيقية بعد</small></div>
+          <div><strong>نسخة تشغيل آمنة</strong><small>الفريق لم يبدأ onboarding بعد</small></div>
         </div>
       </aside>
 
@@ -24,7 +25,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
           <div className="topbar-actions">
             <button className="icon-button" type="button" aria-label="الإشعارات"><Bell size={19} /></button>
-            <div className="user-chip"><span>س</span><div><strong>سميح عجوة</strong><small>المالك</small></div></div>
+            <SessionChip />
           </div>
         </header>
         <div className="page-container">{children}</div>

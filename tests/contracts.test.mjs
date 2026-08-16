@@ -31,7 +31,31 @@ test("Supabase client consumes generated database types", async () => {
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(client, /createClient<Database>/);
-  for (const table of ["audit_events", "memberships", "organizations", "profiles"]) {
+  for (const table of ["audit_events", "memberships", "organizations", "profiles", "tasks", "task_events"]) {
     assert.match(types, new RegExp(`${table}:`));
   }
+});
+
+test("task workflow is shared between UI types and database enforcement", async () => {
+  const [taskContract, migration] = await Promise.all([
+    readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260816232708_task_management.sql", import.meta.url), "utf8"),
+  ]);
+
+  for (const status of ["backlog", "ready", "in_progress", "review", "blocked", "done", "cancelled"]) {
+    assert.match(taskContract, new RegExp(`\\b${status}\\b`));
+    assert.match(migration, new RegExp(`'${status}'`));
+  }
+
+  assert.match(migration, /enable row level security/g);
+  assert.match(migration, /private\.enforce_task_rules/);
+  assert.match(migration, /private\.record_task_event/);
+  assert.match(migration, /grant execute on function public\.bootstrap_market_whales_organization\(uuid\) to service_role/);
+  assert.doesNotMatch(migration, /grant delete/i);
+});
+
+test("application shell does not impersonate an authenticated owner", async () => {
+  const source = await readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /سميح عجوة/);
+  assert.match(source, /SessionChip/);
 });

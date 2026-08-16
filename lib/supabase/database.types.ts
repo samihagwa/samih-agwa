@@ -156,16 +156,162 @@ export type Database = {
         }
         Relationships: []
       }
+      task_events: {
+        Row: {
+          actor_id: string | null
+          details: Json
+          event_type: string
+          from_status: Database["public"]["Enums"]["task_status"] | null
+          id: number
+          occurred_at: string
+          organization_id: string
+          task_id: string
+          to_status: Database["public"]["Enums"]["task_status"] | null
+        }
+        Insert: {
+          actor_id?: string | null
+          details?: Json
+          event_type: string
+          from_status?: Database["public"]["Enums"]["task_status"] | null
+          id?: never
+          occurred_at?: string
+          organization_id: string
+          task_id: string
+          to_status?: Database["public"]["Enums"]["task_status"] | null
+        }
+        Update: {
+          actor_id?: string | null
+          details?: Json
+          event_type?: string
+          from_status?: Database["public"]["Enums"]["task_status"] | null
+          id?: never
+          occurred_at?: string
+          organization_id?: string
+          task_id?: string
+          to_status?: Database["public"]["Enums"]["task_status"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_events_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          acceptance_criteria: string
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          due_at: string
+          id: string
+          organization_id: string
+          owner_id: string
+          priority: Database["public"]["Enums"]["task_priority"]
+          started_at: string | null
+          status: Database["public"]["Enums"]["task_status"]
+          title: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          acceptance_criteria: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_at: string
+          id?: string
+          organization_id: string
+          owner_id: string
+          priority?: Database["public"]["Enums"]["task_priority"]
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["task_status"]
+          title: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          acceptance_criteria?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_at?: string
+          id?: string
+          organization_id?: string
+          owner_id?: string
+          priority?: Database["public"]["Enums"]["task_priority"]
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["task_status"]
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      bootstrap_market_whales_organization: {
+        Args: { target_user_id: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "owner" | "admin" | "manager" | "member" | "viewer"
       membership_status: "invited" | "active" | "suspended"
+      task_priority: "low" | "normal" | "high" | "urgent"
+      task_status:
+        | "backlog"
+        | "ready"
+        | "in_progress"
+        | "review"
+        | "blocked"
+        | "done"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -295,6 +441,16 @@ export const Constants = {
     Enums: {
       app_role: ["owner", "admin", "manager", "member", "viewer"],
       membership_status: ["invited", "active", "suspended"],
+      task_priority: ["low", "normal", "high", "urgent"],
+      task_status: [
+        "backlog",
+        "ready",
+        "in_progress",
+        "review",
+        "blocked",
+        "done",
+        "cancelled",
+      ],
     },
   },
 } as const

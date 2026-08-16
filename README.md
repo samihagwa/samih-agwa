@@ -31,4 +31,13 @@ This starter does not use `wrangler.jsonc`.
 
 ## Important status
 
-The current UI contains foundation and sample states only. The team has not been onboarded and no production customer or social data is connected.
+The identity and real task-management foundations are live. The team has not been onboarded, no live tasks have been entered, and no production customer or social data is connected.
+
+## First owner setup
+
+1. Open `/tasks` on the deployed site.
+2. Request a one-time sign-in link using the owner's email.
+3. After the verified session returns, choose **Create Market Whales workspace** once.
+4. Do not enter team members or live work until role assignments and onboarding have been reviewed.
+
+The bootstrap endpoint is authenticated and can create only the first organization. Once Market Whales exists, later users must be invited through the team-management flow that will be built next.

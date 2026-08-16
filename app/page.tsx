@@ -9,8 +9,8 @@ import { StatusBadge } from "../components/ui/StatusBadge";
 export const metadata: Metadata = { title: "مركز القيادة" };
 
 const foundations = [
-  { label: "هوية وصلاحيات الفريق", state: "قيد الإعداد", icon: ShieldCheck },
-  { label: "مسار إنتاج المحتوى", state: "جاهز للتصميم", icon: CircleCheck },
+  { label: "هوية وصلاحيات الفريق", state: "جاهزة تقنيًا — لم يبدأ الفريق", icon: ShieldCheck },
+  { label: "إدارة المهام والتسليم", state: "قواعد آمنة وبورد حقيقي", icon: CircleCheck },
   { label: "قياس النتائج والحملات", state: "بانتظار مصادر البيانات", icon: Clock3 },
 ];
 
@@ -20,11 +20,11 @@ export default function Home() {
       <PageHeader
         eyebrow="مركز القيادة"
         title="خلّي الشغل يمشي كنظام، مش كسلسلة رسائل"
-        description="نواة موحّدة لإدارة المحتوى والتاسكات والحملات والعملاء. هذه النسخة تأسيسية، ولا تعتبر أي بيانات معروضة مهام حقيقية للفريق."
+        description="نواة موحّدة لإدارة المحتوى والتاسكات والحملات والعملاء. الهوية وقاعدة المهام جاهزتان تقنيًا، لكن الفريق لم يبدأ onboarding ولا نعرض أي بيانات على أنها حقيقية قبل إدخالها رسميًا."
         actions={
           <>
-            <StatusBadge tone="info">بيانات تجريبية</StatusBadge>
-            <Button href="/content">ابدأ من خط المحتوى</Button>
+            <StatusBadge tone="success">قاعدة المهام جاهزة</StatusBadge>
+            <Button href="/tasks">فتح بورد المهام</Button>
           </>
         }
       />
@@ -47,9 +47,9 @@ export default function Home() {
               <p className="overline">جاهزية الأساس</p>
               <h2>3 محاور قبل الإطلاق</h2>
             </div>
-            <span className="progress-value">1/3</span>
+            <span className="progress-value">2/3</span>
           </div>
-          <div className="progress-track" aria-label="اكتمل محور من ثلاثة"><span /></div>
+          <div className="progress-track progress-two" aria-label="اكتمل محوران من ثلاثة"><span /></div>
           <ul className="foundation-list">
             {foundations.map(({ label, state, icon: Icon }) => (
               <li key={label}>
@@ -61,8 +61,8 @@ export default function Home() {
         </aside>
       </section>
 
-      <section className="stats-grid" aria-label="مؤشرات النسخة التأسيسية">
-        <StatCard label="مسارات موحّدة" value="6" note="من الفكرة حتى النشر والقياس" />
+      <section className="stats-grid" aria-label="مؤشرات جاهزية النظام">
+        <StatCard label="حالات مهمة محكومة" value="7" note="كل انتقال يُفحص داخل قاعدة البيانات" />
         <StatCard label="صلاحيات أساسية" value="5" note="مالك، مدير، منفّذ، مراجع، مشاهد" />
         <StatCard label="مصادر بيانات" value="0" note="لن نعرض أرقامًا وهمية" tone="warning" />
         <StatCard label="أعضاء فعّالون" value="0" note="يبدأ بعد اعتماد onboarding" />
@@ -90,9 +90,9 @@ export default function Home() {
 
         <aside className="panel next-step-card">
           <p className="overline">القرار التالي</p>
-          <h2>اعتماد قاعدة البيانات الجديدة</h2>
-          <p>سننشئ مشروع Supabase نظيفًا للنظام، بدل خلطه بالمشروعات التجريبية أو تطبيق الشركة الحالي.</p>
-          <StatusBadge tone="warning">يحتاج موافقة المالك</StatusBadge>
+          <h2>تفعيل حساب المالك ثم إدخال الفريق</h2>
+          <p>أول دخول موثّق ينشئ مساحة Market Whales مرة واحدة، وبعدها يدخل باقي الفريق بالدعوات والصلاحيات المحددة فقط.</p>
+          <StatusBadge tone="warning">لم يبدأ onboarding</StatusBadge>
         </aside>
       </section>
     </main>

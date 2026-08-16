@@ -37,10 +37,11 @@ for (const [pathname, expectedHeading] of routes) {
   });
 }
 
-test("foundation UI does not pretend test tasks are live data", async () => {
+test("dashboard reports onboarding truth without invented operational data", async () => {
   const response = await render("/");
   const html = await response.text();
-  assert.match(html, /بيانات تجريبية/);
+  assert.match(html, /الفريق لم يبدأ onboarding/);
+  assert.match(html, /لن نعرض أرقامًا وهمية/);
   assert.match(html, /أعضاء فعّالون/);
   assert.match(html, />0</);
 });

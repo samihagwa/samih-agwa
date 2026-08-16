@@ -40,10 +40,19 @@ Existing Market Whales application
 - Make webhook and job handlers idempotent and audit every privileged mutation.
 - Keep authorization helpers in a non-exposed `private` schema. Route privileged commands through trusted server code rather than public `SECURITY DEFINER` RPCs.
 
+## Task workflow contract
+
+- `tasks` is the operational source of truth; Telegram messages are never treated as task records.
+- A task cannot be created without one active organization owner, a future deadline, and acceptance criteria.
+- Leadership can define and reassign work. An assigned member can move only their own task and cannot rewrite its scope, owner, priority, or deadline.
+- Status transitions are validated by `private.enforce_task_rules`, not by the browser. The UI mirrors the same transition map for guidance only.
+- Every task change creates an immutable `task_events` record and a leadership-visible `audit_events` record.
+- The first organization is created atomically by an authenticated Edge Function. Its database command is `SECURITY INVOKER` and executable by `service_role` only.
+
 ## Initial domains
 
-1. Identity, organizations, memberships, and roles.
-2. Tasks, dependencies, reviews, and activity.
+1. Identity, organizations, memberships, and roles — foundation live; team onboarding pending.
+2. Tasks, transitions, ownership, deadlines, acceptance criteria, Realtime, and activity — foundation live.
 3. Content assets, briefs, production stages, publishing, and metrics.
 4. Campaigns, launches, milestones, assets, and readiness gates.
 5. People, leads, customers, sources, consent, and pipeline.
