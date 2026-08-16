@@ -1,0 +1,4 @@
+interface:
+  display_name: "Market Whales OS"
+  short_description: "Build and protect the Market Whales OS"
+  default_prompt: "Use $market-whales-os to implement this change safely across the Market Whales operating system."

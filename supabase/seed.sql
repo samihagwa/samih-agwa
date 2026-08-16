@@ -1,0 +1,2 @@
+-- Production data must never be seeded from historical Telegram tests.
+-- Add deterministic local-only fixtures here when the domain schema is approved.
