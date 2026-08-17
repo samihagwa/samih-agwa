@@ -7,7 +7,7 @@ export const sections: Record<string, SectionConfig> = {
     { title: "تسليم تلقائي", description: "بعد الاعتماد ينتقل العمل للتخصص التالي ويصله تنبيه." },
     { title: "تصعيد التأخير", description: "تذكير ثم تصعيد للمدير وفق قواعد ثابتة وقابلة للقياس." },
   ]},
-  content: { eyebrow: "مصنع المحتوى", title: "من الفكرة إلى النشر في مسار واحد", description: "الخطة والـbrief والخام والمونتاج والغلاف والكابشن والنتائج مرتبطة بنفس أصل المحتوى.", status: "أولوية المرحلة الأولى", statusTone: "success", nextStep: "اعتماد قالب الـContent Brief", capabilities: [
+  content: { eyebrow: "مصنع المحتوى", title: "من الفكرة إلى النشر في مسار واحد", description: "الخطة والـbrief والخام والمونتاج والغلاف والكابشن والنتائج مرتبطة بنفس أصل المحتوى.", status: "الأساس جاهز للاختبار", statusTone: "success", nextStep: "اختبار أول ريلز ثم ربط الأصول", capabilities: [
     { title: "تقويم ربع سنوي", description: "ربط أهداف الربع بالأعمدة والحملات ومواعيد النشر." },
     { title: "خط إنتاج", description: "كتابة، تسجيل، مونتاج، تصميم، مراجعة، جدولة ثم نشر." },
     { title: "مكتبة براند", description: "مرجع واضح للمصمم والمونتير: ما يصح وما لا يصح." },

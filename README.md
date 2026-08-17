@@ -31,13 +31,21 @@ This starter does not use `wrangler.jsonc`.
 
 ## Important status
 
-The identity and real task-management foundations are live. The team has not been onboarded, no live tasks have been entered, and no production customer or social data is connected.
+The identity, real task-management, and reel production foundations are live. The team has not been onboarded, no live tasks or content have been entered, and no production customer or social data is connected.
 
 ## First owner setup
 
 1. Open `/tasks` on the deployed site.
 2. Request a one-time sign-in link using the owner's email.
 3. After the verified session returns, choose **Create Market Whales workspace** once.
-4. Do not enter team members or live work until role assignments and onboarding have been reviewed.
+4. During personal testing, do not enter team members. Create only clearly labeled test tasks and reel workflows.
 
-The bootstrap endpoint is authenticated and can create only the first organization. Once Market Whales exists, later users must be invited through the team-management flow that will be built next.
+The bootstrap endpoint is authenticated and can create only the first organization. No invitation flow is active and no invitation is sent during personal testing.
+
+## Personal content test
+
+1. Sign in and create the owner workspace from `/tasks`.
+2. Open `/content` and choose **New reel**.
+3. Complete the brief and publish date. The owner account is assigned to all seven steps by default.
+4. Move linked tasks through the allowed states on `/tasks`. Completing a dependency unlocks the next eligible task automatically.
+5. The final publishing task is a manual confirmation until a verified Meta/platform integration is added.

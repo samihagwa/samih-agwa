@@ -102,6 +102,7 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus);
 .progress-track { height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
 .progress-track span { display: block; width: 33%; height: 100%; background: var(--teal-700); border-radius: inherit; }
 .progress-track.progress-two span { width: 66%; }
+.progress-track.progress-complete span { width: 100%; }
 .foundation-list { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 15px; }
 .foundation-list li { display: flex; align-items: center; gap: 11px; }
 .foundation-list strong, .foundation-list small { display: block; }
@@ -121,7 +122,7 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus);
 .panel { padding: 25px; box-shadow: none; }
 .span-two { min-width: 0; }
 .text-link { display: inline-flex; align-items: center; gap: 6px; color: var(--teal-700); font-size: 11px; font-weight: 900; }
-.workflow-line { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, 1fr); direction: rtl; }
+.workflow-line { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); direction: rtl; }
 .workflow-line li { position: relative; padding-left: 15px; }
 .workflow-line li:not(:last-child)::after { content: ""; position: absolute; top: 15px; left: 2px; width: calc(100% - 32px); height: 1px; background: var(--line-strong); transform: translateX(-50%); }
 .workflow-line span { width: 30px; height: 30px; display: grid; place-items: center; position: relative; z-index: 1; background: var(--ink-950); color: white; border-radius: 9px; font-size: 9px; font-weight: 800; }
@@ -227,6 +228,51 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .column-empty { min-height: 130px; display: grid; place-items: center; align-content: center; gap: 5px; border: 1px dashed var(--line-strong); border-radius: 13px; color: var(--ink-400); }
 .column-empty span { font-size: 22px; }
 .column-empty p { margin: 0; font-size: 9px; }
+.workflow-task-label { width: fit-content; margin-top: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 8px; background: var(--teal-100); color: var(--teal-700); font-size: 9px; font-weight: 900; }
+
+.content-workspace { display: grid; gap: 18px; min-width: 0; }
+.content-create-form { padding: 24px; }
+.content-create-form .section-heading { margin-bottom: 18px; }
+.assignment-block { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(210px, .55fr) minmax(0, 1.45fr); gap: 20px; }
+.assignment-block h3 { margin: 5px 0 6px; font-size: 15px; }
+.assignment-block p:not(.overline) { margin: 0; color: var(--ink-600); font-size: 10px; line-height: 1.75; }
+.assignment-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+.assignment-grid label { display: grid; gap: 6px; }
+.assignment-grid label > span { color: var(--ink-800); font-size: 10px; font-weight: 800; }
+.assignment-grid select { min-height: 38px; padding: 7px 9px; font-size: 10px; }
+.content-list { display: grid; gap: 14px; }
+.content-card { padding: 22px; }
+.content-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.content-card-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.content-card-title h3 { margin: 4px 0 0; font-size: 18px; line-height: 1.5; }
+.content-brief-grid { margin-top: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.content-brief-grid > div { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.content-brief-grid small { color: var(--teal-700); font-size: 9px; font-weight: 900; }
+.content-brief-grid p { margin: 5px 0 0; color: var(--ink-700); font-size: 10px; line-height: 1.7; }
+.content-progress-row { margin: 16px 0; display: grid; grid-template-columns: auto minmax(120px, 1fr) auto; align-items: center; gap: 12px; }
+.content-progress-row > div:first-child { display: flex; align-items: baseline; gap: 7px; }
+.content-progress-row > div:first-child strong { color: var(--teal-700); font-size: 18px; }
+.content-progress-row > div:first-child span, .content-progress-row > div:last-child { color: var(--ink-600); font-size: 9px; }
+.content-progress-row > div:last-child { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.content-progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: var(--canvas); }
+.content-progress-track > span { height: 100%; display: block; border-radius: inherit; background: var(--teal-700); transition: width .25s ease; }
+.content-steps { list-style: none; margin: 0; padding: 15px 0; display: grid; grid-template-columns: repeat(7, minmax(72px, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.content-steps li { min-width: 72px; position: relative; display: grid; justify-items: center; gap: 5px; color: var(--ink-400); text-align: center; }
+.content-steps li:not(:last-child)::after { content: ""; position: absolute; top: 13px; inset-inline-start: calc(50% + 17px); width: calc(100% - 34px); height: 1px; background: var(--line-strong); }
+.content-steps li > span { width: 27px; height: 27px; position: relative; z-index: 1; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--paper); font-size: 9px; font-weight: 900; }
+.content-steps li strong { color: var(--ink-600); font-size: 9px; }
+.content-steps li small { max-width: 90px; overflow: hidden; text-overflow: ellipsis; font-size: 8px; white-space: nowrap; }
+.content-steps li.done > span { border-color: var(--teal-700); background: var(--teal-700); color: white; }
+.content-steps li.done strong { color: var(--teal-700); }
+.content-steps li.active > span { border-color: var(--ink-950); background: var(--ink-950); color: white; box-shadow: 0 0 0 4px var(--teal-100); }
+.content-steps li.active strong { color: var(--ink-950); }
+.content-card > footer { padding-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.content-card > footer > div { display: flex; align-items: center; gap: 7px; color: var(--ink-600); font-size: 10px; }
+.content-card > footer svg { color: var(--teal-700); flex: 0 0 auto; }
+.automation-note { padding: 16px 18px; display: flex; align-items: flex-start; gap: 11px; border: 1px dashed var(--line-strong); border-radius: 14px; background: rgba(255,255,255,.55); }
+.automation-note > svg { color: var(--teal-700); flex: 0 0 auto; margin-top: 2px; }
+.automation-note strong { font-size: 11px; }
+.automation-note p { margin: 4px 0 0; color: var(--ink-600); font-size: 9px; line-height: 1.7; }
 
 @media (max-width: 1120px) {
   .app-shell { grid-template-columns: 220px minmax(0, 1fr); }
@@ -235,6 +281,8 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
   .workflow-line { grid-template-columns: repeat(3, 1fr); gap: 22px 0; }
   .workflow-line li::after { display: none; }
   .auth-layout { grid-template-columns: 1fr; }
+  .assignment-block { grid-template-columns: 1fr; }
+  .content-brief-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -265,6 +313,11 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
   .full-field { grid-column: auto; }
   .workspace-onboarding .button { margin-right: 0; width: 100%; }
   .kanban-board { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
+  .assignment-grid { grid-template-columns: 1fr; }
+  .content-card { padding: 17px; }
+  .content-card > header, .content-card > footer { align-items: flex-start; flex-direction: column; }
+  .content-progress-row { grid-template-columns: 1fr; }
+  .content-steps { margin-left: -17px; margin-right: -17px; padding-left: 17px; padding-right: 17px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

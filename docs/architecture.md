@@ -38,7 +38,7 @@ Existing Market Whales application
 - Use `app_metadata` or database membership rows for authorization.
 - Put uploads in private buckets and use short-lived signed URLs.
 - Make webhook and job handlers idempotent and audit every privileged mutation.
-- Keep authorization helpers in a non-exposed `private` schema. Route privileged commands through trusted server code rather than public `SECURITY DEFINER` RPCs.
+- Keep authorization helpers in a non-exposed `private` schema. Prefer trusted server code for privileged operations; any narrow `SECURITY DEFINER` command must validate the authenticated caller, use an empty search path, expose no table writes, and have explicit execute grants.
 
 ## Task workflow contract
 
@@ -49,11 +49,21 @@ Existing Market Whales application
 - Every task change creates an immutable `task_events` record and a leadership-visible `audit_events` record.
 - The first organization is created atomically by an authenticated Edge Function. Its database command is `SECURITY INVOKER` and executable by `service_role` only.
 
+## Content production contract
+
+- `content_items` is the source of truth for a publishable asset and its brief.
+- A reel workflow is created atomically through the JWT-protected `create-content-workflow` Edge Function; its database command is executable by `service_role` only, so partial task sets cannot be saved.
+- Each workflow produces seven normal tasks: brief, recording, editing, thumbnail, caption, approval, and publishing.
+- `task_dependencies` models the handoff graph. Completing a predecessor unlocks only downstream tasks whose dependencies are all done.
+- Caption work can run in parallel after brief approval; final approval waits for editing, thumbnail, and caption.
+- Content status is derived by database triggers from linked task state, and important changes are written to the audit log.
+- External social publishing remains manual until a verified platform integration returns a real publish confirmation.
+
 ## Initial domains
 
 1. Identity, organizations, memberships, and roles — foundation live; team onboarding pending.
 2. Tasks, transitions, ownership, deadlines, acceptance criteria, Realtime, and activity — foundation live.
-3. Content assets, briefs, production stages, publishing, and metrics.
+3. Content assets, briefs, dependency-based production stages, and manual publish confirmation — foundation live; external publishing and metrics pending.
 4. Campaigns, launches, milestones, assets, and readiness gates.
 5. People, leads, customers, sources, consent, and pipeline.
 6. Metric definitions, observations, targets, experiments, and decisions.

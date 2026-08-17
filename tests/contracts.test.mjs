@@ -31,7 +31,7 @@ test("Supabase client consumes generated database types", async () => {
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(client, /createClient<Database>/);
-  for (const table of ["audit_events", "memberships", "organizations", "profiles", "tasks", "task_events"]) {
+  for (const table of ["audit_events", "content_items", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
     assert.match(types, new RegExp(`${table}:`));
   }
 });
@@ -52,6 +52,32 @@ test("task workflow is shared between UI types and database enforcement", async 
   assert.match(migration, /private\.record_task_event/);
   assert.match(migration, /grant execute on function public\.bootstrap_market_whales_organization\(uuid\) to service_role/);
   assert.doesNotMatch(migration, /grant delete/i);
+});
+
+test("content workflow creates one guarded dependency graph shared with tasks", async () => {
+  const [contentContract, migration, securityMigration, edgeFunction, workspace] = await Promise.all([
+    readFile(new URL("../lib/content.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260816235000_content_production_pipeline.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260817000500_secure_content_workflow_command.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+  ]);
+
+  for (const step of ["brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing"]) {
+    assert.match(contentContract, new RegExp(`\\b${step}\\b`));
+    assert.match(migration, new RegExp(`'${step}'`));
+  }
+
+  assert.match(migration, /create table public\.task_dependencies/);
+  assert.match(migration, /private\.advance_content_workflow/);
+  assert.match(migration, /create or replace function public\.create_reel_workflow/);
+  assert.doesNotMatch(migration, /grant (insert|update|delete).*content_items/i);
+  assert.match(securityMigration, /to service_role/);
+  assert.match(securityMigration, /from public, anon, authenticated/);
+  assert.match(edgeFunction, /createSupabaseContext/);
+  assert.match(edgeFunction, /auth: "user"/);
+  assert.match(workspace, /functions\.invoke\("create-content-workflow"/);
+  assert.match(workspace, /7 مهام مترابطة/);
 });
 
 test("application shell does not impersonate an authenticated owner", async () => {

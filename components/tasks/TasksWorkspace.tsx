@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleUserRound,
+  Film,
   LoaderCircle,
   LockKeyhole,
   Plus,
@@ -14,6 +15,7 @@ import {
   UserRoundCheck,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { contentStepConfig } from "../../lib/content";
 import {
   allowedTaskTransitions,
   canManageTasks,
@@ -344,7 +346,7 @@ export function TasksWorkspace() {
     return (
       <section className="workspace-state workspace-onboarding">
         <UserRoundCheck size={27} />
-        <div><p className="overline">الحساب موثّق</p><h2>حسابك غير مرتبط بمساحة فريق بعد</h2><p>إذا كنت أول مستخدم للنظام، أنشئ مساحة Market Whales مرة واحدة. بعد ذلك يدخل باقي الفريق بالدعوات فقط.</p></div>
+        <div><p className="overline">الحساب موثّق</p><h2>حسابك غير مرتبط بمساحة فريق بعد</h2><p>أنشئ مساحة Market Whales مرة واحدة للاختبار الشخصي. لن نضيف أي عضو أو نرسل أي دعوة في هذه المرحلة.</p></div>
         <Button type="button" onClick={bootstrapWorkspace} disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Plus size={16} />} إنشاء مساحة الشركة</Button>
         {error ? <p className="form-notice error" role="alert">{error}</p> : null}
       </section>
@@ -399,6 +401,7 @@ export function TasksWorkspace() {
                   return (
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} key={task.id}>
                       <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><small>v{task.version}</small></div>
+                      {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
                       <h3>{task.title}</h3>
                       {task.description ? <p>{task.description}</p> : null}
                       <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong>{task.acceptance_criteria}</span></div>
