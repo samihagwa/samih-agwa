@@ -52,9 +52,8 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus);
 
 .workspace { min-width: 0; }
 .topbar { height: 72px; position: sticky; top: 0; z-index: 15; padding: 0 clamp(20px, 4vw, 52px); background: rgba(243,246,245,.87); backdrop-filter: blur(18px); border-bottom: 1px solid rgba(194,207,205,.72); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-.search-trigger { width: min(430px, 45vw); height: 40px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.8); color: var(--ink-600); border-radius: 12px; padding: 0 12px; cursor: pointer; text-align: right; }
-.search-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.search-trigger kbd { margin-right: auto; padding: 2px 7px; border: 1px solid var(--line); border-bottom-color: var(--line-strong); border-radius: 6px; background: var(--canvas); color: var(--ink-600); font-size: 10px; direction: ltr; }
+.topbar-status { min-height: 38px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: rgba(255,255,255,.7); color: var(--ink-600); border-radius: 12px; padding: 0 12px; font-size: 11px; font-weight: 800; }
+.topbar-status svg { color: var(--teal-700); }
 .topbar-actions { display: flex; align-items: center; gap: 11px; }
 .icon-button { width: 39px; height: 39px; display: grid; place-items: center; background: var(--paper); color: var(--ink-800); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
 .user-chip { display: flex; align-items: center; gap: 9px; padding-right: 5px; }
@@ -359,8 +358,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
   .sidebar-nav a { flex: 0 0 auto; min-height: 38px; padding: 8px 10px; font-size: 11px; }
   .sidebar-nav a:hover { transform: none; }
   .topbar { top: 110px; height: 60px; padding: 0 16px; }
-  .search-trigger { width: 45px; justify-content: center; }
-  .search-trigger span, .search-trigger kbd, .user-chip div { display: none; }
+  .topbar-status span, .user-chip div { display: none; }
   .page-container { padding: 24px 16px 48px; }
   .page-header { align-items: flex-start; flex-direction: column; }
   .page-header h1 { font-size: 29px; }

@@ -15,7 +15,6 @@ import {
   Route,
   Sparkles,
 } from "lucide-react";
-import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   launchGateConfig,
@@ -527,7 +526,7 @@ export function CampaignsWorkspace() {
                   </section>
 
                   <section className="launch-assets-panel">
-                    <div className="launch-subheading"><div><p className="overline">أصول الحملة</p><h4>{linkedItems.length ? `${linkedItems.length} أصل محتوى مرتبط` : "لا يوجد محتوى مرتبط"}</h4></div><Link className="text-link" href="/content">فتح المصنع <Link2 size={13} /></Link></div>
+                    <div className="launch-subheading"><div><p className="overline">أصول الحملة</p><h4>{linkedItems.length ? `${linkedItems.length} أصل محتوى مرتبط` : "لا يوجد محتوى مرتبط"}</h4></div><a className="text-link" href="/content">فتح المصنع <Link2 size={13} /></a></div>
                     {linkedItems.length ? <ul className="linked-content-list">{linkedItems.map((item) => <li key={item.id}><div><Film size={14} /><span>{item.title}</span></div>{manager ? <button type="button" disabled={working} onClick={() => void changeContentLink(launch.id, item.id, false)}>إزالة الربط</button> : null}</li>)}</ul> : <p className="launch-assets-empty">أنشئ أصلًا من مصنع المحتوى، ثم اربطه هنا بالخطة.</p>}
                     {manager && availableContent.length ? <div className="content-link-control"><select aria-label={`اختر محتوى لحملة ${launch.title}`} value={contentSelection[launch.id] ?? ""} onChange={(event) => setContentSelection((current) => ({ ...current, [launch.id]: event.target.value }))}><option value="">اختر أصل محتوى…</option>{availableContent.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select><Button type="button" variant="secondary" disabled={working || !contentSelection[launch.id]} onClick={() => void changeContentLink(launch.id, contentSelection[launch.id], true)}><Link2 size={14} /> ربط</Button></div> : null}
                   </section>
@@ -535,7 +534,7 @@ export function CampaignsWorkspace() {
 
                 <footer>
                   <div>{activeTasks.length ? <><CircleUserRound size={15} /><span>النشط الآن: <strong>{activeTasks.map((task) => task.launch_gate ? launchGateConfig[task.launch_gate].shortLabel : task.title).join(" + ")}</strong></span></> : <><CheckCircle2 size={15} /><span>لا توجد بوابة نشطة الآن.</span></>}</div>
-                  <Link className="text-link" href="/tasks">فتح مهام الإطلاق <Link2 size={13} /></Link>
+                  <a className="text-link" href="/tasks">فتح مهام الإطلاق <Link2 size={13} /></a>
                 </footer>
               </article>
             );

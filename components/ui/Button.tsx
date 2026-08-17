@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -9,6 +8,6 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ children, href, variant = "primary", className = "", ...buttonProps }: Props) {
   const classes = `button button-${variant} ${className}`.trim();
-  if (href) return <Link href={href} className={classes}>{children}</Link>;
+  if (href) return <a href={href} className={classes}>{children}</a>;
   return <button {...buttonProps} className={classes}>{children}</button>;
 }

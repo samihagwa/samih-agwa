@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bell, Search } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { SessionChip } from "../auth/SessionChip";
 import { SidebarNav } from "./SidebarNav";
 
@@ -20,11 +20,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="workspace">
         <header className="topbar">
-          <button className="search-trigger" type="button" aria-label="بحث داخل النظام">
-            <Search size={18} /><span>ابحث عن مهمة، محتوى، عميل...</span><kbd>⌘ K</kbd>
-          </button>
+          <div className="topbar-status"><ShieldCheck size={17} /><span>وضع الاختبار الشخصي</span></div>
           <div className="topbar-actions">
-            <button className="icon-button" type="button" aria-label="الإشعارات"><Bell size={19} /></button>
             <SessionChip />
           </div>
         </header>

@@ -14,7 +14,6 @@ import {
   Route,
   Sparkles,
 } from "lucide-react";
-import Link from "next/link";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   contentStatusConfig,
@@ -388,7 +387,7 @@ export function ContentWorkspace() {
 
                 <footer>
                   <div>{activeTasks.length ? <><CircleUserRound size={15} /><span>النشط الآن: <strong>{activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ")}</strong></span></> : <><CheckCircle2 size={15} /><span>لا توجد خطوة نشطة الآن.</span></>}</div>
-                  <Link className="text-link" href="/tasks">فتح المهمة <Link2 size={13} /></Link>
+                  <a className="text-link" href="/tasks">فتح المهمة <Link2 size={13} /></a>
                 </footer>
               </article>
             );

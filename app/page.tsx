@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { ArrowLeft, CircleCheck, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -83,7 +82,7 @@ export default function Home() {
         <article className="panel span-two">
           <div className="section-heading">
             <div><p className="overline">خط التشغيل المقترح</p><h2>الريلز يتحرك تلقائيًا بين التخصصات</h2></div>
-            <Link className="text-link" href="/content">فتح خط المحتوى <ArrowLeft size={16} /></Link>
+            <a className="text-link" href="/content">فتح خط المحتوى <ArrowLeft size={16} /></a>
           </div>
           <ol className="workflow-line">
             {contentSteps.map((step) => (

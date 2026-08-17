@@ -9,6 +9,20 @@ test("shared navigation covers every primary route", async () => {
   }
 });
 
+test("internal navigation remains usable when the experimental client router fails", async () => {
+  const sources = await Promise.all([
+    "../app/page.tsx",
+    "../components/layout/SidebarNav.tsx",
+    "../components/ui/Button.tsx",
+    "../components/content/ContentWorkspace.tsx",
+    "../components/campaigns/CampaignsWorkspace.tsx",
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")));
+
+  assert.doesNotMatch(sources.join("\n"), /from ["']next\/link["']/);
+  assert.match(sources[1], /<a key=\{href\} href=\{href\}/);
+  assert.match(sources[2], /if \(href\) return <a href=\{href\}/);
+});
+
 test("status badges never rely on color alone", async () => {
   const source = await readFile(new URL("../components/ui/StatusBadge.tsx", import.meta.url), "utf8");
   assert.match(source, /const marks/);

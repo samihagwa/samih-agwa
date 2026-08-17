@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, Clapperboard, LayoutDashboard, Rocket, Settings, SquareKanban, UsersRound } from "lucide-react";
 
@@ -20,11 +19,11 @@ export function SidebarNav() {
       <p className="nav-label">مساحة العمل</p>
       {items.map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === href : pathname.startsWith(href);
-        return <Link key={href} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}><Icon size={19} /><span>{label}</span></Link>;
+        return <a key={href} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}><Icon size={19} /><span>{label}</span></a>;
       })}
       <p className="nav-label nav-label-spaced">النظام</p>
-      <Link href="/team" className={pathname.startsWith("/team") ? "active" : ""}><UsersRound size={19} /><span>الفريق والصلاحيات</span></Link>
-      <Link href="/settings" className={pathname.startsWith("/settings") ? "active" : ""}><Settings size={19} /><span>الإعدادات والتكاملات</span></Link>
+      <a href="/team" className={pathname.startsWith("/team") ? "active" : ""}><UsersRound size={19} /><span>الفريق والصلاحيات</span></a>
+      <a href="/settings" className={pathname.startsWith("/settings") ? "active" : ""}><Settings size={19} /><span>الإعدادات والتكاملات</span></a>
     </nav>
   );
 }
