@@ -465,6 +465,8 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .crm-contact-meta dt { display: flex; align-items: center; gap: 4px; color: var(--ink-600); font-size: 9px; }
 .crm-contact-meta dd { margin: 0; max-width: 170px; color: var(--ink-800); font-size: 9px; font-weight: 800; text-align: left; overflow-wrap: anywhere; }
 .crm-contact-notes { margin: 0 0 11px; padding: 10px; border-radius: 11px; background: var(--canvas); color: var(--ink-600); font-size: 9px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.crm-chat-links { margin: 0 0 11px; display: flex; flex-wrap: wrap; gap: 7px; }
+.crm-chat-links a { width: fit-content; min-height: 30px; padding: 7px 9px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #b3dbd5; border-radius: 9px; background: var(--teal-100); color: var(--teal-700); font-size: 9px; font-weight: 900; }
 .crm-task-link, .crm-task-complete { width: fit-content; display: flex; align-items: center; gap: 5px; font-size: 9px; font-weight: 900; }
 .crm-task-link { color: var(--teal-700); text-decoration: underline; text-underline-offset: 3px; }
 .crm-task-complete { color: var(--ink-600); }

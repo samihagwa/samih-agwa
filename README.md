@@ -63,7 +63,7 @@ Telegram remains the raw-material inbox for now: paste the direct message/file l
 ## Personal CRM test
 
 1. Sign in with the owner account and open `/crm`.
-2. Add one clearly identified personal test lead with a future follow-up. This creates the contact record, immutable first activity, and one linked task atomically.
+2. Add one clearly identified personal test lead with a future follow-up. You can select a standard source/reason or choose the custom option and type a new one. Add an optional direct Telegram, WhatsApp, Instagram, Facebook, Messenger, or other chat link. This creates the contact record, immutable first activity, chat link, and one linked task atomically.
 3. Open `/tasks` and confirm the generic CRM follow-up task appears without the person's name or contact details.
-4. Return to the linked CRM record and log a call, message, email, or note. An active stage requires a future follow-up and creates exactly one next task.
+4. Return to the linked CRM record, confirm that **فتح شات** opens the correct external conversation, and log a call, message, email, or note. An active stage requires a future follow-up and creates exactly one next task.
 5. Choose a closed stage to stop follow-up. `do_not_contact` also records denied consent. No action in this test sends a message or imports external customers.

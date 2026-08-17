@@ -451,12 +451,14 @@ export type Database = {
           full_name: string
           id: string
           interest: Database["public"]["Enums"]["crm_interest"]
+          interest_detail: string | null
           last_contacted_at: string | null
           next_follow_up_at: string | null
           notes: string | null
           organization_id: string
           owner_id: string
           source: Database["public"]["Enums"]["crm_source"]
+          source_detail: string | null
           stage: Database["public"]["Enums"]["crm_lead_stage"]
           updated_at: string
           version: number
@@ -470,12 +472,14 @@ export type Database = {
           full_name: string
           id?: string
           interest: Database["public"]["Enums"]["crm_interest"]
+          interest_detail?: string | null
           last_contacted_at?: string | null
           next_follow_up_at?: string | null
           notes?: string | null
           organization_id: string
           owner_id: string
           source: Database["public"]["Enums"]["crm_source"]
+          source_detail?: string | null
           stage?: Database["public"]["Enums"]["crm_lead_stage"]
           updated_at?: string
           version?: number
@@ -489,12 +493,14 @@ export type Database = {
           full_name?: string
           id?: string
           interest?: Database["public"]["Enums"]["crm_interest"]
+          interest_detail?: string | null
           last_contacted_at?: string | null
           next_follow_up_at?: string | null
           notes?: string | null
           organization_id?: string
           owner_id?: string
           source?: Database["public"]["Enums"]["crm_source"]
+          source_detail?: string | null
           stage?: Database["public"]["Enums"]["crm_lead_stage"]
           updated_at?: string
           version?: number
@@ -519,6 +525,64 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_conversation_links: {
+        Row: {
+          channel: Database["public"]["Enums"]["crm_conversation_channel"]
+          contact_id: string
+          created_at: string
+          created_by: string
+          id: string
+          is_primary: boolean
+          label: string | null
+          organization_id: string
+          url: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["crm_conversation_channel"]
+          contact_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
+          organization_id: string
+          url: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["crm_conversation_channel"]
+          contact_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_primary?: boolean
+          label?: string | null
+          organization_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_conversation_links_contact_org_fkey"
+            columns: ["contact_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "crm_conversation_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_conversation_links_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1077,6 +1141,27 @@ export type Database = {
         }
         Returns: string
       }
+      create_crm_lead_v2: {
+        Args: {
+          contact_consent_status: Database["public"]["Enums"]["crm_consent_status"]
+          contact_full_name: string
+          contact_interest: Database["public"]["Enums"]["crm_interest"]
+          contact_interest_detail: string
+          contact_owner_id: string
+          contact_source: Database["public"]["Enums"]["crm_source"]
+          contact_source_detail: string
+          identity_kind: Database["public"]["Enums"]["crm_identity_kind"]
+          identity_value: string
+          initial_notes: string
+          target_conversation_channel: Database["public"]["Enums"]["crm_conversation_channel"]
+          target_conversation_label: string
+          target_conversation_url: string
+          target_follow_up_at: string
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       create_launch_workflow: {
         Args: {
           delivery_owner_id: string
@@ -1282,6 +1367,13 @@ export type Database = {
         | "publishing"
       crm_activity_kind: "created" | "call" | "message" | "email" | "note"
       crm_consent_status: "unknown" | "granted" | "denied"
+      crm_conversation_channel:
+        | "telegram"
+        | "whatsapp"
+        | "instagram"
+        | "facebook"
+        | "messenger"
+        | "other"
       crm_identity_kind: "phone" | "email" | "telegram"
       crm_interest:
         | "indicator"
@@ -1514,6 +1606,14 @@ export const Constants = {
       ],
       crm_activity_kind: ["created", "call", "message", "email", "note"],
       crm_consent_status: ["unknown", "granted", "denied"],
+      crm_conversation_channel: [
+        "telegram",
+        "whatsapp",
+        "instagram",
+        "facebook",
+        "messenger",
+        "other",
+      ],
       crm_identity_kind: ["phone", "email", "telegram"],
       crm_interest: [
         "indicator",

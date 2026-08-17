@@ -45,7 +45,7 @@ test("Supabase client consumes generated database types", async () => {
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(client, /createClient<Database>/);
-  for (const table of ["audit_events", "content_assets", "content_items", "content_revision_requests", "content_timeline_cues", "crm_activities", "crm_contacts", "crm_identities", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
+  for (const table of ["audit_events", "content_assets", "content_items", "content_revision_requests", "content_timeline_cues", "crm_activities", "crm_contacts", "crm_conversation_links", "crm_identities", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
     assert.match(types, new RegExp(`${table}:`));
   }
 });
@@ -175,8 +175,9 @@ test("application shell does not impersonate an authenticated owner", async () =
 });
 
 test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task system", async () => {
-  const [migration, edgeFunction, workspace, taskWorkspace, contract, roadmap] = await Promise.all([
+  const [migration, contextMigration, edgeFunction, workspace, taskWorkspace, contract, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817033924_crm_foundation.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260817151104_crm_contact_context_and_chat_links.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
@@ -199,7 +200,18 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(migration, /from public, anon, authenticated/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
+  assert.match(edgeFunction, /create_crm_lead_v2/);
+  assert.match(contextMigration, /create table public\.crm_conversation_links/);
+  assert.match(contextMigration, /alter table public\.crm_conversation_links enable row level security/);
+  assert.match(contextMigration, /grant select on table public\.crm_conversation_links to authenticated/);
+  assert.doesNotMatch(contextMigration, /grant (insert|update|delete) on table public\.crm_conversation_links to authenticated/i);
+  assert.match(contextMigration, /function public\.create_crm_lead_v2/);
+  assert.match(contextMigration, /to service_role/);
+  assert.match(contextMigration, /from public, anon, authenticated/);
   assert.match(workspace, /لن تُرسل أي رسالة/);
+  assert.match(workspace, /لينك شات/);
+  assert.match(workspace, /اسم المصدر الجديد/);
+  assert.match(workspace, /سبب التسجيل الجديد/);
   assert.match(workspace, /functions\.invoke\("crm-commands"/);
   assert.match(taskWorkspace, /فتح ملف العميل وتسجيل النتيجة/);
   assert.doesNotMatch(migration, /'متابعة عميل محتمل[^']*'\s*,\s*contact_full_name/);
@@ -207,6 +219,20 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(roadmap, /Deferred scheduled Telegram publishing/);
   assert.match(roadmap, /test_mode/);
   assert.match(roadmap, /idempotency key/);
+});
+
+test("Edge Function errors expose safe server messages through one shared parser", async () => {
+  const [parser, ...workspaces] = await Promise.all([
+    readFile(new URL("../lib/supabase/function-errors.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(parser, /FunctionsHttpError/);
+  assert.match(parser, /error\.context\.json\(\)/);
+  for (const workspace of workspaces) assert.match(workspace, /getSupabaseFunctionErrorMessage/);
 });
 
 test("launch workflow uses guarded gates, shared tasks, and reversible content links", async () => {

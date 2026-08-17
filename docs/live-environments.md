@@ -27,6 +27,7 @@ Applied migrations:
 13. `telegram_smart_content_intake`: optional reviewed Telegram request intake, original-message traceability, execution timeline cues, service-only mutations, RLS, Realtime, and approval guards for incomplete cues.
 14. `crm_foundation`: tenant-safe lead, identity, consent, activity-history, and linked follow-up-task contracts with owner/leadership RLS and service-only commands.
 15. `crm_task_priority_cast`: explicit enum-safe CRM task priorities discovered and verified by a rollback-only end-to-end contract test.
+16. `crm_contact_context_and_chat_links`: custom acquisition sources and registration reasons, tenant-scoped direct conversation links, and an atomic service-only lead command.
 
 Deployed Edge Functions:
 
@@ -34,13 +35,13 @@ Deployed Edge Functions:
 2. `create-content-workflow` v3: JWT-protected, preserves the original manual workflow and optionally creates an approved Telegram intake, timeline, links, and seven dependent tasks atomically. Unauthenticated requests return `401`.
 3. `launch-commands` v3: JWT-protected launch creation plus audited content attach/detach commands, including positive-target validation. Unauthenticated requests return `401`.
 4. `content-commands` v2: JWT-protected content brief, asset, revision, and timeline commands. Timeline completion is restricted to the assigned editor or organization leadership.
-5. `crm-commands` v1: JWT-protected manual lead creation and follow-up recording. It sends no message, performs no import, and rejects unauthenticated requests with `401`.
+5. `crm-commands` v2: JWT-protected manual lead creation with optional direct chat link and custom acquisition context, plus follow-up recording. It sends no message, performs no import, and rejects unauthenticated requests with `401`.
 
 Verification on 2026-08-17:
 
 - Project status: `ACTIVE_HEALTHY`.
 - Security advisor: no schema or RLS findings. A project-level warning remains for leaked-password protection; the current application uses passwordless one-time email links and does not expose password sign-in.
-- RLS: enabled on all sixteen public application tables.
+- RLS: enabled on all seventeen public application tables.
 - `anon`: no table read grant.
 - `authenticated`: explicit reads, column-scoped task writes, and one validated workflow command; all access is filtered by RLS and database rules.
 - Performance advisor: only unused-index informational notices, expected while the personally tested database has almost no operational volume.
@@ -50,8 +51,8 @@ Verification on 2026-08-17:
 - Telegram intake and timeline mutation commands are not executable by `anon` or `authenticated`; `authenticated` receives only organization-filtered timeline reads through RLS.
 - Launch creation and content-link commands are not executable by `anon` or `authenticated`; the authenticated browser calls the JWT-protected Edge Function instead.
 - Composite launch foreign keys have covering indexes; the performance advisor reports only unused-index informational notices expected for an empty database.
-- CRM contact, identity, and activity tables remain empty after verification; the existing task count remains eight and no fake customer was persisted.
+- CRM contact, identity, conversation-link, and activity tables remain empty after verification; the existing task count remains eight and no fake customer was persisted.
 - `authenticated` has read-only table grants filtered by owner/leadership RLS and cannot execute the CRM mutation commands; only `service_role` can execute them through the JWT-protected Edge Function.
-- A rollback-only database test verified creation, one-open-task enforcement, guarded task movement, follow-up rollover, and `do_not_contact` consent closure without leaving test data.
+- Rollback-only database tests verified creation, custom source/reason storage, one primary conversation link, one-open-task enforcement, guarded task movement, follow-up rollover, and `do_not_contact` consent closure without leaving test data.
 
 Never commit `.env.local`, secret keys, legacy service-role keys, or production customer data.

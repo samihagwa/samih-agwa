@@ -32,6 +32,7 @@ import {
 } from "../../lib/tasks";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
+import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 
@@ -241,7 +242,7 @@ export function TasksWorkspace() {
     });
 
     if (invokeError) {
-      setError(invokeError.message);
+      setError(await getSupabaseFunctionErrorMessage(invokeError, "تعذّر إنشاء مساحة العمل."));
     } else {
       setNotice("تم إنشاء مساحة Market Whales وتفعيل حساب المالك.");
       await loadWorkspace(session);

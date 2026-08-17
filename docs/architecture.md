@@ -72,9 +72,10 @@ Existing Market Whales application
 
 ## CRM contract
 
-- `crm_contacts` is the governed lead record; `crm_identities` deduplicates the primary phone, email, or Telegram username inside one organization.
-- A lead is created atomically through the JWT-protected `crm-commands` Edge Function. The two database commands are executable by `service_role` only, so the browser cannot write contact, identity, or activity tables directly.
-- Leadership can see the organization pipeline. A working member can see and act only on leads they own. The same ownership rule protects identities and immutable activity history through RLS.
+- `crm_contacts` is the governed lead record; `crm_identities` deduplicates the primary phone, email, or Telegram username inside one organization. A structured source and registration reason remain available for reporting, while `source_detail` and `interest_detail` capture new custom values without changing the schema for every campaign.
+- `crm_conversation_links` stores direct Telegram, WhatsApp, Instagram, Facebook, Messenger, or other chat URLs separately from contact identity. This keeps deduplication stable while allowing one-click access to the exact conversation.
+- A lead is created atomically through the JWT-protected `crm-commands` Edge Function. The database commands are executable by `service_role` only, so the browser cannot write contact, identity, conversation-link, or activity tables directly.
+- Leadership can see the organization pipeline. A working member can see and act only on leads they own. The same ownership rule protects identities, conversation links, and immutable activity history through RLS.
 - Every active lead has exactly one open, ordinary task linked by `crm_contact_id`. The task contains no customer name or contact value, so the shared task board does not leak CRM details.
 - CRM task status is controlled only by the CRM command. Recording a result closes the current task and either creates the next future follow-up or closes the lead with a reason.
 - Selecting `do_not_contact` records denied consent and prevents another follow-up. No message, import, or external synchronization is active in this foundation.

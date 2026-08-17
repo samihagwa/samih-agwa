@@ -35,6 +35,7 @@ import {
 import { formatTimelineSeconds } from "../../lib/content-intake";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
+import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 import { canManageTasks } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
@@ -239,7 +240,7 @@ export function ContentWorkspace() {
     const { error: commandError } = await getSupabaseBrowserClient().functions.invoke("content-commands", { body });
     setWorking(false);
     if (commandError) {
-      setError(commandError.message);
+      setError(await getSupabaseFunctionErrorMessage(commandError, "تعذّر تحديث المحتوى."));
       return false;
     }
     setNotice(successMessage);
@@ -282,7 +283,7 @@ export function ContentWorkspace() {
     });
     setWorking(false);
     if (workflowError) {
-      setError(workflowError.message);
+      setError(await getSupabaseFunctionErrorMessage(workflowError, "تعذّر إنشاء مسار إنتاج المحتوى. لم يتم حفظ أي جزء من العملية."));
       return;
     }
     formElement.reset();
@@ -301,7 +302,7 @@ export function ContentWorkspace() {
     });
     setWorking(false);
     if (workflowError) {
-      setError(workflowError.message);
+      setError(await getSupabaseFunctionErrorMessage(workflowError, "تعذّر تحويل الطلب السريع إلى مسار إنتاج."));
       return false;
     }
     setShowQuickIntake(false);

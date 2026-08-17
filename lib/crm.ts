@@ -4,6 +4,7 @@ export type CrmLeadStage = Database["public"]["Enums"]["crm_lead_stage"];
 export type CrmSource = Database["public"]["Enums"]["crm_source"];
 export type CrmInterest = Database["public"]["Enums"]["crm_interest"];
 export type CrmIdentityKind = Database["public"]["Enums"]["crm_identity_kind"];
+export type CrmConversationChannel = Database["public"]["Enums"]["crm_conversation_channel"];
 export type CrmConsentStatus = Database["public"]["Enums"]["crm_consent_status"];
 export type CrmActivityKind = Database["public"]["Enums"]["crm_activity_kind"];
 
@@ -43,7 +44,7 @@ export const crmSourceConfig: Record<CrmSource, { label: string }> = {
   exness: { label: "Exness" },
   tickmill: { label: "Tickmill" },
   referral: { label: "ترشيح" },
-  other: { label: "مصدر آخر" },
+  other: { label: "مصدر مخصص" },
 };
 
 export const crmInterestConfig: Record<CrmInterest, { label: string }> = {
@@ -54,7 +55,16 @@ export const crmInterestConfig: Record<CrmInterest, { label: string }> = {
   brokerage: { label: "وكالة بروكر" },
   book: { label: "كتاب أو مادة تعليمية" },
   service: { label: "خدمة أخرى" },
-  other: { label: "غير محدد" },
+  other: { label: "سبب آخر" },
+};
+
+export const crmConversationChannelConfig: Record<CrmConversationChannel, { label: string; placeholder: string }> = {
+  telegram: { label: "Telegram", placeholder: "https://t.me/username" },
+  whatsapp: { label: "WhatsApp", placeholder: "https://wa.me/2010…" },
+  instagram: { label: "Instagram", placeholder: "https://instagram.com/username" },
+  facebook: { label: "Facebook", placeholder: "https://facebook.com/username" },
+  messenger: { label: "Messenger", placeholder: "https://m.me/username" },
+  other: { label: "منصة أخرى", placeholder: "https://…" },
 };
 
 export const crmIdentityKindConfig: Record<CrmIdentityKind, { label: string; placeholder: string; inputType: "text" | "email" | "tel" }> = {

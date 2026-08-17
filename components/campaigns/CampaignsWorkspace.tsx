@@ -26,6 +26,7 @@ import {
 } from "../../lib/launches";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
+import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 import { canManageTasks } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
@@ -342,7 +343,7 @@ export function CampaignsWorkspace() {
     setWorking(false);
 
     if (commandError) {
-      setError(commandError.message);
+      setError(await getSupabaseFunctionErrorMessage(commandError, "تعذّر إنشاء الإطلاق. لم يتم حفظ أي جزء من العملية."));
       return;
     }
 
@@ -368,7 +369,7 @@ export function CampaignsWorkspace() {
 
     setWorking(false);
     if (commandError) {
-      setError(commandError.message);
+      setError(await getSupabaseFunctionErrorMessage(commandError, "تعذّر تحديث ارتباط المحتوى بالإطلاق."));
       return;
     }
 

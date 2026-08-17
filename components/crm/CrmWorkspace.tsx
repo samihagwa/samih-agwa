@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   CircleUserRound,
   ContactRound,
+  ExternalLink,
   FileClock,
   History,
   Link2,
@@ -24,12 +25,14 @@ import {
   allowedCrmTransitions,
   crmActivityKindConfig,
   crmConsentConfig,
+  crmConversationChannelConfig,
   crmIdentityKindConfig,
   crmInterestConfig,
   crmLeadStageConfig,
   crmLeadStages,
   crmSourceConfig,
   type CrmActivityKind,
+  type CrmConversationChannel,
   type CrmIdentityKind,
   type CrmInterest,
   type CrmLeadStage,
@@ -37,6 +40,7 @@ import {
 } from "../../lib/crm";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
+import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 import { canManageTasks, taskStatusConfig } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
@@ -44,6 +48,7 @@ import { StatusBadge } from "../ui/StatusBadge";
 type Contact = Tables<"crm_contacts">;
 type Identity = Tables<"crm_identities">;
 type Activity = Tables<"crm_activities">;
+type ConversationLink = Tables<"crm_conversation_links">;
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
@@ -85,6 +90,7 @@ export function CrmWorkspace() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [identities, setIdentities] = useState<Identity[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [conversationLinks, setConversationLinks] = useState<ConversationLink[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
@@ -92,6 +98,9 @@ export function CrmWorkspace() {
   const [activityFormId, setActivityFormId] = useState<string | null>(null);
   const [activityStage, setActivityStage] = useState<CrmLeadStage>("new");
   const [identityKind, setIdentityKind] = useState<CrmIdentityKind>("phone");
+  const [source, setSource] = useState<CrmSource>("manual");
+  const [interest, setInterest] = useState<CrmInterest>("indicator");
+  const [conversationChannel, setConversationChannel] = useState<CrmConversationChannel | "">("");
   const [filter, setFilter] = useState<Filter>("all");
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
@@ -102,26 +111,30 @@ export function CrmWorkspace() {
     setContacts([]);
     setIdentities([]);
     setActivities([]);
+    setConversationLinks([]);
     setTasks([]);
     setActivityFormId(null);
   }, []);
 
   const refreshCrm = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
-    const [contactsResult, identitiesResult, activitiesResult, tasksResult] = await Promise.all([
+    const [contactsResult, identitiesResult, activitiesResult, linksResult, tasksResult] = await Promise.all([
       supabase.from("crm_contacts").select("*").eq("organization_id", organizationId).order("next_follow_up_at", { ascending: true, nullsFirst: false }),
       supabase.from("crm_identities").select("*").eq("organization_id", organizationId).order("is_primary", { ascending: false }),
       supabase.from("crm_activities").select("*").eq("organization_id", organizationId).order("occurred_at", { ascending: false }),
+      supabase.from("crm_conversation_links").select("*").eq("organization_id", organizationId).order("is_primary", { ascending: false }),
       supabase.from("tasks").select("*").eq("organization_id", organizationId).not("crm_contact_id", "is", null).order("due_at", { ascending: true }),
     ]);
 
     if (contactsResult.error) throw contactsResult.error;
     if (identitiesResult.error) throw identitiesResult.error;
     if (activitiesResult.error) throw activitiesResult.error;
+    if (linksResult.error) throw linksResult.error;
     if (tasksResult.error) throw tasksResult.error;
     setContacts(contactsResult.data ?? []);
     setIdentities(identitiesResult.data ?? []);
     setActivities(activitiesResult.data ?? []);
+    setConversationLinks(linksResult.data ?? []);
     setTasks(tasksResult.data ?? []);
   }, []);
 
@@ -194,7 +207,7 @@ export function CrmWorkspace() {
     const supabase = getSupabaseBrowserClient();
     const refresh = () => void refreshCrm(workspace.organization.id);
     let channel = supabase.channel(`crm:${workspace.organization.id}`);
-    for (const table of ["crm_contacts", "crm_identities", "crm_activities", "tasks"] as const) {
+    for (const table of ["crm_contacts", "crm_identities", "crm_activities", "crm_conversation_links", "tasks"] as const) {
       channel = channel.on("postgres_changes", {
         event: "*", schema: "public", table, filter: `organization_id=eq.${workspace.organization.id}`,
       }, refresh);
@@ -214,6 +227,12 @@ export function CrmWorkspace() {
     for (const activity of activities) grouped.set(activity.contact_id, [...(grouped.get(activity.contact_id) ?? []), activity]);
     return grouped;
   }, [activities]);
+
+  const conversationLinksByContact = useMemo(() => {
+    const grouped = new Map<string, ConversationLink[]>();
+    for (const link of conversationLinks) grouped.set(link.contact_id, [...(grouped.get(link.contact_id) ?? []), link]);
+    return grouped;
+  }, [conversationLinks]);
 
   const tasksByContact = useMemo(() => {
     const grouped = new Map<string, Task[]>();
@@ -238,7 +257,7 @@ export function CrmWorkspace() {
     const { error: commandError } = await getSupabaseBrowserClient().functions.invoke("crm-commands", { body });
     setWorking(false);
     if (commandError) {
-      setError(commandError.message);
+      setError(await getSupabaseFunctionErrorMessage(commandError, "تعذّر تنفيذ أمر CRM. لم يتم حفظ أي جزء من العملية."));
       return false;
     }
     setNotice(successMessage);
@@ -261,17 +280,25 @@ export function CrmWorkspace() {
       organization_id: workspace.organization.id,
       full_name: formText(form, "full_name"),
       source: formText(form, "source"),
+      source_detail: formText(form, "source_detail"),
       interest: formText(form, "interest"),
+      interest_detail: formText(form, "interest_detail"),
       owner_id: formText(form, "owner_id") || session.user.id,
       consent_status: formText(form, "consent_status"),
       identity_kind: formText(form, "identity_kind"),
       identity_value: formText(form, "identity_value"),
       follow_up_at: followUpAt,
       notes: formText(form, "notes"),
+      conversation_channel: formText(form, "conversation_channel"),
+      conversation_url: formText(form, "conversation_url"),
+      conversation_label: formText(form, "conversation_label"),
     }, "تم إنشاء ملف العميل ومهمة المتابعة معًا.");
     if (created) {
       formElement.reset();
       setIdentityKind("phone");
+      setSource("manual");
+      setInterest("indicator");
+      setConversationChannel("");
       setShowCreate(false);
     }
   }
@@ -355,11 +382,15 @@ export function CrmWorkspace() {
         <div className="crm-safety-note"><ShieldCheck size={18} /><div><strong>لن تُرسل أي رسالة</strong><p>هذا الإدخال يحفظ الملف ويضيف مهمة متابعة فقط. الاستيراد والتواصل التلقائي غير مفعّلين.</p></div></div>
         <div className="form-grid">
           <label><span>اسم العميل المحتمل</span><input name="full_name" minLength={2} maxLength={160} required placeholder="الاسم كما تعرفه" /></label>
-          <label><span>مصدر التسجيل</span><select name="source" defaultValue="manual">{(Object.keys(crmSourceConfig) as CrmSource[]).map((source) => <option value={source} key={source}>{crmSourceConfig[source].label}</option>)}</select></label>
-          <label><span>الاهتمام الأساسي</span><select name="interest" defaultValue="indicator">{(Object.keys(crmInterestConfig) as CrmInterest[]).map((interest) => <option value={interest} key={interest}>{crmInterestConfig[interest].label}</option>)}</select></label>
+          <label><span>مصدر التسجيل</span><select name="source" value={source} onChange={(event) => setSource(event.target.value as CrmSource)}>{(Object.keys(crmSourceConfig) as CrmSource[]).map((option) => <option value={option} key={option}>{crmSourceConfig[option].label}</option>)}</select><small>اختر «مصدر مخصص» لإضافة أي مصدر جديد غير موجود بالقائمة.</small></label>
+          {source === "other" ? <label><span>اسم المصدر الجديد</span><input name="source_detail" minLength={2} maxLength={160} required placeholder="مثال: Webinar أغسطس أو Instagram Organic" /></label> : null}
+          <label><span>سبب التسجيل / الاهتمام</span><select name="interest" value={interest} onChange={(event) => setInterest(event.target.value as CrmInterest)}>{(Object.keys(crmInterestConfig) as CrmInterest[]).map((option) => <option value={option} key={option}>{crmInterestConfig[option].label}</option>)}</select><small>اختر «سبب آخر» لكتابة أي خدمة أو حملة جديدة.</small></label>
+          {interest === "other" ? <label><span>سبب التسجيل الجديد</span><input name="interest_detail" minLength={2} maxLength={160} required placeholder="مثال: حضور ويبنار التحليل الفني" /></label> : null}
           <label><span>حالة الموافقة على التواصل</span><select name="consent_status" defaultValue="unknown"><option value="unknown">غير معروفة</option><option value="granted">وافق</option></select><small>إذا رفض لاحقًا، اختر «عدم تواصل» عند تسجيل النتيجة ليُغلق الملف والمهمة.</small></label>
           <label><span>وسيلة التواصل الأساسية</span><select name="identity_kind" value={identityKind} onChange={(event) => setIdentityKind(event.target.value as CrmIdentityKind)}>{(Object.keys(crmIdentityKindConfig) as CrmIdentityKind[]).map((kind) => <option value={kind} key={kind}>{crmIdentityKindConfig[kind].label}</option>)}</select></label>
-          <label><span>{crmIdentityKindConfig[identityKind].label}</span><input name="identity_value" type={crmIdentityKindConfig[identityKind].inputType} dir="ltr" minLength={3} maxLength={320} required placeholder={crmIdentityKindConfig[identityKind].placeholder} /></label>
+          <label><span>{crmIdentityKindConfig[identityKind].label}</span><input name="identity_value" type={crmIdentityKindConfig[identityKind].inputType} dir="ltr" minLength={3} maxLength={320} required placeholder={crmIdentityKindConfig[identityKind].placeholder} /><small>{identityKind === "telegram" ? "اكتب @username هنا، وليس لينك الشات." : "تُستخدم لمنع تكرار نفس العميل في CRM."}</small></label>
+          <label><span>منصة المحادثة المباشرة — اختياري</span><select name="conversation_channel" value={conversationChannel} onChange={(event) => setConversationChannel(event.target.value as CrmConversationChannel | "")}><option value="">بدون لينك حاليًا</option>{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select><small>يمكن فتح الشات لاحقًا بضغطة واحدة من كارت العميل.</small></label>
+          {conversationChannel ? <label><span>لينك شات {crmConversationChannelConfig[conversationChannel].label}</span><input name="conversation_url" type="url" dir="ltr" maxLength={2000} required placeholder={crmConversationChannelConfig[conversationChannel].placeholder} /><small>الصق لينكًا كاملًا يبدأ بـ https://</small></label> : null}
           {manager ? <label><span>مسؤول المتابعة</span><select name="owner_id" defaultValue={session.user.id}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : <input name="owner_id" type="hidden" value={session.user.id} />}
           <label><span>موعد أول متابعة</span><input name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /></label>
           <label className="full-field"><span>سياق مهم قبل التواصل — اختياري</span><textarea name="notes" maxLength={5000} rows={3} placeholder="ماذا طلب؟ ما الذي سجّل فيه؟ وما الذي يجب أن يعرفه مسؤول المتابعة؟" /></label>
@@ -375,19 +406,21 @@ export function CrmWorkspace() {
             const contactIdentities = identitiesByContact.get(contact.id) ?? [];
             const primaryIdentity = contactIdentities.find((identity) => identity.is_primary) ?? contactIdentities[0];
             const contactActivities = activitiesByContact.get(contact.id) ?? [];
+            const contactConversationLinks = conversationLinksByContact.get(contact.id) ?? [];
             const contactTasks = tasksByContact.get(contact.id) ?? [];
             const openTask = contactTasks.find((task) => !["done", "cancelled"].includes(task.status));
             const canAct = manager || contact.owner_id === session.user.id;
             const overdue = Boolean(contact.next_follow_up_at && new Date(contact.next_follow_up_at).getTime() < renderNow);
             const nextOptions = [contact.stage, ...allowedCrmTransitions[contact.stage]];
             return <article className={`crm-contact-card ${overdue ? "overdue" : ""}`} id={`lead-${contact.id}`} key={contact.id}>
-              <div className="crm-contact-top"><div><p className="overline">{crmSourceConfig[contact.source].label}</p><h3>{contact.full_name}</h3></div><StatusBadge tone={crmConsentConfig[contact.consent_status].tone}>{crmConsentConfig[contact.consent_status].label}</StatusBadge></div>
+              <div className="crm-contact-top"><div><p className="overline">{contact.source_detail ?? crmSourceConfig[contact.source].label}</p><h3>{contact.full_name}</h3></div><StatusBadge tone={crmConsentConfig[contact.consent_status].tone}>{crmConsentConfig[contact.consent_status].label}</StatusBadge></div>
               <dl className="crm-contact-meta">
-                <div><dt>الاهتمام</dt><dd>{crmInterestConfig[contact.interest].label}</dd></div>
+                <div><dt>سبب التسجيل</dt><dd>{contact.interest_detail ?? crmInterestConfig[contact.interest].label}</dd></div>
                 <div><dt>التواصل</dt><dd dir="ltr">{primaryIdentity ? `${crmIdentityKindConfig[primaryIdentity.kind].label}: ${primaryIdentity.value}` : "—"}</dd></div>
                 <div><dt><CircleUserRound size={13} /> المسؤول</dt><dd>{peopleById.get(contact.owner_id)?.name ?? "عضو فريق"}</dd></div>
                 {contact.next_follow_up_at ? <div><dt><CalendarClock size={13} /> المتابعة</dt><dd>{formatDate(contact.next_follow_up_at)}</dd></div> : null}
               </dl>
+              {contactConversationLinks.length ? <div className="crm-chat-links">{contactConversationLinks.map((link) => <a href={link.url} target="_blank" rel="noreferrer" key={link.id}><ExternalLink size={12} /> فتح شات {link.label ?? crmConversationChannelConfig[link.channel].label}</a>)}</div> : null}
               {contact.notes ? <p className="crm-contact-notes">{contact.notes}</p> : null}
               {overdue ? <span className="overdue-label"><AlertTriangle size={13} /> المتابعة متأخرة</span> : null}
               {openTask ? <a className="crm-task-link" href="/tasks"><Route size={12} /> المهمة: {taskStatusConfig[openTask.status].label}</a> : <span className="crm-task-complete"><CheckCircle2 size={12} /> لا توجد متابعة مفتوحة</span>}
