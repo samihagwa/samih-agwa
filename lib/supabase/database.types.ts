@@ -61,6 +61,113 @@ export type Database = {
           },
         ]
       }
+      brand_articles: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          archived_at: string | null
+          archived_by: string | null
+          audiences: Database["public"]["Enums"]["brand_audience"][]
+          category: Database["public"]["Enums"]["brand_category"]
+          change_note: string
+          created_at: string
+          created_by: string
+          do_list: string[]
+          dont_list: string[]
+          edit_version: number
+          examples: string | null
+          guidelines: string
+          id: string
+          organization_id: string
+          reference_urls: string[]
+          status: Database["public"]["Enums"]["brand_article_status"]
+          summary: string
+          title: string
+          topic_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          audiences?: Database["public"]["Enums"]["brand_audience"][]
+          category: Database["public"]["Enums"]["brand_category"]
+          change_note: string
+          created_at?: string
+          created_by: string
+          do_list?: string[]
+          dont_list?: string[]
+          edit_version?: number
+          examples?: string | null
+          guidelines: string
+          id?: string
+          organization_id: string
+          reference_urls?: string[]
+          status?: Database["public"]["Enums"]["brand_article_status"]
+          summary: string
+          title: string
+          topic_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          audiences?: Database["public"]["Enums"]["brand_audience"][]
+          category?: Database["public"]["Enums"]["brand_category"]
+          change_note?: string
+          created_at?: string
+          created_by?: string
+          do_list?: string[]
+          dont_list?: string[]
+          edit_version?: number
+          examples?: string | null
+          guidelines?: string
+          id?: string
+          organization_id?: string
+          reference_urls?: string[]
+          status?: Database["public"]["Enums"]["brand_article_status"]
+          summary?: string
+          title?: string
+          topic_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_articles_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_articles_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_articles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_articles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_assets: {
         Row: {
           content_item_id: string
@@ -115,6 +222,59 @@ export type Database = {
           },
           {
             foreignKeyName: "content_assets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_brand_references: {
+        Row: {
+          brand_article_id: string
+          content_item_id: string
+          created_at: string
+          created_by: string
+          organization_id: string
+        }
+        Insert: {
+          brand_article_id: string
+          content_item_id: string
+          created_at?: string
+          created_by: string
+          organization_id: string
+        }
+        Update: {
+          brand_article_id?: string
+          content_item_id?: string
+          created_at?: string
+          created_by?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_brand_references_article_org_fkey"
+            columns: ["brand_article_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "brand_articles"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_brand_references_content_org_fkey"
+            columns: ["content_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_brand_references_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_brand_references_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -1097,6 +1257,14 @@ export type Database = {
         }
         Returns: string
       }
+      approve_brand_article: {
+        Args: { target_article_id: string; target_user_id: string }
+        Returns: boolean
+      }
+      archive_brand_article: {
+        Args: { target_article_id: string; target_user_id: string }
+        Returns: boolean
+      }
       attach_content_to_launch: {
         Args: {
           target_content_item_id: string
@@ -1124,6 +1292,23 @@ export type Database = {
           target_user_id: string
         }
         Returns: boolean
+      }
+      create_brand_article_draft: {
+        Args: {
+          article_audiences: Database["public"]["Enums"]["brand_audience"][]
+          article_category: Database["public"]["Enums"]["brand_category"]
+          article_change_note: string
+          article_do_list: string[]
+          article_dont_list: string[]
+          article_examples: string
+          article_guidelines: string
+          article_reference_urls: string[]
+          article_summary: string
+          article_title: string
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
       }
       create_crm_lead: {
         Args: {
@@ -1216,6 +1401,34 @@ export type Database = {
         }
         Returns: string
       }
+      create_reel_from_intake_v2: {
+        Args: {
+          approval_owner_id: string
+          brief_owner_id: string
+          caption_owner_id: string
+          content_brand_notes: string
+          content_cta: string
+          content_editing_brief: string
+          content_goal: string
+          content_hook: string
+          content_script_outline: string
+          content_thumbnail_brief: string
+          content_title: string
+          editing_owner_id: string
+          intake_request_text: string
+          parsed_assets: Json
+          parsed_timeline: Json
+          publishing_owner_id: string
+          recording_owner_id: string
+          target_brand_article_ids: string[]
+          target_organization_id: string
+          target_publish_at: string
+          target_user_id: string
+          telegram_source_url: string
+          thumbnail_owner_id: string
+        }
+        Returns: string
+      }
       create_reel_production_workflow: {
         Args: {
           approval_owner_id: string
@@ -1235,6 +1448,33 @@ export type Database = {
           initial_source_url: string
           publishing_owner_id: string
           recording_owner_id: string
+          target_organization_id: string
+          target_publish_at: string
+          target_user_id: string
+          thumbnail_owner_id: string
+        }
+        Returns: string
+      }
+      create_reel_production_workflow_v2: {
+        Args: {
+          approval_owner_id: string
+          brief_owner_id: string
+          caption_owner_id: string
+          content_brand_notes: string
+          content_cta: string
+          content_editing_brief: string
+          content_goal: string
+          content_hook: string
+          content_script_outline: string
+          content_thumbnail_brief: string
+          content_title: string
+          editing_owner_id: string
+          initial_raw_url: string
+          initial_reference_url: string
+          initial_source_url: string
+          publishing_owner_id: string
+          recording_owner_id: string
+          target_brand_article_ids: string[]
           target_organization_id: string
           target_publish_at: string
           target_user_id: string
@@ -1311,6 +1551,32 @@ export type Database = {
         }
         Returns: string
       }
+      revise_brand_article: {
+        Args: {
+          revision_change_note: string
+          target_article_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
+      update_brand_article_draft: {
+        Args: {
+          article_audiences: Database["public"]["Enums"]["brand_audience"][]
+          article_category: Database["public"]["Enums"]["brand_category"]
+          article_change_note: string
+          article_do_list: string[]
+          article_dont_list: string[]
+          article_examples: string
+          article_guidelines: string
+          article_reference_urls: string[]
+          article_summary: string
+          article_title: string
+          expected_edit_version: number
+          target_article_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
       update_content_production_brief: {
         Args: {
           content_brand_notes: string
@@ -1325,6 +1591,24 @@ export type Database = {
     }
     Enums: {
       app_role: "owner" | "admin" | "manager" | "member" | "viewer"
+      brand_article_status: "draft" | "approved" | "archived"
+      brand_audience:
+        | "all"
+        | "management"
+        | "design"
+        | "editing"
+        | "copy"
+        | "publishing"
+        | "sales"
+      brand_category:
+        | "foundation"
+        | "visual_identity"
+        | "editing"
+        | "copy_voice"
+        | "publishing"
+        | "compliance"
+        | "offer_product"
+        | "workflow"
       content_asset_kind:
         | "raw_video"
         | "source"
@@ -1559,6 +1843,26 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["owner", "admin", "manager", "member", "viewer"],
+      brand_article_status: ["draft", "approved", "archived"],
+      brand_audience: [
+        "all",
+        "management",
+        "design",
+        "editing",
+        "copy",
+        "publishing",
+        "sales",
+      ],
+      brand_category: [
+        "foundation",
+        "visual_identity",
+        "editing",
+        "copy_voice",
+        "publishing",
+        "compliance",
+        "offer_product",
+        "workflow",
+      ],
       content_asset_kind: [
         "raw_video",
         "source",

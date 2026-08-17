@@ -31,7 +31,7 @@ This starter does not use `wrangler.jsonc`.
 
 ## Important status
 
-The identity, task-management, reel-production, campaign-launch, and manual CRM foundations are ready for personal testing. The team has not been onboarded, no production customers have been imported, and no sales message, social publishing, or external analytics integration is active.
+The identity, task-management, reel-production, campaign-launch, manual CRM, and brand-knowledge foundations are ready for personal testing. The team has not been onboarded, no production customers have been imported, and no sales message, social publishing, or external analytics integration is active.
 
 ## First owner setup
 
@@ -41,6 +41,15 @@ The identity, task-management, reel-production, campaign-launch, and manual CRM 
 4. During personal testing, do not enter team members. Create only clearly labeled test tasks and reel workflows.
 
 The bootstrap endpoint is authenticated and can create only the first organization. No invitation flow is active and no invitation is sent during personal testing.
+
+## Personal brand test
+
+1. Open `/brand` and create a clearly identified real draft such as **Who we are and the message** or **Editing rules**. A draft is private to leadership and does not affect current work.
+2. Review the title, intended departments, required and prohibited rules, examples, references, and change reason. Only the owner can select **Final approval**.
+3. Open `/content` and create a manual or Telegram-reviewed reel. Select one or more approved brand references; the exact numbered versions are linked to the brief and visible to execution owners.
+4. To change an approved rule, create a revision instead of editing it. The current version stays active until the new draft is approved; old content keeps its original reference even after that version is archived.
+
+No sample rules are seeded. Add only real brand decisions you are ready to use.
 
 ## Personal content test
 

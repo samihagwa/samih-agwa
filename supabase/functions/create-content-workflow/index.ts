@@ -27,6 +27,11 @@ function isNonEmptyString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function approvedBrandArticleIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean))];
+}
+
 function isOptionalHttpUrl(value: unknown) {
   if (value === undefined || value === null || value === "") return true;
   if (typeof value !== "string") return false;
@@ -124,6 +129,11 @@ export default {
     const timeline = Array.isArray(body.parsed_timeline) ? body.parsed_timeline : [];
     const extractedAssets = Array.isArray(body.parsed_assets) ? body.parsed_assets : [];
     const isTelegramIntake = intakeRequest.length > 0 || telegramSource.length > 0;
+    const brandArticleIds = approvedBrandArticleIds(body.brand_article_ids);
+
+    if (brandArticleIds.length > 8 || brandArticleIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+      return jsonResponse({ message: "اختر بحد أقصى 8 مراجع براند معتمدة وصحيحة." }, 400);
+    }
 
     if (isTelegramIntake) {
       if (intakeRequest.length < 20 || intakeRequest.length > 30000 || !isTelegramUrl(telegramSource)) {
@@ -138,7 +148,7 @@ export default {
     }
 
     const { data: contentId, error } = await context.supabaseAdmin.rpc(
-      isTelegramIntake ? "create_reel_from_intake" : "create_reel_production_workflow",
+      isTelegramIntake ? "create_reel_from_intake_v2" : "create_reel_production_workflow_v2",
       {
         target_user_id: context.userClaims.id,
         target_organization_id: body.target_organization_id,
@@ -150,6 +160,7 @@ export default {
         content_editing_brief: body.content_editing_brief,
         content_thumbnail_brief: body.content_thumbnail_brief,
         content_brand_notes: typeof body.content_brand_notes === "string" ? body.content_brand_notes : "",
+        target_brand_article_ids: brandArticleIds,
         ...(isTelegramIntake ? {
           intake_request_text: intakeRequest,
           telegram_source_url: telegramSource,
@@ -173,7 +184,7 @@ export default {
     );
 
     if (error) {
-      const userError = /Only organization leadership|active organization member|Publish time|fields are incomplete|asset link|valid HTTP|Telegram|timeline|extracted links|Parsed intake/i.test(error.message);
+      const userError = /Only organization leadership|active organization member|Publish time|fields are incomplete|asset link|valid HTTP|Telegram|timeline|extracted links|Parsed intake|brand reference|approved brand/i.test(error.message);
       return jsonResponse(
         {
           message: userError

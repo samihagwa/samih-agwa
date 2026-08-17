@@ -28,20 +28,23 @@ Applied migrations:
 14. `crm_foundation`: tenant-safe lead, identity, consent, activity-history, and linked follow-up-task contracts with owner/leadership RLS and service-only commands.
 15. `crm_task_priority_cast`: explicit enum-safe CRM task priorities discovered and verified by a rollback-only end-to-end contract test.
 16. `crm_contact_context_and_chat_links`: custom acquisition sources and registration reasons, tenant-scoped direct conversation links, and an atomic service-only lead command.
+17. `brand_knowledge_center`: versioned brand drafts and owner approval, immutable approved history, audience-aware RLS, exact approved references on content workflows, Realtime, audit events, and service-only mutations.
+18. `brand_reference_fk_index`: covering index for the content/organization composite foreign key reported by the performance advisor.
 
 Deployed Edge Functions:
 
 1. `bootstrap-organization` v1: JWT-protected, one-time owner workspace initialization. Unauthenticated requests return `401`.
-2. `create-content-workflow` v3: JWT-protected, preserves the original manual workflow and optionally creates an approved Telegram intake, timeline, links, and seven dependent tasks atomically. Unauthenticated requests return `401`.
+2. `create-content-workflow` v4: JWT-protected, preserves both manual and reviewed Telegram intake, validates approved brand references, and creates the brief, exact reference links, timeline/assets when present, and seven dependent tasks atomically. Unauthenticated requests return `401`.
 3. `launch-commands` v3: JWT-protected launch creation plus audited content attach/detach commands, including positive-target validation. Unauthenticated requests return `401`.
 4. `content-commands` v2: JWT-protected content brief, asset, revision, and timeline commands. Timeline completion is restricted to the assigned editor or organization leadership.
 5. `crm-commands` v2: JWT-protected manual lead creation with optional direct chat link and custom acquisition context, plus follow-up recording. It sends no message, performs no import, and rejects unauthenticated requests with `401`.
+6. `brand-commands` v1: JWT-protected brand draft, edit, revision, owner approval, and archive commands. The browser has no direct table-write or database-command privilege.
 
 Verification on 2026-08-17:
 
 - Project status: `ACTIVE_HEALTHY`.
 - Security advisor: no schema or RLS findings. A project-level warning remains for leaked-password protection; the current application uses passwordless one-time email links and does not expose password sign-in.
-- RLS: enabled on all seventeen public application tables.
+- RLS: enabled on all nineteen public application tables.
 - `anon`: no table read grant.
 - `authenticated`: explicit reads, column-scoped task writes, and one validated workflow command; all access is filtered by RLS and database rules.
 - Performance advisor: only unused-index informational notices, expected while the personally tested database has almost no operational volume.
@@ -54,5 +57,7 @@ Verification on 2026-08-17:
 - CRM contact, identity, conversation-link, and activity tables remain empty after verification; the existing task count remains eight and no fake customer was persisted.
 - `authenticated` has read-only table grants filtered by owner/leadership RLS and cannot execute the CRM mutation commands; only `service_role` can execute them through the JWT-protected Edge Function.
 - Rollback-only database tests verified creation, custom source/reason storage, one primary conversation link, one-open-task enforcement, guarded task movement, follow-up rollover, and `do_not_contact` consent closure without leaving test data.
+- Brand commands and content-reference wrappers are service-role only; authenticated users receive audience-aware, organization-filtered reads through RLS and no direct table writes.
+- A rollback-only brand test verified draft creation, optimistic editing, owner approval, atomic content linking, revision history, previous-version archiving, and preserved exact content references without leaving test data.
 
 Never commit `.env.local`, secret keys, legacy service-role keys, or production customer data.

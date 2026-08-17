@@ -8,6 +8,8 @@
 4. Define metric ownership and add approved manual observations before connecting external analytics.
 5. Add external integrations incrementally, starting in test mode with explicit owner approval.
 
+The brand knowledge foundation is now implemented: drafts, owner approval, immutable version history, audience-aware reads, and exact references on new content workflows. It contains no invented brand rules; the owner will add and approve the real material during personal testing.
+
 ## Current raw-material contract
 
 - Telegram is the working inbox for original audio, video, images, and the unstructured production request.

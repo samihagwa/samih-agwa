@@ -3,6 +3,7 @@
 import type { Session } from "@supabase/supabase-js";
 import {
   CalendarClock,
+  BookOpenCheck,
   CheckCircle2,
   CircleUserRound,
   ExternalLink,
@@ -33,6 +34,7 @@ import {
   type ContentAssetKind,
 } from "../../lib/content";
 import { formatTimelineSeconds } from "../../lib/content-intake";
+import { brandCategoryConfig } from "../../lib/brand";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -45,6 +47,8 @@ type ContentItem = Tables<"content_items">;
 type ContentAsset = Tables<"content_assets">;
 type ContentRevision = Tables<"content_revision_requests">;
 type ContentTimelineCue = Tables<"content_timeline_cues">;
+type BrandArticle = Tables<"brand_articles">;
+type ContentBrandReference = Tables<"content_brand_references">;
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
@@ -74,6 +78,13 @@ function formText(form: FormData, name: string) {
   return String(form.get(name) ?? "").trim();
 }
 
+function BrandReferenceSelector({ articles }: { articles: BrandArticle[] }) {
+  return <section className="brand-reference-selector">
+    <div><p className="overline">قواعد التنفيذ</p><h3>مراجع البراند المعتمدة</h3><p>اربط النسخ التي يجب أن يعتمد عليها المصمم والمونتير والكاتب في هذا الطلب.</p></div>
+    {articles.length ? <div>{articles.map((article) => <label key={article.id}><input type="checkbox" name="brand_reference_ids" value={article.id} aria-label={`ربط مرجع ${article.title}`} /><span><strong>{article.title}</strong><small>{brandCategoryConfig[article.category].label} · النسخة {article.version}</small></span></label>)}</div> : <p className="brand-reference-empty">لا يوجد مرجع معتمد بعد. يمكنك إنشاء الطلب الآن، أو اعتماد أول مرجع من <a href="/brand">مركز البراند</a>.</p>}
+  </section>;
+}
+
 export function ContentWorkspace() {
   const configured = isSupabaseConfigured();
   const [session, setSession] = useState<Session | null>(null);
@@ -83,6 +94,8 @@ export function ContentWorkspace() {
   const [assets, setAssets] = useState<ContentAsset[]>([]);
   const [revisions, setRevisions] = useState<ContentRevision[]>([]);
   const [timelineCues, setTimelineCues] = useState<ContentTimelineCue[]>([]);
+  const [brandArticles, setBrandArticles] = useState<BrandArticle[]>([]);
+  const [brandReferences, setBrandReferences] = useState<ContentBrandReference[]>([]);
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -100,6 +113,8 @@ export function ContentWorkspace() {
     setAssets([]);
     setRevisions([]);
     setTimelineCues([]);
+    setBrandArticles([]);
+    setBrandReferences([]);
     setEditingBriefId(null);
     setAssetFormId(null);
     setRevisionFormId(null);
@@ -107,12 +122,14 @@ export function ContentWorkspace() {
 
   const refreshContent = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
-    const [contentResult, taskResult, assetResult, revisionResult, timelineResult] = await Promise.all([
+    const [contentResult, taskResult, assetResult, revisionResult, timelineResult, brandResult, brandReferenceResult] = await Promise.all([
       supabase.from("content_items").select("*").eq("organization_id", organizationId).order("publish_at", { ascending: true }),
       supabase.from("tasks").select("*").eq("organization_id", organizationId).not("content_item_id", "is", null).order("due_at", { ascending: true }),
       supabase.from("content_assets").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
       supabase.from("content_revision_requests").select("*").eq("organization_id", organizationId).order("round", { ascending: false }),
       supabase.from("content_timeline_cues").select("*").eq("organization_id", organizationId).order("sort_order", { ascending: true }),
+      supabase.from("brand_articles").select("*").eq("organization_id", organizationId).order("title", { ascending: true }),
+      supabase.from("content_brand_references").select("*").eq("organization_id", organizationId),
     ]);
 
     if (contentResult.error) throw contentResult.error;
@@ -120,11 +137,15 @@ export function ContentWorkspace() {
     if (assetResult.error) throw assetResult.error;
     if (revisionResult.error) throw revisionResult.error;
     if (timelineResult.error) throw timelineResult.error;
+    if (brandResult.error) throw brandResult.error;
+    if (brandReferenceResult.error) throw brandReferenceResult.error;
     setItems(contentResult.data ?? []);
     setTasks(taskResult.data ?? []);
     setAssets(assetResult.data ?? []);
     setRevisions(revisionResult.data ?? []);
     setTimelineCues(timelineResult.data ?? []);
+    setBrandArticles(brandResult.data ?? []);
+    setBrandReferences(brandReferenceResult.data ?? []);
   }, []);
 
   const loadWorkspace = useCallback(async (activeSession: Session) => {
@@ -196,7 +217,7 @@ export function ContentWorkspace() {
     const supabase = getSupabaseBrowserClient();
     const refresh = () => void refreshContent(workspace.organization.id);
     let channel = supabase.channel(`content:${workspace.organization.id}`);
-    for (const table of ["content_items", "tasks", "content_assets", "content_revision_requests", "content_timeline_cues"] as const) {
+    for (const table of ["content_items", "tasks", "content_assets", "content_revision_requests", "content_timeline_cues", "brand_articles", "content_brand_references"] as const) {
       channel = channel.on("postgres_changes", {
         event: "*", schema: "public", table, filter: `organization_id=eq.${workspace.organization.id}`,
       }, refresh);
@@ -231,6 +252,15 @@ export function ContentWorkspace() {
     for (const cue of timelineCues) grouped.set(cue.content_item_id, [...(grouped.get(cue.content_item_id) ?? []), cue]);
     return grouped;
   }, [timelineCues]);
+
+  const brandReferencesByContent = useMemo(() => {
+    const grouped = new Map<string, ContentBrandReference[]>();
+    for (const reference of brandReferences) grouped.set(reference.content_item_id, [...(grouped.get(reference.content_item_id) ?? []), reference]);
+    return grouped;
+  }, [brandReferences]);
+
+  const brandArticlesById = useMemo(() => new Map(brandArticles.map((article) => [article.id, article])), [brandArticles]);
+  const approvedBrandArticles = useMemo(() => brandArticles.filter((article) => article.status === "approved"), [brandArticles]);
 
   async function runCommand(body: Record<string, unknown>, successMessage: string) {
     if (!workspace) return false;
@@ -274,6 +304,7 @@ export function ContentWorkspace() {
         content_editing_brief: formText(form, "editing_brief"),
         content_thumbnail_brief: formText(form, "thumbnail_brief"),
         content_brand_notes: formText(form, "brand_notes"),
+        brand_article_ids: form.getAll("brand_reference_ids").map(String),
         initial_raw_url: formText(form, "initial_raw_url"),
         initial_source_url: formText(form, "initial_source_url"),
         initial_reference_url: formText(form, "initial_reference_url"),
@@ -398,6 +429,7 @@ export function ContentWorkspace() {
         currentUserId={session.user.id}
         defaultPublish={defaultPublish}
         people={workspace.people}
+        approvedBrandArticles={approvedBrandArticles.map((article) => ({ id: article.id, title: article.title, version: article.version, categoryLabel: brandCategoryConfig[article.category].label }))}
         working={working}
         onCancel={() => setShowQuickIntake(false)}
         onCreate={createQuickWorkflow}
@@ -415,8 +447,9 @@ export function ContentWorkspace() {
             <label className="full-field"><span>السكريبت أو تسلسل الفكرة</span><textarea name="script_outline" minLength={10} maxLength={8000} rows={5} required placeholder="الجمل أو المشاهد بالترتيب، وما الذي يجب ظهوره أو سماعه في كل جزء" /></label>
             <label className="full-field"><span>Production Brief للمونتاج</span><textarea name="editing_brief" minLength={10} maxLength={8000} rows={6} required placeholder="حدد إيقاع القطع، متى تعلو أو تنخفض الموسيقى، لحظات الصمت، الترجمة، B-roll، المؤثرات، وما يجب تجنبه" /></label>
             <label className="full-field"><span>Design Brief للغلاف</span><textarea name="thumbnail_brief" minLength={10} maxLength={4000} rows={4} required placeholder="النص الأساسي، ترتيب العناصر، الصورة، الإحساس البصري، المقاس، وما لا يجوز استخدامه" /></label>
-            <label className="full-field"><span>قواعد البراند لهذا الريلز — اختياري</span><textarea name="brand_notes" maxLength={4000} rows={3} placeholder="ألوان أو خطوط أو صور ممنوعة، ونبرة البراند المطلوبة" /></label>
+            <label className="full-field"><span>استثناءات أو ملاحظات خاصة بهذا الريلز — اختياري</span><textarea name="brand_notes" maxLength={4000} rows={3} placeholder="اكتب فقط ما يختلف عن قواعد البراند المعتمدة لهذا الطلب" /></label>
           </div>
+          <BrandReferenceSelector articles={approvedBrandArticles} />
           <div className="asset-seed-block">
             <div><p className="overline">ملفات البداية</p><h3>أضف المتاح الآن واترك الباقي للفريق</h3><p>أي رابط Google Drive أو مصدر خارجي سيظل مرتبطًا بالريلز ومرحلة استخدامه.</p></div>
             <div className="form-grid">
@@ -440,6 +473,7 @@ export function ContentWorkspace() {
         const itemAssets = assetsByContent.get(item.id) ?? [];
         const itemRevisions = revisionsByContent.get(item.id) ?? [];
         const itemTimeline = [...(timelineByContent.get(item.id) ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+        const itemBrandArticles = (brandReferencesByContent.get(item.id) ?? []).map((reference) => brandArticlesById.get(reference.brand_article_id)).filter((article): article is BrandArticle => Boolean(article));
         const doneCount = itemTasks.filter((task) => task.status === "done").length;
         const activeTasks = itemTasks.filter((task) => ["ready", "in_progress", "review", "blocked"].includes(task.status));
         const progress = itemTasks.length ? Math.round((doneCount / itemTasks.length) * 100) : 0;
@@ -461,19 +495,20 @@ export function ContentWorkspace() {
           </header>
 
           <div className="content-brief-grid"><div><small>الهدف</small><p>{item.goal}</p></div><div><small>الـHook</small><p>{item.hook}</p></div><div><small>الـCTA</small><p>{item.cta}</p></div></div>
+          <section className="content-brand-references"><div><BookOpenCheck size={16} /><div><p className="overline">مرجع التنفيذ</p><h4>مراجع البراند المعتمدة</h4></div></div>{itemBrandArticles.length ? <div>{itemBrandArticles.map((article) => <a href={`/brand#article-${article.id}`} key={article.id}><strong>{article.title}</strong><small>{brandCategoryConfig[article.category].label} · v{article.version}{article.status === "archived" ? " · نسخة محفوظة" : ""}</small></a>)}</div> : <p>لم يُربط مرجع معتمد بهذا الطلب. استخدم الملاحظات الخاصة أدناه فقط عند وجود استثناء فعلي.</p>}</section>
           <div className="production-header"><div><FileText size={17} /><div><p className="overline">تعليمات التنفيذ</p><h4>Production Brief</h4></div></div>{manager ? <button className="text-button" type="button" onClick={() => setEditingBriefId(editingBriefId === item.id ? null : item.id)}><Pencil size={13} /> {briefComplete ? "تعديل التعليمات" : "استكمال التعليمات"}</button> : null}</div>
 
           {editingBriefId === item.id && manager ? <form className="inline-production-form" onSubmit={(event) => void updateBrief(event, item.id)}>
             <label><span>السكريبت أو التسلسل</span><textarea name="script_outline" minLength={10} maxLength={8000} rows={5} required defaultValue={item.script_outline} /></label>
             <label><span>تعليمات المونتاج</span><textarea name="editing_brief" minLength={10} maxLength={8000} rows={6} required defaultValue={item.editing_brief} placeholder="القطع، الموسيقى، الصمت، الترجمة، B-roll، المؤثرات، والممنوعات" /></label>
             <label><span>تعليمات الغلاف</span><textarea name="thumbnail_brief" minLength={10} maxLength={4000} rows={4} required defaultValue={item.thumbnail_brief} placeholder="النص، الصورة، الترتيب البصري، المقاس، والممنوعات" /></label>
-            <label><span>ملاحظات البراند — اختياري</span><textarea name="brand_notes" maxLength={4000} rows={3} defaultValue={item.brand_notes ?? ""} /></label>
+            <label><span>استثناءات أو ملاحظات خاصة — اختياري</span><textarea name="brand_notes" maxLength={4000} rows={3} defaultValue={item.brand_notes ?? ""} /></label>
             <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={15} /> : <CheckCircle2 size={15} />} حفظ ومزامنة المهام</Button><button className="text-button" type="button" onClick={() => setEditingBriefId(null)}>إلغاء</button></div>
           </form> : <div className={`production-brief-grid ${briefComplete ? "" : "incomplete"}`}>
             <div><small>السكريبت / التسلسل</small><p>{item.script_outline || "لم تُضف تعليمات السكربت بعد."}</p></div>
             <div><small>تعليمات المونتاج</small><p>{item.editing_brief || "لم تُضف تعليمات المونتاج بعد."}</p></div>
             <div><small>تعليمات الغلاف</small><p>{item.thumbnail_brief || "لم تُضف تعليمات الغلاف بعد."}</p></div>
-            {item.brand_notes ? <div><small>قواعد البراند</small><p>{item.brand_notes}</p></div> : null}
+            {item.brand_notes ? <div><small>استثناءات أو ملاحظات خاصة</small><p>{item.brand_notes}</p></div> : null}
           </div>}
 
           {item.intake_request && item.intake_source_url ? <details className="telegram-intake-source">

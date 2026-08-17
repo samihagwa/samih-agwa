@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("shared navigation covers every primary route", async () => {
   const source = await readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8");
-  for (const route of ["/tasks", "/content", "/campaigns", "/crm", "/analytics", "/team", "/settings"]) {
+  for (const route of ["/tasks", "/content", "/brand", "/campaigns", "/crm", "/analytics", "/team", "/settings"]) {
     assert.match(source, new RegExp(`href(?::|=)\\s*["']${route}`));
   }
 });
@@ -45,7 +45,7 @@ test("Supabase client consumes generated database types", async () => {
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(client, /createClient<Database>/);
-  for (const table of ["audit_events", "content_assets", "content_items", "content_revision_requests", "content_timeline_cues", "crm_activities", "crm_contacts", "crm_conversation_links", "crm_identities", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
+  for (const table of ["audit_events", "brand_articles", "content_assets", "content_brand_references", "content_items", "content_revision_requests", "content_timeline_cues", "crm_activities", "crm_contacts", "crm_conversation_links", "crm_identities", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
     assert.match(types, new RegExp(`${table}:`));
   }
 });
@@ -166,6 +166,42 @@ test("content production briefs, assets, and revision rounds share one secured w
   assert.match(taskWorkspace, /فتح Production Brief والملفات/);
   assert.match(contentContract, /contentAssetKindConfig/);
   assert.match(contentContract, /contentRevisionStatusConfig/);
+});
+
+test("brand knowledge is versioned, owner-approved, and linked to content by an exact secured reference", async () => {
+  const [migration, indexMigration, commands, createWorkflow, brandWorkspace, contentWorkspace, architecture] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260817165446_brand_knowledge_center.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260817171101_brand_reference_fk_index.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/brand-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/brand/BrandWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../docs/architecture.md", import.meta.url), "utf8"),
+  ]);
+
+  for (const table of ["brand_articles", "content_brand_references"]) {
+    assert.match(migration, new RegExp(`create table public\\.${table}`));
+    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(migration, new RegExp(`grant select on table public\\.${table} to authenticated`));
+    assert.doesNotMatch(migration, new RegExp(`grant (insert|update|delete) on table public\\.${table} to authenticated`, "i"));
+  }
+  for (const rpc of ["create_brand_article_draft", "update_brand_article_draft", "revise_brand_article", "approve_brand_article", "archive_brand_article", "create_reel_production_workflow_v2", "create_reel_from_intake_v2"]) {
+    assert.match(migration, new RegExp(`function public\\.${rpc}`));
+    assert.match(migration, new RegExp(`grant execute on function public\\.${rpc}`));
+  }
+  assert.match(migration, /to service_role/);
+  assert.match(migration, /from public, anon, authenticated/);
+  assert.match(migration, /brand_articles_one_approved_per_topic_idx/);
+  assert.match(indexMigration, /content_brand_references_content_org_fk_idx/);
+  assert.match(migration, /article\.status = 'approved'/);
+  assert.match(commands, /createSupabaseContext/);
+  assert.match(commands, /auth: "user"/);
+  assert.match(brandWorkspace, /المسودة لا تؤثر على الشغل الحالي/);
+  assert.match(contentWorkspace, /brand_article_ids/);
+  assert.match(contentWorkspace, /مراجع البراند المعتمدة/);
+  assert.match(createWorkflow, /create_reel_production_workflow_v2/);
+  assert.match(createWorkflow, /create_reel_from_intake_v2/);
+  assert.match(architecture, /approved body is immutable/i);
 });
 
 test("application shell does not impersonate an authenticated owner", async () => {

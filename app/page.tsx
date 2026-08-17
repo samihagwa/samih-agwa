@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowLeft, CircleCheck, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, BookOpenCheck, CircleCheck, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { PageHeader } from "../components/ui/PageHeader";
 import { StatCard } from "../components/ui/StatCard";
@@ -12,6 +12,7 @@ const foundations = [
   { label: "هوية وصلاحيات الفريق", state: "جاهزة تقنيًا — لم يبدأ الفريق", icon: ShieldCheck },
   { label: "إدارة المهام والتسليم", state: "قواعد آمنة وبورد حقيقي", icon: CircleCheck },
   { label: "مصنع محتوى مترابط", state: "7 خطوات واعتماديات تلقائية", icon: CircleCheck },
+  { label: "مركز معرفة البراند", state: "جاهز لإدخال واعتماد المراجع الحقيقية", icon: BookOpenCheck },
 ];
 
 const contentStepDescriptions: Record<ContentStep, string> = {
@@ -55,11 +56,11 @@ export default function Home() {
           <div className="section-heading compact">
             <div>
               <p className="overline">جاهزية الأساس</p>
-              <h2>3 محاور قبل الإطلاق</h2>
+              <h2>4 محاور قبل الإطلاق</h2>
             </div>
-            <span className="progress-value">3/3</span>
+            <span className="progress-value">4/4</span>
           </div>
-          <div className="progress-track progress-complete" aria-label="اكتملت محاور الأساس الثلاثة"><span /></div>
+          <div className="progress-track progress-complete" aria-label="اكتملت محاور الأساس الأربعة تقنيًا"><span /></div>
           <ul className="foundation-list">
             {foundations.map(({ label, state, icon: Icon }) => (
               <li key={label}>

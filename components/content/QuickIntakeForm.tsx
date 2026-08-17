@@ -17,6 +17,7 @@ import {
 import { Button } from "../ui/Button";
 
 type TeamPerson = { id: string; name: string };
+type ApprovedBrandArticle = { id: string; title: string; version: number; categoryLabel: string };
 
 export type QuickIntakePayload = {
   target_publish_at: string;
@@ -30,6 +31,7 @@ export type QuickIntakePayload = {
   content_editing_brief: string;
   content_thumbnail_brief: string;
   content_brand_notes: string;
+  brand_article_ids: string[];
   parsed_timeline: Array<{
     start_seconds: number;
     end_seconds: number | null;
@@ -51,6 +53,7 @@ type Props = {
   currentUserId: string;
   defaultPublish: string;
   people: TeamPerson[];
+  approvedBrandArticles: ApprovedBrandArticle[];
   working: boolean;
   onCancel: () => void;
   onCreate: (payload: QuickIntakePayload) => Promise<boolean>;
@@ -67,7 +70,7 @@ function updateTimelineCue(
   };
 }
 
-export function QuickIntakeForm({ currentUserId, defaultPublish, people, working, onCancel, onCreate }: Props) {
+export function QuickIntakeForm({ currentUserId, defaultPublish, people, approvedBrandArticles, working, onCancel, onCreate }: Props) {
   const [rawRequest, setRawRequest] = useState("");
   const [telegramUrl, setTelegramUrl] = useState("");
   const [draft, setDraft] = useState<ParsedProductionRequest | null>(null);
@@ -121,6 +124,7 @@ export function QuickIntakeForm({ currentUserId, defaultPublish, people, working
       content_editing_brief: draft.editingBrief.trim(),
       content_thumbnail_brief: draft.thumbnailBrief.trim(),
       content_brand_notes: draft.brandNotes.trim(),
+      brand_article_ids: form.getAll("brand_reference_ids").map(String),
       parsed_timeline: draft.timeline.map((cue) => ({
         start_seconds: cue.startSeconds,
         end_seconds: cue.endSeconds,
@@ -164,8 +168,10 @@ export function QuickIntakeForm({ currentUserId, defaultPublish, people, working
         <label className="full-field"><span>السكريبت المستخرج</span><textarea value={draft.scriptOutline} onChange={(event) => setDraft({ ...draft, scriptOutline: event.target.value })} minLength={10} maxLength={8000} rows={7} required /></label>
         <label className="full-field"><span>التعليمات العامة للمونتاج</span><textarea value={draft.editingBrief} onChange={(event) => setDraft({ ...draft, editingBrief: event.target.value })} minLength={10} maxLength={8000} rows={5} required /></label>
         <label className="full-field"><span>تعليمات الغلاف المستخرجة</span><textarea value={draft.thumbnailBrief} onChange={(event) => setDraft({ ...draft, thumbnailBrief: event.target.value })} minLength={10} maxLength={4000} rows={4} required /></label>
-        <label className="full-field"><span>قواعد البراند — اختياري</span><textarea value={draft.brandNotes} onChange={(event) => setDraft({ ...draft, brandNotes: event.target.value })} maxLength={4000} rows={2} /></label>
+        <label className="full-field"><span>استثناءات أو ملاحظات خاصة بهذا الريلز — اختياري</span><textarea value={draft.brandNotes} onChange={(event) => setDraft({ ...draft, brandNotes: event.target.value })} maxLength={4000} rows={2} placeholder="اكتب فقط ما يختلف عن قواعد البراند المعتمدة لهذا الطلب" /></label>
       </div>
+
+      <BrandReferenceSelector articles={approvedBrandArticles} />
 
       <section className="intake-timeline-editor">
         <div className="production-tool-heading"><div><MessageSquareText size={16} /><div><p className="overline">Timeline</p><h4>تعليمات التنفيذ بالثانية</h4></div></div><button className="text-button" type="button" onClick={() => setDraft({ ...draft, timeline: [...draft.timeline, { startSeconds: 0, endSeconds: null, kind: "note", action: "", sourceUrl: null }] })}><Plus size={13} /> إضافة سطر</button></div>
@@ -190,4 +196,11 @@ export function QuickIntakeForm({ currentUserId, defaultPublish, people, working
       <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} اعتماد وإنشاء خط الإنتاج</Button><small>بعد الاعتماد فقط تُنشأ المهام والـTimeline والروابط معًا.</small></div>
     </form>
   );
+}
+
+function BrandReferenceSelector({ articles }: { articles: ApprovedBrandArticle[] }) {
+  return <section className="brand-reference-selector">
+    <div><p className="overline">قواعد التنفيذ</p><h3>مراجع البراند المعتمدة</h3><p>اختر القواعد التي يجب أن يفتحها المصمم والمونتير والكاتب مع هذا الريلز.</p></div>
+    {articles.length ? <div>{articles.map((article) => <label key={article.id}><input type="checkbox" name="brand_reference_ids" value={article.id} aria-label={`ربط مرجع ${article.title}`} /><span><strong>{article.title}</strong><small>{article.categoryLabel} · النسخة {article.version}</small></span></label>)}</div> : <p className="brand-reference-empty">لا يوجد مرجع معتمد بعد. يمكنك إنشاء الطلب الآن، أو اعتماد أول مرجع من <a href="/brand">مركز البراند</a>.</p>}
+  </section>;
 }

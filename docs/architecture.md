@@ -80,6 +80,14 @@ Existing Market Whales application
 - CRM task status is controlled only by the CRM command. Recording a result closes the current task and either creates the next future follow-up or closes the lead with a reason.
 - Selecting `do_not_contact` records denied consent and prevents another follow-up. No message, import, or external synchronization is active in this foundation.
 
+## Brand knowledge contract
+
+- `brand_articles` is the governed source for identity, visual, editing, copy, publishing, compliance, product, and workflow rules. Leadership creates drafts; only the organization owner can approve or archive them.
+- An approved body is immutable. A change starts a new numbered draft while the current approved version stays active; approving the revision archives the previous version without deleting history.
+- The browser has read-only table access through RLS. Every mutation goes through the JWT-protected `brand-commands` Edge Function and service-only database commands, with an audit event for each privileged change.
+- `content_brand_references` records the exact approved version used when a content workflow is created. Archived versions remain readable for content already linked to them, while new briefs can select only currently approved versions.
+- Item-specific brand notes are exceptions or clarifications, not a replacement for the approved knowledge center. The content command validates and links up to eight approved references atomically with the brief and seven tasks.
+
 ## Initial domains
 
 1. Identity, organizations, memberships, and roles — foundation live; team onboarding pending.
@@ -87,4 +95,5 @@ Existing Market Whales application
 3. Content assets, briefs, dependency-based production stages, and manual publish confirmation — foundation live; external publishing and metrics pending.
 4. Campaigns, launches, assets, readiness gates, and Go / No-Go — foundation live; external performance ingestion pending.
 5. People, leads, customers, sources, consent, pipeline, and accountable follow-up tasks — foundation ready for personal testing; imports and messages pending.
-6. Metric definitions, observations, targets, experiments, and decisions.
+6. Versioned brand knowledge, approval, audience visibility, and exact content references — foundation ready for personal testing; real brand content pending.
+7. Metric definitions, observations, targets, experiments, and decisions.
