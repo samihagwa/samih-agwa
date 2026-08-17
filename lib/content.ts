@@ -2,6 +2,8 @@ import type { Database } from "./supabase/database.types";
 
 export type ContentStatus = Database["public"]["Enums"]["content_status"];
 export type ContentStep = Database["public"]["Enums"]["content_step"];
+export type ContentAssetKind = Database["public"]["Enums"]["content_asset_kind"];
+export type ContentRevisionStatus = Database["public"]["Enums"]["content_revision_status"];
 
 export const contentStatusConfig: Record<
   ContentStatus,
@@ -29,3 +31,25 @@ export const contentSteps = (Object.keys(contentStepConfig) as ContentStep[]).so
   (a, b) => contentStepConfig[a].order - contentStepConfig[b].order,
 );
 
+export const contentAssetKindConfig: Record<ContentAssetKind, { label: string }> = {
+  raw_video: { label: "المادة الخام" },
+  source: { label: "المصدر الأساسي" },
+  b_roll: { label: "B-roll" },
+  image: { label: "صورة مستخدمة" },
+  audio: { label: "موسيقى أو صوت" },
+  reference: { label: "مرجع بصري" },
+  draft_video: { label: "نسخة مونتاج للمراجعة" },
+  thumbnail: { label: "تصميم الغلاف" },
+  caption: { label: "الكابشن" },
+  final_export: { label: "النسخة النهائية" },
+};
+
+export const contentRevisionStatusConfig: Record<
+  ContentRevisionStatus,
+  { label: string; tone: "neutral" | "info" | "success" | "warning" }
+> = {
+  requested: { label: "مطلوب تنفيذها", tone: "warning" },
+  in_progress: { label: "قيد التعديل", tone: "info" },
+  resolved: { label: "تم تنفيذها", tone: "success" },
+  cancelled: { label: "ملغاة", tone: "neutral" },
+};

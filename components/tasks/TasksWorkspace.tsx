@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleUserRound,
+  FileText,
   Film,
   LoaderCircle,
   LockKeyhole,
@@ -404,6 +405,7 @@ export function TasksWorkspace() {
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} key={task.id}>
                       <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><small>v{task.version}</small></div>
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
+                      {task.content_item_id ? <a className="task-production-link" href={`/content#content-${task.content_item_id}`}><FileText size={12} /> فتح Production Brief والملفات</a> : null}
                       {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
                       <h3>{task.title}</h3>
                       {task.description ? <p>{task.description}</p> : null}

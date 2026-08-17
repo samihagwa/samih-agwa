@@ -61,11 +61,74 @@ export type Database = {
           },
         ]
       }
+      content_assets: {
+        Row: {
+          content_item_id: string
+          created_at: string
+          created_by: string
+          id: string
+          kind: Database["public"]["Enums"]["content_asset_kind"]
+          notes: string | null
+          organization_id: string
+          stage: Database["public"]["Enums"]["content_step"] | null
+          title: string
+          url: string
+        }
+        Insert: {
+          content_item_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          kind: Database["public"]["Enums"]["content_asset_kind"]
+          notes?: string | null
+          organization_id: string
+          stage?: Database["public"]["Enums"]["content_step"] | null
+          title: string
+          url: string
+        }
+        Update: {
+          content_item_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["content_asset_kind"]
+          notes?: string | null
+          organization_id?: string
+          stage?: Database["public"]["Enums"]["content_step"] | null
+          title?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_assets_content_org_fkey"
+            columns: ["content_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_assets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_assets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_items: {
         Row: {
+          brand_notes: string | null
           created_at: string
           created_by: string
           cta: string
+          editing_brief: string
           format: Database["public"]["Enums"]["content_format"]
           goal: string
           hook: string
@@ -74,15 +137,19 @@ export type Database = {
           platforms: string[]
           publish_at: string
           published_at: string | null
+          script_outline: string
           status: Database["public"]["Enums"]["content_status"]
+          thumbnail_brief: string
           title: string
           updated_at: string
           version: number
         }
         Insert: {
+          brand_notes?: string | null
           created_at?: string
           created_by?: string
           cta: string
+          editing_brief?: string
           format?: Database["public"]["Enums"]["content_format"]
           goal: string
           hook: string
@@ -91,15 +158,19 @@ export type Database = {
           platforms?: string[]
           publish_at: string
           published_at?: string | null
+          script_outline?: string
           status?: Database["public"]["Enums"]["content_status"]
+          thumbnail_brief?: string
           title: string
           updated_at?: string
           version?: number
         }
         Update: {
+          brand_notes?: string | null
           created_at?: string
           created_by?: string
           cta?: string
+          editing_brief?: string
           format?: Database["public"]["Enums"]["content_format"]
           goal?: string
           hook?: string
@@ -108,7 +179,9 @@ export type Database = {
           platforms?: string[]
           publish_at?: string
           published_at?: string | null
+          script_outline?: string
           status?: Database["public"]["Enums"]["content_status"]
+          thumbnail_brief?: string
           title?: string
           updated_at?: string
           version?: number
@@ -126,6 +199,100 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_revision_requests: {
+        Row: {
+          assigned_to: string
+          content_item_id: string
+          id: string
+          instructions: string
+          organization_id: string
+          requested_at: string
+          requested_by: string
+          resolved_at: string | null
+          resolved_by: string | null
+          round: number
+          stage: Database["public"]["Enums"]["content_step"]
+          started_at: string | null
+          status: Database["public"]["Enums"]["content_revision_status"]
+          task_id: string
+        }
+        Insert: {
+          assigned_to: string
+          content_item_id: string
+          id?: string
+          instructions: string
+          organization_id: string
+          requested_at?: string
+          requested_by: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          round: number
+          stage: Database["public"]["Enums"]["content_step"]
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["content_revision_status"]
+          task_id: string
+        }
+        Update: {
+          assigned_to?: string
+          content_item_id?: string
+          id?: string
+          instructions?: string
+          organization_id?: string
+          requested_at?: string
+          requested_by?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          round?: number
+          stage?: Database["public"]["Enums"]["content_step"]
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["content_revision_status"]
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_revision_requests_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_revision_requests_content_org_fkey"
+            columns: ["content_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_revision_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_revision_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_revision_requests_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_revision_requests_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
         ]
@@ -560,6 +727,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_content_asset: {
+        Args: {
+          asset_kind: Database["public"]["Enums"]["content_asset_kind"]
+          asset_notes: string
+          asset_stage: Database["public"]["Enums"]["content_step"]
+          asset_title: string
+          asset_url: string
+          target_content_item_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       attach_content_to_launch: {
         Args: {
           target_content_item_id: string
@@ -571,6 +750,14 @@ export type Database = {
       bootstrap_market_whales_organization: {
         Args: { target_user_id: string }
         Returns: string
+      }
+      change_content_revision: {
+        Args: {
+          target_action: string
+          target_revision_id: string
+          target_user_id: string
+        }
+        Returns: boolean
       }
       create_launch_workflow: {
         Args: {
@@ -596,6 +783,32 @@ export type Database = {
           target_organization_id: string
           target_user_id: string
           tracking_owner_id: string
+        }
+        Returns: string
+      }
+      create_reel_production_workflow: {
+        Args: {
+          approval_owner_id: string
+          brief_owner_id: string
+          caption_owner_id: string
+          content_brand_notes: string
+          content_cta: string
+          content_editing_brief: string
+          content_goal: string
+          content_hook: string
+          content_script_outline: string
+          content_thumbnail_brief: string
+          content_title: string
+          editing_owner_id: string
+          initial_raw_url: string
+          initial_reference_url: string
+          initial_source_url: string
+          publishing_owner_id: string
+          recording_owner_id: string
+          target_organization_id: string
+          target_publish_at: string
+          target_user_id: string
+          thumbnail_owner_id: string
         }
         Returns: string
       }
@@ -644,9 +857,44 @@ export type Database = {
         }
         Returns: boolean
       }
+      remove_content_asset: {
+        Args: { target_asset_id: string; target_user_id: string }
+        Returns: boolean
+      }
+      request_content_revision: {
+        Args: {
+          revision_instructions: string
+          target_content_item_id: string
+          target_stage: Database["public"]["Enums"]["content_step"]
+          target_user_id: string
+        }
+        Returns: string
+      }
+      update_content_production_brief: {
+        Args: {
+          content_brand_notes: string
+          content_editing_brief: string
+          content_script_outline: string
+          content_thumbnail_brief: string
+          target_content_item_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "owner" | "admin" | "manager" | "member" | "viewer"
+      content_asset_kind:
+        | "raw_video"
+        | "source"
+        | "b_roll"
+        | "image"
+        | "audio"
+        | "reference"
+        | "draft_video"
+        | "thumbnail"
+        | "caption"
+        | "final_export"
       content_format:
         | "reel"
         | "carousel"
@@ -655,6 +903,11 @@ export type Database = {
         | "long_video"
         | "live"
         | "email"
+      content_revision_status:
+        | "requested"
+        | "in_progress"
+        | "resolved"
+        | "cancelled"
       content_status:
         | "planned"
         | "production"
@@ -826,6 +1079,18 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["owner", "admin", "manager", "member", "viewer"],
+      content_asset_kind: [
+        "raw_video",
+        "source",
+        "b_roll",
+        "image",
+        "audio",
+        "reference",
+        "draft_video",
+        "thumbnail",
+        "caption",
+        "final_export",
+      ],
       content_format: [
         "reel",
         "carousel",
@@ -834,6 +1099,12 @@ export const Constants = {
         "long_video",
         "live",
         "email",
+      ],
+      content_revision_status: [
+        "requested",
+        "in_progress",
+        "resolved",
+        "cancelled",
       ],
       content_status: [
         "planned",

@@ -45,7 +45,7 @@ test("Supabase client consumes generated database types", async () => {
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(client, /createClient<Database>/);
-  for (const table of ["audit_events", "content_items", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
+  for (const table of ["audit_events", "content_assets", "content_items", "content_revision_requests", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
     assert.match(types, new RegExp(`${table}:`));
   }
 });
@@ -92,6 +92,45 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(edgeFunction, /auth: "user"/);
   assert.match(workspace, /functions\.invoke\("create-content-workflow"/);
   assert.match(workspace, /7 مهام مترابطة/);
+});
+
+test("content production briefs, assets, and revision rounds share one secured workflow", async () => {
+  const [migration, commands, createCommand, workspace, taskWorkspace, contentContract, types] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260817014819_content_production_briefs_and_revisions.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/content.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+  ]);
+
+  for (const table of ["content_assets", "content_revision_requests"]) {
+    assert.match(migration, new RegExp(`create table public\\.${table}`));
+    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(types, new RegExp(`${table}:`));
+  }
+  for (const rpc of ["create_reel_production_workflow", "update_content_production_brief", "add_content_asset", "remove_content_asset", "request_content_revision", "change_content_revision"]) {
+    assert.match(migration, new RegExp(`function public\\.${rpc}`));
+    assert.match(migration, new RegExp(`grant execute on function public\\.${rpc}`));
+    assert.match(types, new RegExp(`${rpc}:`));
+  }
+  assert.match(migration, /to service_role/);
+  assert.match(migration, /from public, anon, authenticated/);
+  assert.match(migration, /guard_content_approval_revisions/);
+  assert.doesNotMatch(migration, /grant (insert|update|delete) on table public\.(content_assets|content_revision_requests) to authenticated/i);
+  assert.match(commands, /createSupabaseContext/);
+  assert.match(commands, /auth: "user"/);
+  assert.match(commands, /request_revision/);
+  assert.match(commands, /resolve_revision/);
+  assert.match(createCommand, /create_reel_production_workflow/);
+  assert.match(workspace, /Production Brief للمونتاج/);
+  assert.match(workspace, /مركز الأصول/);
+  assert.match(workspace, /جولات التعديل/);
+  assert.match(workspace, /functions\.invoke\("content-commands"/);
+  assert.match(taskWorkspace, /فتح Production Brief والملفات/);
+  assert.match(contentContract, /contentAssetKindConfig/);
+  assert.match(contentContract, /contentRevisionStatusConfig/);
 });
 
 test("application shell does not impersonate an authenticated owner", async () => {

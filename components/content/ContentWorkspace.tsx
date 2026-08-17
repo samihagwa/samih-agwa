@@ -5,20 +5,29 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleUserRound,
+  ExternalLink,
+  FileText,
   Film,
   Link2,
   LoaderCircle,
   LockKeyhole,
+  MessageSquareText,
+  Paperclip,
+  Pencil,
   Plus,
   RefreshCw,
   Route,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  contentAssetKindConfig,
+  contentRevisionStatusConfig,
   contentStatusConfig,
   contentStepConfig,
   contentSteps,
+  type ContentAssetKind,
   type ContentStep,
 } from "../../lib/content";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
@@ -28,21 +37,14 @@ import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 
 type ContentItem = Tables<"content_items">;
+type ContentAsset = Tables<"content_assets">;
+type ContentRevision = Tables<"content_revision_requests">;
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
 
-type TeamPerson = {
-  id: string;
-  name: string;
-  role: Membership["role"];
-};
-
-type Workspace = {
-  organization: Organization;
-  membership: Membership;
-  people: TeamPerson[];
-};
+type TeamPerson = { id: string; name: string; role: Membership["role"] };
+type Workspace = { organization: Organization; membership: Membership; people: TeamPerson[] };
 
 const assignmentFields: Array<{ step: ContentStep; name: string }> = [
   { step: "brief", name: "brief_owner_id" },
@@ -54,6 +56,9 @@ const assignmentFields: Array<{ step: ContentStep; name: string }> = [
   { step: "publishing", name: "publishing_owner_id" },
 ];
 
+const revisionSteps: ContentStep[] = ["recording", "editing", "thumbnail", "caption"];
+const assetKinds = Object.keys(contentAssetKindConfig) as ContentAssetKind[];
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "object" && error && "message" in error) return String(error.message);
@@ -61,15 +66,16 @@ function getErrorMessage(error: unknown) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ar-EG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function toLocalDateTimeInput(date: Date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function formText(form: FormData, name: string) {
+  return String(form.get(name) ?? "").trim();
 }
 
 export function ContentWorkspace() {
@@ -78,164 +84,169 @@ export function ContentWorkspace() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [items, setItems] = useState<ContentItem[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [assets, setAssets] = useState<ContentAsset[]>([]);
+  const [revisions, setRevisions] = useState<ContentRevision[]>([]);
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingBriefId, setEditingBriefId] = useState<string | null>(null);
+  const [assetFormId, setAssetFormId] = useState<string | null>(null);
+  const [revisionFormId, setRevisionFormId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
   const [defaultPublish] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)));
 
+  const clearData = useCallback(() => {
+    setItems([]);
+    setTasks([]);
+    setAssets([]);
+    setRevisions([]);
+    setEditingBriefId(null);
+    setAssetFormId(null);
+    setRevisionFormId(null);
+  }, []);
+
   const refreshContent = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
-    const [{ data: contentRows, error: contentError }, { data: taskRows, error: tasksError }] = await Promise.all([
-      supabase
-        .from("content_items")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .order("publish_at", { ascending: true }),
-      supabase
-        .from("tasks")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .not("content_item_id", "is", null)
-        .order("due_at", { ascending: true }),
+    const [contentResult, taskResult, assetResult, revisionResult] = await Promise.all([
+      supabase.from("content_items").select("*").eq("organization_id", organizationId).order("publish_at", { ascending: true }),
+      supabase.from("tasks").select("*").eq("organization_id", organizationId).not("content_item_id", "is", null).order("due_at", { ascending: true }),
+      supabase.from("content_assets").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
+      supabase.from("content_revision_requests").select("*").eq("organization_id", organizationId).order("round", { ascending: false }),
     ]);
 
-    if (contentError) throw contentError;
-    if (tasksError) throw tasksError;
-    setItems(contentRows ?? []);
-    setTasks(taskRows ?? []);
+    if (contentResult.error) throw contentResult.error;
+    if (taskResult.error) throw taskResult.error;
+    if (assetResult.error) throw assetResult.error;
+    if (revisionResult.error) throw revisionResult.error;
+    setItems(contentResult.data ?? []);
+    setTasks(taskResult.data ?? []);
+    setAssets(assetResult.data ?? []);
+    setRevisions(revisionResult.data ?? []);
   }, []);
 
   const loadWorkspace = useCallback(async (activeSession: Session) => {
     const supabase = getSupabaseBrowserClient();
     setLoading(true);
     setError(null);
-
     try {
       const { data: membership, error: membershipError } = await supabase
-        .from("memberships")
-        .select("*")
-        .eq("user_id", activeSession.user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-
+        .from("memberships").select("*").eq("user_id", activeSession.user.id).eq("status", "active").limit(1).maybeSingle();
       if (membershipError) throw membershipError;
       if (!membership) {
         setWorkspace(null);
-        setItems([]);
-        setTasks([]);
+        clearData();
         return;
       }
 
-      const [{ data: organization, error: organizationError }, { data: memberRows, error: membersError }] = await Promise.all([
+      const [organizationResult, membersResult] = await Promise.all([
         supabase.from("organizations").select("*").eq("id", membership.organization_id).single(),
-        supabase
-          .from("memberships")
-          .select("user_id, role")
-          .eq("organization_id", membership.organization_id)
-          .eq("status", "active"),
+        supabase.from("memberships").select("user_id, role").eq("organization_id", membership.organization_id).eq("status", "active"),
       ]);
+      if (organizationResult.error) throw organizationResult.error;
+      if (membersResult.error) throw membersResult.error;
 
-      if (organizationError) throw organizationError;
-      if (membersError) throw membersError;
-
-      const memberIds = (memberRows ?? []).map((member) => member.user_id);
-      const { data: profiles, error: profilesError } = memberIds.length
+      const memberIds = (membersResult.data ?? []).map((member) => member.user_id);
+      const profilesResult = memberIds.length
         ? await supabase.from("profiles").select("id, full_name").in("id", memberIds)
         : { data: [], error: null };
+      if (profilesResult.error) throw profilesResult.error;
 
-      if (profilesError) throw profilesError;
-
-      const people = (memberRows ?? []).map((member) => ({
+      const people = (membersResult.data ?? []).map((member) => ({
         id: member.user_id,
         role: member.role,
-        name:
-          profiles?.find((profile) => profile.id === member.user_id)?.full_name
+        name: profilesResult.data?.find((profile) => profile.id === member.user_id)?.full_name
           ?? (member.user_id === activeSession.user.id ? activeSession.user.email : null)
           ?? "عضو فريق",
       }));
-
-      setWorkspace({ organization, membership, people });
+      setWorkspace({ organization: organizationResult.data, membership, people });
       await refreshContent(membership.organization_id);
     } catch (loadError) {
       setError(getErrorMessage(loadError));
     } finally {
       setLoading(false);
     }
-  }, [refreshContent]);
+  }, [clearData, refreshContent]);
 
   useEffect(() => {
     if (!configured) return;
     const supabase = getSupabaseBrowserClient();
-
     void supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       if (data.session) void loadWorkspace(data.session);
       else setLoading(false);
     });
-
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setNotice(null);
       if (nextSession) void loadWorkspace(nextSession);
       else {
         setWorkspace(null);
-        setItems([]);
-        setTasks([]);
+        clearData();
         setLoading(false);
       }
     });
-
     return () => data.subscription.unsubscribe();
-  }, [configured, loadWorkspace]);
+  }, [clearData, configured, loadWorkspace]);
 
   useEffect(() => {
     if (!workspace) return;
     const supabase = getSupabaseBrowserClient();
     const refresh = () => void refreshContent(workspace.organization.id);
-    const contentChannel = supabase
-      .channel(`content:${workspace.organization.id}`)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "content_items",
-        filter: `organization_id=eq.${workspace.organization.id}`,
-      }, refresh)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "tasks",
-        filter: `organization_id=eq.${workspace.organization.id}`,
-      }, refresh)
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(contentChannel);
-    };
+    let channel = supabase.channel(`content:${workspace.organization.id}`);
+    for (const table of ["content_items", "tasks", "content_assets", "content_revision_requests"] as const) {
+      channel = channel.on("postgres_changes", {
+        event: "*", schema: "public", table, filter: `organization_id=eq.${workspace.organization.id}`,
+      }, refresh);
+    }
+    channel.subscribe();
+    return () => { void supabase.removeChannel(channel); };
   }, [refreshContent, workspace]);
 
   const tasksByContent = useMemo(() => {
     const grouped = new Map<string, Task[]>();
     for (const task of tasks) {
       if (!task.content_item_id) continue;
-      const current = grouped.get(task.content_item_id) ?? [];
-      current.push(task);
-      grouped.set(task.content_item_id, current);
+      grouped.set(task.content_item_id, [...(grouped.get(task.content_item_id) ?? []), task]);
     }
     return grouped;
   }, [tasks]);
 
+  const assetsByContent = useMemo(() => {
+    const grouped = new Map<string, ContentAsset[]>();
+    for (const asset of assets) grouped.set(asset.content_item_id, [...(grouped.get(asset.content_item_id) ?? []), asset]);
+    return grouped;
+  }, [assets]);
+
+  const revisionsByContent = useMemo(() => {
+    const grouped = new Map<string, ContentRevision[]>();
+    for (const revision of revisions) grouped.set(revision.content_item_id, [...(grouped.get(revision.content_item_id) ?? []), revision]);
+    return grouped;
+  }, [revisions]);
+
+  async function runCommand(body: Record<string, unknown>, successMessage: string) {
+    if (!workspace) return false;
+    setWorking(true);
+    setError(null);
+    setNotice(null);
+    const { error: commandError } = await getSupabaseBrowserClient().functions.invoke("content-commands", { body });
+    setWorking(false);
+    if (commandError) {
+      setError(commandError.message);
+      return false;
+    }
+    setNotice(successMessage);
+    await refreshContent(workspace.organization.id);
+    return true;
+  }
+
   async function createWorkflow(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspace) return;
-
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const publishValue = String(form.get("publish_at") ?? "");
+    const publishValue = formText(form, "publish_at");
     const publishDate = new Date(publishValue);
-
     if (!publishValue || Number.isNaN(publishDate.getTime()) || publishDate.getTime() <= Date.now() + 60 * 60 * 1000) {
       setError("موعد النشر يجب أن يكون بعد ساعة على الأقل من الآن.");
       return;
@@ -244,60 +255,99 @@ export function ContentWorkspace() {
     setWorking(true);
     setError(null);
     setNotice(null);
-
     const { error: workflowError } = await getSupabaseBrowserClient().functions.invoke("create-content-workflow", {
       body: {
         target_organization_id: workspace.organization.id,
-        content_title: String(form.get("title") ?? "").trim(),
-        content_goal: String(form.get("goal") ?? "").trim(),
-        content_hook: String(form.get("hook") ?? "").trim(),
-        content_cta: String(form.get("cta") ?? "").trim(),
+        content_title: formText(form, "title"),
+        content_goal: formText(form, "goal"),
+        content_hook: formText(form, "hook"),
+        content_cta: formText(form, "cta"),
+        content_script_outline: formText(form, "script_outline"),
+        content_editing_brief: formText(form, "editing_brief"),
+        content_thumbnail_brief: formText(form, "thumbnail_brief"),
+        content_brand_notes: formText(form, "brand_notes"),
+        initial_raw_url: formText(form, "initial_raw_url"),
+        initial_source_url: formText(form, "initial_source_url"),
+        initial_reference_url: formText(form, "initial_reference_url"),
         target_publish_at: publishDate.toISOString(),
-        brief_owner_id: String(form.get("brief_owner_id") ?? ""),
-        recording_owner_id: String(form.get("recording_owner_id") ?? ""),
-        editing_owner_id: String(form.get("editing_owner_id") ?? ""),
-        thumbnail_owner_id: String(form.get("thumbnail_owner_id") ?? ""),
-        caption_owner_id: String(form.get("caption_owner_id") ?? ""),
-        approval_owner_id: String(form.get("approval_owner_id") ?? ""),
-        publishing_owner_id: String(form.get("publishing_owner_id") ?? ""),
+        ...Object.fromEntries(assignmentFields.map(({ name }) => [name, formText(form, name)])),
       },
     });
-
     setWorking(false);
     if (workflowError) {
       setError(workflowError.message);
       return;
     }
-
     formElement.reset();
     setShowCreate(false);
-    setNotice("تم إنشاء أصل المحتوى و7 مهام مترابطة. أول مهمة فقط جاهزة الآن.");
+    setNotice("تم إنشاء Production Brief و7 مهام مترابطة. أول مهمة فقط جاهزة الآن.");
     await refreshContent(workspace.organization.id);
   }
 
-  if (loading) {
-    return <section className="workspace-state" aria-live="polite"><LoaderCircle className="spin" size={24} /><div><h2>جارٍ تحميل مصنع المحتوى</h2><p>نجمع الأصول والمهام والصلاحيات من المصدر الحقيقي.</p></div></section>;
+  async function updateBrief(event: FormEvent<HTMLFormElement>, contentId: string) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const updated = await runCommand({
+      action: "update_brief",
+      content_item_id: contentId,
+      content_script_outline: formText(form, "script_outline"),
+      content_editing_brief: formText(form, "editing_brief"),
+      content_thumbnail_brief: formText(form, "thumbnail_brief"),
+      content_brand_notes: formText(form, "brand_notes"),
+    }, "تم تحديث Production Brief ومزامنة تعليمات المونتاج والغلاف مع المهام.");
+    if (updated) setEditingBriefId(null);
   }
 
-  if (!session) {
-    return (
-      <section className="workspace-state workspace-onboarding">
-        <LockKeyhole size={27} />
-        <div><p className="overline">دخول موحد</p><h2>سجّل الدخول أولًا من قسم المهام</h2><p>نفس الجلسة والصلاحيات تعمل في كل أقسام النظام، ولا يوجد حساب منفصل لمصنع المحتوى.</p></div>
-        <Button href="/tasks"><Link2 size={16} /> الانتقال لتسجيل الدخول</Button>
-      </section>
-    );
+  async function addAsset(event: FormEvent<HTMLFormElement>, contentId: string) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const added = await runCommand({
+      action: "add_asset",
+      content_item_id: contentId,
+      asset_stage: formText(form, "asset_stage"),
+      asset_kind: formText(form, "asset_kind"),
+      asset_title: formText(form, "asset_title"),
+      asset_url: formText(form, "asset_url"),
+      asset_notes: formText(form, "asset_notes"),
+    }, "تمت إضافة الرابط إلى ملف المحتوى وأصبح متاحًا لصاحب المهمة.");
+    if (added) {
+      formElement.reset();
+      setAssetFormId(null);
+    }
   }
 
-  if (!workspace) {
-    return (
-      <section className="workspace-state workspace-onboarding">
-        <Route size={27} />
-        <div><p className="overline">مساحة العمل مطلوبة</p><h2>أنشئ مساحة الشركة مرة واحدة</h2><p>ابدأ من قسم المهام، ثم ارجع هنا لبناء أول خط إنتاج محتوى.</p></div>
-        <Button href="/tasks"><Link2 size={16} /> فتح قسم المهام</Button>
-      </section>
-    );
+  async function requestRevision(event: FormEvent<HTMLFormElement>, contentId: string) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const requested = await runCommand({
+      action: "request_revision",
+      content_item_id: contentId,
+      target_stage: formText(form, "target_stage"),
+      revision_instructions: formText(form, "revision_instructions"),
+    }, "تم تسجيل جولة تعديل وإسنادها تلقائيًا لصاحب المرحلة.");
+    if (requested) {
+      formElement.reset();
+      setRevisionFormId(null);
+    }
   }
+
+  if (loading) return <section className="workspace-state" aria-live="polite"><LoaderCircle className="spin" size={24} /><div><h2>جارٍ تحميل مصنع المحتوى</h2><p>نجمع الأصول والمهام والصلاحيات من المصدر الحقيقي.</p></div></section>;
+
+  if (!session) return (
+    <section className="workspace-state workspace-onboarding">
+      <LockKeyhole size={27} /><div><p className="overline">دخول موحد</p><h2>سجّل الدخول أولًا من قسم المهام</h2><p>نفس الجلسة والصلاحيات تعمل في كل أقسام النظام.</p></div>
+      <Button href="/tasks"><Link2 size={16} /> الانتقال لتسجيل الدخول</Button>
+    </section>
+  );
+
+  if (!workspace) return (
+    <section className="workspace-state workspace-onboarding">
+      <Route size={27} /><div><p className="overline">مساحة العمل مطلوبة</p><h2>أنشئ مساحة الشركة مرة واحدة</h2><p>ابدأ من قسم المهام، ثم ارجع هنا لبناء خط الإنتاج.</p></div>
+      <Button href="/tasks"><Link2 size={16} /> فتح قسم المهام</Button>
+    </section>
+  );
 
   const manager = canManageTasks(workspace.membership.role);
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
@@ -305,7 +355,7 @@ export function ContentWorkspace() {
   return (
     <section className="content-workspace">
       <div className="workspace-toolbar">
-        <div><p className="overline">{workspace.organization.name}</p><h2>خط إنتاج الريلز</h2><p>{items.length ? `${items.length} أصل محتوى حقيقي` : "لا يوجد محتوى حقيقي بعد — أنشئ أول ريلز عند الجاهزية."}</p></div>
+        <div><p className="overline">{workspace.organization.name}</p><h2>مصنع الريلز</h2><p>{items.length ? `${items.length} أصل محتوى حقيقي` : "لا يوجد محتوى حقيقي بعد — أنشئ أول ريلز عند الجاهزية."}</p></div>
         <div className="toolbar-actions">
           <button className="icon-button" type="button" aria-label="تحديث المحتوى" onClick={() => void refreshContent(workspace.organization.id)}><RefreshCw size={17} /></button>
           <Button href="/tasks" variant="secondary"><Route size={16} /> عرض كل المهام</Button>
@@ -318,90 +368,120 @@ export function ContentWorkspace() {
 
       {showCreate && manager ? (
         <form className="panel content-create-form" onSubmit={createWorkflow}>
-          <div className="section-heading"><div><p className="overline">أصل واحد بدل رسائل متفرقة</p><h2>Content brief وخط التنفيذ</h2></div><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div>
+          <div className="section-heading"><div><p className="overline">مصدر حقيقة واحد</p><h2>Production Brief وخط التنفيذ</h2></div><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div>
           <div className="form-grid">
-            <label><span>عنوان الريلز</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: لماذا يخسر المتداول بعد صفقة ناجحة؟" /></label>
+            <label><span>عنوان الريلز</span><input name="title" minLength={3} maxLength={180} required placeholder="عنوان واضح للفريق والجمهور" /></label>
             <label><span>موعد النشر النهائي</span><input name="publish_at" type="datetime-local" defaultValue={defaultPublish} required /></label>
-            <label className="full-field"><span>الهدف</span><textarea name="goal" minLength={5} maxLength={1000} rows={2} required placeholder="ما القرار أو الفهم الذي نريد من الجمهور الوصول إليه؟" /></label>
+            <label className="full-field"><span>الهدف</span><textarea name="goal" minLength={5} maxLength={1000} rows={2} required placeholder="ما الفهم أو القرار المطلوب من الجمهور؟" /></label>
             <label className="full-field"><span>الـHook</span><textarea name="hook" minLength={3} maxLength={1000} rows={2} required placeholder="أول جملة توقف المشاهد" /></label>
-            <label className="full-field"><span>الـCTA</span><textarea name="cta" minLength={2} maxLength={500} rows={2} required placeholder="مثال: سجّل في الويبنار من الرابط" /></label>
+            <label className="full-field"><span>الـCTA</span><textarea name="cta" minLength={2} maxLength={500} rows={2} required placeholder="الإجراء المطلوب من المشاهد" /></label>
+            <label className="full-field"><span>السكريبت أو تسلسل الفكرة</span><textarea name="script_outline" minLength={10} maxLength={8000} rows={5} required placeholder="الجمل أو المشاهد بالترتيب، وما الذي يجب ظهوره أو سماعه في كل جزء" /></label>
+            <label className="full-field"><span>Production Brief للمونتاج</span><textarea name="editing_brief" minLength={10} maxLength={8000} rows={6} required placeholder="حدد إيقاع القطع، متى تعلو أو تنخفض الموسيقى، لحظات الصمت، الترجمة، B-roll، المؤثرات، وما يجب تجنبه" /></label>
+            <label className="full-field"><span>Design Brief للغلاف</span><textarea name="thumbnail_brief" minLength={10} maxLength={4000} rows={4} required placeholder="النص الأساسي، ترتيب العناصر، الصورة، الإحساس البصري، المقاس، وما لا يجوز استخدامه" /></label>
+            <label className="full-field"><span>قواعد البراند لهذا الريلز — اختياري</span><textarea name="brand_notes" maxLength={4000} rows={3} placeholder="ألوان أو خطوط أو صور ممنوعة، ونبرة البراند المطلوبة" /></label>
           </div>
-
-          <div className="assignment-block">
-            <div><p className="overline">المساءلة</p><h3>مسؤول واحد لكل خطوة</h3><p>في اختبارك الشخصي سيظهر حسابك في كل الخطوات. عند إضافة الفريق يمكن توزيعها هنا.</p></div>
-            <div className="assignment-grid">
-              {assignmentFields.map(({ step, name }) => (
-                <label key={step}><span>{contentStepConfig[step].label}</span><select name={name} defaultValue={session.user.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
-              ))}
+          <div className="asset-seed-block">
+            <div><p className="overline">ملفات البداية</p><h3>أضف المتاح الآن واترك الباقي للفريق</h3><p>أي رابط Google Drive أو مصدر خارجي سيظل مرتبطًا بالريلز ومرحلة استخدامه.</p></div>
+            <div className="form-grid">
+              <label><span>رابط المادة الخام — اختياري</span><input name="initial_raw_url" type="url" dir="ltr" placeholder="https://drive.google.com/..." /></label>
+              <label><span>رابط المصدر الأساسي — اختياري</span><input name="initial_source_url" type="url" dir="ltr" placeholder="https://..." /></label>
+              <label className="full-field"><span>مرجع بصري أو فيديو مشابه — اختياري</span><input name="initial_reference_url" type="url" dir="ltr" placeholder="https://..." /></label>
             </div>
           </div>
-
-          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} إنشاء خط الإنتاج</Button><small>العملية ذرّية: إما يُنشأ الأصل و7 المهام معًا، أو لا يُحفظ شيء.</small></div>
+          <div className="assignment-block">
+            <div><p className="overline">المساءلة</p><h3>مسؤول واحد لكل خطوة</h3><p>كل خطوة تصل لصاحبها بموعد واعتمادية واضحة.</p></div>
+            <div className="assignment-grid">{assignmentFields.map(({ step, name }) => (
+              <label key={step}><span>{contentStepConfig[step].label}</span><select name={name} defaultValue={session.user.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+            ))}</div>
+          </div>
+          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} إنشاء خط الإنتاج</Button><small>إما يُنشأ الـBrief و7 المهام والروابط معًا، أو لا يُحفظ شيء.</small></div>
         </form>
       ) : null}
 
-      {items.length ? (
-        <div className="content-list">
-          {items.map((item) => {
-            const itemTasks = [...(tasksByContent.get(item.id) ?? [])].sort((a, b) => {
-              const aOrder = a.content_step ? contentStepConfig[a.content_step].order : 99;
-              const bOrder = b.content_step ? contentStepConfig[b.content_step].order : 99;
-              return aOrder - bOrder;
-            });
-            const doneCount = itemTasks.filter((task) => task.status === "done").length;
-            const activeTasks = itemTasks.filter((task) => ["ready", "in_progress", "review", "blocked"].includes(task.status));
-            const progress = itemTasks.length ? Math.round((doneCount / itemTasks.length) * 100) : 0;
+      {items.length ? <div className="content-list">{items.map((item) => {
+        const itemTasks = [...(tasksByContent.get(item.id) ?? [])].sort((a, b) => (a.content_step ? contentStepConfig[a.content_step].order : 99) - (b.content_step ? contentStepConfig[b.content_step].order : 99));
+        const itemAssets = assetsByContent.get(item.id) ?? [];
+        const itemRevisions = revisionsByContent.get(item.id) ?? [];
+        const doneCount = itemTasks.filter((task) => task.status === "done").length;
+        const activeTasks = itemTasks.filter((task) => ["ready", "in_progress", "review", "blocked"].includes(task.status));
+        const progress = itemTasks.length ? Math.round((doneCount / itemTasks.length) * 100) : 0;
+        const openRevisions = itemRevisions.filter((revision) => ["requested", "in_progress"].includes(revision.status));
+        const approvalTask = itemTasks.find((task) => task.content_step === "approval");
+        const workflowOwner = itemTasks.some((task) => task.owner_id === session.user.id);
+        const canAddAsset = manager || workflowOwner;
+        const canRequestRevision = manager || approvalTask?.owner_id === session.user.id;
+        const briefComplete = Boolean(item.script_outline.trim() && item.editing_brief.trim() && item.thumbnail_brief.trim());
 
-            return (
-              <article className="panel content-card" key={item.id}>
-                <header>
-                  <div className="content-card-title"><span className="icon-tile"><Film size={17} /></span><div><p className="overline">Reel · Instagram + Facebook</p><h3>{item.title}</h3></div></div>
-                  <StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>
-                </header>
+        return <article className="panel content-card" id={`content-${item.id}`} key={item.id}>
+          <header>
+            <div className="content-card-title"><span className="icon-tile"><Film size={17} /></span><div><p className="overline">Reel · Instagram + Facebook · v{item.version}</p><h3>{item.title}</h3></div></div>
+            <div className="content-card-badges"><StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>{openRevisions.length ? <StatusBadge tone="warning">{openRevisions.length} تعديل مفتوح</StatusBadge> : null}</div>
+          </header>
 
-                <div className="content-brief-grid">
-                  <div><small>الهدف</small><p>{item.goal}</p></div>
-                  <div><small>الـHook</small><p>{item.hook}</p></div>
-                  <div><small>الـCTA</small><p>{item.cta}</p></div>
-                </div>
+          <div className="content-brief-grid"><div><small>الهدف</small><p>{item.goal}</p></div><div><small>الـHook</small><p>{item.hook}</p></div><div><small>الـCTA</small><p>{item.cta}</p></div></div>
+          <div className="production-header"><div><FileText size={17} /><div><p className="overline">تعليمات التنفيذ</p><h4>Production Brief</h4></div></div>{manager ? <button className="text-button" type="button" onClick={() => setEditingBriefId(editingBriefId === item.id ? null : item.id)}><Pencil size={13} /> {briefComplete ? "تعديل التعليمات" : "استكمال التعليمات"}</button> : null}</div>
 
-                <div className="content-progress-row">
-                  <div><strong>{progress}%</strong><span>اكتمل {doneCount} من {itemTasks.length}</span></div>
-                  <div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div>
-                  <div><CalendarClock size={14} /><span>النشر {formatDate(item.publish_at)}</span></div>
-                </div>
+          {editingBriefId === item.id && manager ? <form className="inline-production-form" onSubmit={(event) => void updateBrief(event, item.id)}>
+            <label><span>السكريبت أو التسلسل</span><textarea name="script_outline" minLength={10} maxLength={8000} rows={5} required defaultValue={item.script_outline} /></label>
+            <label><span>تعليمات المونتاج</span><textarea name="editing_brief" minLength={10} maxLength={8000} rows={6} required defaultValue={item.editing_brief} placeholder="القطع، الموسيقى، الصمت، الترجمة، B-roll، المؤثرات، والممنوعات" /></label>
+            <label><span>تعليمات الغلاف</span><textarea name="thumbnail_brief" minLength={10} maxLength={4000} rows={4} required defaultValue={item.thumbnail_brief} placeholder="النص، الصورة، الترتيب البصري، المقاس، والممنوعات" /></label>
+            <label><span>ملاحظات البراند — اختياري</span><textarea name="brand_notes" maxLength={4000} rows={3} defaultValue={item.brand_notes ?? ""} /></label>
+            <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={15} /> : <CheckCircle2 size={15} />} حفظ ومزامنة المهام</Button><button className="text-button" type="button" onClick={() => setEditingBriefId(null)}>إلغاء</button></div>
+          </form> : <div className={`production-brief-grid ${briefComplete ? "" : "incomplete"}`}>
+            <div><small>السكريبت / التسلسل</small><p>{item.script_outline || "لم تُضف تعليمات السكربت بعد."}</p></div>
+            <div><small>تعليمات المونتاج</small><p>{item.editing_brief || "لم تُضف تعليمات المونتاج بعد."}</p></div>
+            <div><small>تعليمات الغلاف</small><p>{item.thumbnail_brief || "لم تُضف تعليمات الغلاف بعد."}</p></div>
+            {item.brand_notes ? <div><small>قواعد البراند</small><p>{item.brand_notes}</p></div> : null}
+          </div>}
 
-                <ol className="content-steps" aria-label="خطوات إنتاج المحتوى">
-                  {contentSteps.map((step) => {
-                    const task = itemTasks.find((candidate) => candidate.content_step === step);
-                    const isActive = activeTasks.some((activeTask) => activeTask.id === task?.id);
-                    return (
-                      <li className={`${task?.status === "done" ? "done" : ""} ${isActive ? "active" : ""}`} key={step}>
-                        <span>{task?.status === "done" ? <CheckCircle2 size={14} /> : contentStepConfig[step].order}</span>
-                        <strong>{contentStepConfig[step].label}</strong>
-                        <small>{task ? peopleById.get(task.owner_id)?.name ?? "عضو فريق" : "—"}</small>
-                      </li>
-                    );
-                  })}
-                </ol>
+          <div className="production-tools-grid">
+            <section className="production-tool-panel">
+              <div className="production-tool-heading"><div><Paperclip size={16} /><div><p className="overline">ملفات ومراجع</p><h4>مركز الأصول</h4></div></div>{canAddAsset ? <button className="text-button" type="button" onClick={() => setAssetFormId(assetFormId === item.id ? null : item.id)}><Plus size={13} /> إضافة رابط</button> : null}</div>
+              {itemAssets.length ? <ul className="asset-list">{itemAssets.map((asset) => <li key={asset.id}>
+                <div><span className="asset-kind">{contentAssetKindConfig[asset.kind].label}</span><a href={asset.url} target="_blank" rel="noreferrer">{asset.title} <ExternalLink size={12} /></a><small>{asset.stage ? contentStepConfig[asset.stage].label : "كل المراحل"} · أضافه {peopleById.get(asset.created_by)?.name ?? "عضو فريق"}</small>{asset.notes ? <p>{asset.notes}</p> : null}</div>
+                {manager || asset.created_by === session.user.id ? <button className="asset-remove" type="button" disabled={working} aria-label={`إزالة رابط ${asset.title}`} onClick={() => void runCommand({ action: "remove_asset", asset_id: asset.id }, "تمت إزالة الرابط من ملف المحتوى فقط؛ الملف الأصلي لم يُحذف.")}><Trash2 size={13} /> إزالة الرابط</button> : null}
+              </li>)}</ul> : <p className="tool-empty">لا توجد روابط بعد. أضف المادة الخام والمصادر ونسخ المراجعة هنا بدل الرسائل المتفرقة.</p>}
+              {assetFormId === item.id && canAddAsset ? <form className="compact-command-form" onSubmit={(event) => void addAsset(event, item.id)}>
+                <div className="compact-form-grid"><label><span>النوع</span><select name="asset_kind" defaultValue="raw_video">{assetKinds.map((kind) => <option value={kind} key={kind}>{contentAssetKindConfig[kind].label}</option>)}</select></label><label><span>مرحلة الاستخدام</span><select name="asset_stage" defaultValue="editing">{contentSteps.map((step) => <option value={step} key={step}>{contentStepConfig[step].label}</option>)}</select></label></div>
+                <label><span>اسم واضح للرابط</span><input name="asset_title" minLength={2} maxLength={160} required placeholder="مثال: المادة الخام — Take 2" /></label>
+                <label><span>الرابط</span><input name="asset_url" type="url" dir="ltr" required placeholder="https://drive.google.com/..." /></label>
+                <label><span>ملاحظة الاستخدام — اختياري</span><textarea name="asset_notes" maxLength={2000} rows={2} placeholder="من الدقيقة 00:18 أو استخدم الصور 2 و4 فقط" /></label>
+                <div className="form-actions"><Button type="submit" disabled={working}>حفظ الرابط</Button><button className="text-button" type="button" onClick={() => setAssetFormId(null)}>إلغاء</button></div>
+              </form> : null}
+            </section>
 
-                <footer>
-                  <div>{activeTasks.length ? <><CircleUserRound size={15} /><span>النشط الآن: <strong>{activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ")}</strong></span></> : <><CheckCircle2 size={15} /><span>لا توجد خطوة نشطة الآن.</span></>}</div>
-                  <a className="text-link" href="/tasks">فتح المهمة <Link2 size={13} /></a>
-                </footer>
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <section className="panel empty-state">
-          <span className="empty-visual"><Film size={20} /></span>
-          <div><h2>مصنع المحتوى جاهز بدون بيانات وهمية</h2><p>عندما تنشئ أول ريلز سيظهر هنا ومعه كل المهام والمواعيد والاعتماديات.</p></div>
-          <span className="empty-proof"><CheckCircle2 size={15} /> متصل ببورد المهام</span>
-        </section>
-      )}
+            <section className="production-tool-panel">
+              <div className="production-tool-heading"><div><MessageSquareText size={16} /><div><p className="overline">Feedback Loop</p><h4>جولات التعديل</h4></div></div>{canRequestRevision ? <button className="text-button" type="button" onClick={() => setRevisionFormId(revisionFormId === item.id ? null : item.id)}><Plus size={13} /> طلب تعديل</button> : null}</div>
+              {itemRevisions.length ? <ol className="revision-list">{itemRevisions.map((revision) => {
+                const canWorkRevision = manager || revision.assigned_to === session.user.id;
+                const canCancelRevision = manager || revision.requested_by === session.user.id;
+                return <li key={revision.id}>
+                  <div className="revision-top"><strong>جولة {revision.round} · {contentStepConfig[revision.stage].label}</strong><StatusBadge tone={contentRevisionStatusConfig[revision.status].tone}>{contentRevisionStatusConfig[revision.status].label}</StatusBadge></div>
+                  <p>{revision.instructions}</p><small>إلى {peopleById.get(revision.assigned_to)?.name ?? "صاحب المرحلة"} · {formatDate(revision.requested_at)}</small>
+                  {revision.status === "requested" && canWorkRevision ? <Button type="button" variant="secondary" disabled={working} onClick={() => void runCommand({ action: "start_revision", revision_id: revision.id }, "بدأ تنفيذ التعديل وأعيد فتح مهمة المرحلة.")}>بدء التنفيذ</Button> : null}
+                  {revision.status === "in_progress" && canWorkRevision ? <Button type="button" variant="secondary" disabled={working} onClick={() => void runCommand({ action: "resolve_revision", revision_id: revision.id }, "تم إرسال التعديل للمراجعة.")}>تم التنفيذ وإرسال للمراجعة</Button> : null}
+                  {["requested", "in_progress"].includes(revision.status) && canCancelRevision ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void runCommand({ action: "cancel_revision", revision_id: revision.id }, "تم إلغاء طلب التعديل مع الاحتفاظ بسجله.")}>إلغاء الطلب</button> : null}
+                </li>;
+              })}</ol> : <p className="tool-empty">لا توجد تعديلات مسجلة. عند طلب تعديل سيُسند تلقائيًا لصاحب المرحلة برقم جولة واضح.</p>}
+              {revisionFormId === item.id && canRequestRevision ? <form className="compact-command-form" onSubmit={(event) => void requestRevision(event, item.id)}>
+                <label><span>المرحلة المطلوب تعديلها</span><select name="target_stage" defaultValue="editing">{revisionSteps.map((step) => <option value={step} key={step}>{contentStepConfig[step].label}</option>)}</select></label>
+                <label><span>ما المطلوب تغييره بالضبط؟</span><textarea name="revision_instructions" minLength={5} maxLength={5000} rows={4} required placeholder="اكتب التوقيت أو المشهد، المشكلة، والنتيجة المطلوبة. مثال: 00:18 اخفض الموسيقى واترك نصف ثانية صمت قبل الجملة التالية." /></label>
+                <div className="form-actions"><Button type="submit" disabled={working}>إسناد التعديل</Button><button className="text-button" type="button" onClick={() => setRevisionFormId(null)}>إلغاء</button></div>
+              </form> : null}
+            </section>
+          </div>
 
-      <aside className="automation-note"><LockKeyhole size={17} /><div><strong>النشر الخارجي لم يُفعّل بعد</strong><p>مهمة النشر الآن تُغلق يدويًا بعد الجدولة الفعلية. ربط Meta وواجهات المنصات سيكون تكاملًا منفصلًا بصلاحيات محدودة، ولن ندّعي أن المحتوى نُشر قبل وصول تأكيد حقيقي.</p></div></aside>
+          <div className="content-progress-row"><div><strong>{progress}%</strong><span>اكتمل {doneCount} من {itemTasks.length}</span></div><div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div><div><CalendarClock size={14} /><span>النشر {formatDate(item.publish_at)}</span></div></div>
+          <ol className="content-steps" aria-label="خطوات إنتاج المحتوى">{contentSteps.map((step) => {
+            const task = itemTasks.find((candidate) => candidate.content_step === step);
+            const isActive = activeTasks.some((activeTask) => activeTask.id === task?.id);
+            return <li className={`${task?.status === "done" ? "done" : ""} ${isActive ? "active" : ""}`} key={step}><span>{task?.status === "done" ? <CheckCircle2 size={14} /> : contentStepConfig[step].order}</span><strong>{contentStepConfig[step].label}</strong><small>{task ? peopleById.get(task.owner_id)?.name ?? "عضو فريق" : "—"}</small></li>;
+          })}</ol>
+          <footer><div>{activeTasks.length ? <><CircleUserRound size={15} /><span>النشط الآن: <strong>{activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ")}</strong></span></> : <><CheckCircle2 size={15} /><span>لا توجد خطوة نشطة الآن.</span></>}</div><a className="text-link" href="/tasks">فتح بورد التنفيذ <Link2 size={13} /></a></footer>
+        </article>;
+      })}</div> : <section className="panel empty-state"><span className="empty-visual"><Film size={20} /></span><div><h2>مصنع المحتوى جاهز بدون بيانات وهمية</h2><p>عندما تنشئ أول ريلز سيظهر هنا ومعه الـBrief والملفات والمهام والتعديلات.</p></div><span className="empty-proof"><CheckCircle2 size={15} /> متصل ببورد المهام</span></section>}
+
+      <aside className="automation-note"><LockKeyhole size={17} /><div><strong>النشر الخارجي لم يُفعّل بعد</strong><p>مهمة النشر تُغلق يدويًا بعد الجدولة الفعلية. ربط Meta سيكون تكاملًا منفصلًا بصلاحيات محدودة، ولن نعتبر المحتوى منشورًا قبل تأكيد حقيقي من المنصة.</p></div></aside>
     </section>
   );
 }
