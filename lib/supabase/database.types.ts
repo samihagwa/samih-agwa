@@ -133,6 +133,8 @@ export type Database = {
           goal: string
           hook: string
           id: string
+          intake_request: string | null
+          intake_source_url: string | null
           organization_id: string
           platforms: string[]
           publish_at: string
@@ -154,6 +156,8 @@ export type Database = {
           goal: string
           hook: string
           id?: string
+          intake_request?: string | null
+          intake_source_url?: string | null
           organization_id: string
           platforms?: string[]
           publish_at: string
@@ -175,6 +179,8 @@ export type Database = {
           goal?: string
           hook?: string
           id?: string
+          intake_request?: string | null
+          intake_source_url?: string | null
           organization_id?: string
           platforms?: string[]
           publish_at?: string
@@ -293,6 +299,83 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_timeline_cues: {
+        Row: {
+          action: string
+          completed_at: string | null
+          completed_by: string | null
+          content_item_id: string
+          created_at: string
+          created_by: string
+          end_seconds: number | null
+          id: string
+          kind: Database["public"]["Enums"]["content_cue_kind"]
+          organization_id: string
+          sort_order: number
+          source_url: string | null
+          start_seconds: number
+        }
+        Insert: {
+          action: string
+          completed_at?: string | null
+          completed_by?: string | null
+          content_item_id: string
+          created_at?: string
+          created_by: string
+          end_seconds?: number | null
+          id?: string
+          kind: Database["public"]["Enums"]["content_cue_kind"]
+          organization_id: string
+          sort_order: number
+          source_url?: string | null
+          start_seconds: number
+        }
+        Update: {
+          action?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          content_item_id?: string
+          created_at?: string
+          created_by?: string
+          end_seconds?: number | null
+          id?: string
+          kind?: Database["public"]["Enums"]["content_cue_kind"]
+          organization_id?: string
+          sort_order?: number
+          source_url?: string | null
+          start_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_timeline_cues_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_timeline_cues_content_org_fkey"
+            columns: ["content_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_timeline_cues_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_timeline_cues_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -759,6 +842,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      change_timeline_cue: {
+        Args: {
+          target_completed: boolean
+          target_cue_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
       create_launch_workflow: {
         Args: {
           delivery_owner_id: string
@@ -783,6 +874,33 @@ export type Database = {
           target_organization_id: string
           target_user_id: string
           tracking_owner_id: string
+        }
+        Returns: string
+      }
+      create_reel_from_intake: {
+        Args: {
+          approval_owner_id: string
+          brief_owner_id: string
+          caption_owner_id: string
+          content_brand_notes: string
+          content_cta: string
+          content_editing_brief: string
+          content_goal: string
+          content_hook: string
+          content_script_outline: string
+          content_thumbnail_brief: string
+          content_title: string
+          editing_owner_id: string
+          intake_request_text: string
+          parsed_assets: Json
+          parsed_timeline: Json
+          publishing_owner_id: string
+          recording_owner_id: string
+          target_organization_id: string
+          target_publish_at: string
+          target_user_id: string
+          telegram_source_url: string
+          thumbnail_owner_id: string
         }
         Returns: string
       }
@@ -895,6 +1013,7 @@ export type Database = {
         | "thumbnail"
         | "caption"
         | "final_export"
+      content_cue_kind: "cut" | "visual" | "text" | "audio" | "review" | "note"
       content_format:
         | "reel"
         | "carousel"
@@ -1091,6 +1210,7 @@ export const Constants = {
         "caption",
         "final_export",
       ],
+      content_cue_kind: ["cut", "visual", "text", "audio", "review", "note"],
       content_format: [
         "reel",
         "carousel",

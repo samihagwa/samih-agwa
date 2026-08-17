@@ -18,27 +18,32 @@ import {
   RefreshCw,
   Route,
   Sparkles,
+  TimerReset,
   Trash2,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   contentAssetKindConfig,
+  contentAssignmentFields,
+  contentCueKindConfig,
   contentRevisionStatusConfig,
   contentStatusConfig,
   contentStepConfig,
   contentSteps,
   type ContentAssetKind,
-  type ContentStep,
 } from "../../lib/content";
+import { formatTimelineSeconds } from "../../lib/content-intake";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { canManageTasks } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
+import { QuickIntakeForm, type QuickIntakePayload } from "./QuickIntakeForm";
 
 type ContentItem = Tables<"content_items">;
 type ContentAsset = Tables<"content_assets">;
 type ContentRevision = Tables<"content_revision_requests">;
+type ContentTimelineCue = Tables<"content_timeline_cues">;
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
@@ -46,17 +51,7 @@ type Organization = Tables<"organizations">;
 type TeamPerson = { id: string; name: string; role: Membership["role"] };
 type Workspace = { organization: Organization; membership: Membership; people: TeamPerson[] };
 
-const assignmentFields: Array<{ step: ContentStep; name: string }> = [
-  { step: "brief", name: "brief_owner_id" },
-  { step: "recording", name: "recording_owner_id" },
-  { step: "editing", name: "editing_owner_id" },
-  { step: "thumbnail", name: "thumbnail_owner_id" },
-  { step: "caption", name: "caption_owner_id" },
-  { step: "approval", name: "approval_owner_id" },
-  { step: "publishing", name: "publishing_owner_id" },
-];
-
-const revisionSteps: ContentStep[] = ["recording", "editing", "thumbnail", "caption"];
+const revisionSteps = ["recording", "editing", "thumbnail", "caption"] as const;
 const assetKinds = Object.keys(contentAssetKindConfig) as ContentAssetKind[];
 
 function getErrorMessage(error: unknown) {
@@ -86,9 +81,11 @@ export function ContentWorkspace() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [assets, setAssets] = useState<ContentAsset[]>([]);
   const [revisions, setRevisions] = useState<ContentRevision[]>([]);
+  const [timelineCues, setTimelineCues] = useState<ContentTimelineCue[]>([]);
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [showQuickIntake, setShowQuickIntake] = useState(false);
   const [editingBriefId, setEditingBriefId] = useState<string | null>(null);
   const [assetFormId, setAssetFormId] = useState<string | null>(null);
   const [revisionFormId, setRevisionFormId] = useState<string | null>(null);
@@ -101,6 +98,7 @@ export function ContentWorkspace() {
     setTasks([]);
     setAssets([]);
     setRevisions([]);
+    setTimelineCues([]);
     setEditingBriefId(null);
     setAssetFormId(null);
     setRevisionFormId(null);
@@ -108,21 +106,24 @@ export function ContentWorkspace() {
 
   const refreshContent = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
-    const [contentResult, taskResult, assetResult, revisionResult] = await Promise.all([
+    const [contentResult, taskResult, assetResult, revisionResult, timelineResult] = await Promise.all([
       supabase.from("content_items").select("*").eq("organization_id", organizationId).order("publish_at", { ascending: true }),
       supabase.from("tasks").select("*").eq("organization_id", organizationId).not("content_item_id", "is", null).order("due_at", { ascending: true }),
       supabase.from("content_assets").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
       supabase.from("content_revision_requests").select("*").eq("organization_id", organizationId).order("round", { ascending: false }),
+      supabase.from("content_timeline_cues").select("*").eq("organization_id", organizationId).order("sort_order", { ascending: true }),
     ]);
 
     if (contentResult.error) throw contentResult.error;
     if (taskResult.error) throw taskResult.error;
     if (assetResult.error) throw assetResult.error;
     if (revisionResult.error) throw revisionResult.error;
+    if (timelineResult.error) throw timelineResult.error;
     setItems(contentResult.data ?? []);
     setTasks(taskResult.data ?? []);
     setAssets(assetResult.data ?? []);
     setRevisions(revisionResult.data ?? []);
+    setTimelineCues(timelineResult.data ?? []);
   }, []);
 
   const loadWorkspace = useCallback(async (activeSession: Session) => {
@@ -194,7 +195,7 @@ export function ContentWorkspace() {
     const supabase = getSupabaseBrowserClient();
     const refresh = () => void refreshContent(workspace.organization.id);
     let channel = supabase.channel(`content:${workspace.organization.id}`);
-    for (const table of ["content_items", "tasks", "content_assets", "content_revision_requests"] as const) {
+    for (const table of ["content_items", "tasks", "content_assets", "content_revision_requests", "content_timeline_cues"] as const) {
       channel = channel.on("postgres_changes", {
         event: "*", schema: "public", table, filter: `organization_id=eq.${workspace.organization.id}`,
       }, refresh);
@@ -223,6 +224,12 @@ export function ContentWorkspace() {
     for (const revision of revisions) grouped.set(revision.content_item_id, [...(grouped.get(revision.content_item_id) ?? []), revision]);
     return grouped;
   }, [revisions]);
+
+  const timelineByContent = useMemo(() => {
+    const grouped = new Map<string, ContentTimelineCue[]>();
+    for (const cue of timelineCues) grouped.set(cue.content_item_id, [...(grouped.get(cue.content_item_id) ?? []), cue]);
+    return grouped;
+  }, [timelineCues]);
 
   async function runCommand(body: Record<string, unknown>, successMessage: string) {
     if (!workspace) return false;
@@ -270,7 +277,7 @@ export function ContentWorkspace() {
         initial_source_url: formText(form, "initial_source_url"),
         initial_reference_url: formText(form, "initial_reference_url"),
         target_publish_at: publishDate.toISOString(),
-        ...Object.fromEntries(assignmentFields.map(({ name }) => [name, formText(form, name)])),
+        ...Object.fromEntries(contentAssignmentFields.map(({ name }) => [name, formText(form, name)])),
       },
     });
     setWorking(false);
@@ -282,6 +289,25 @@ export function ContentWorkspace() {
     setShowCreate(false);
     setNotice("تم إنشاء Production Brief و7 مهام مترابطة. أول مهمة فقط جاهزة الآن.");
     await refreshContent(workspace.organization.id);
+  }
+
+  async function createQuickWorkflow(payload: QuickIntakePayload) {
+    if (!workspace) return false;
+    setWorking(true);
+    setError(null);
+    setNotice(null);
+    const { error: workflowError } = await getSupabaseBrowserClient().functions.invoke("create-content-workflow", {
+      body: { target_organization_id: workspace.organization.id, ...payload },
+    });
+    setWorking(false);
+    if (workflowError) {
+      setError(workflowError.message);
+      return false;
+    }
+    setShowQuickIntake(false);
+    setNotice("تم تحويل طلب Telegram إلى Brief وTimeline و7 مهام مترابطة بعد مراجعتك.");
+    await refreshContent(workspace.organization.id);
+    return true;
   }
 
   async function updateBrief(event: FormEvent<HTMLFormElement>, contentId: string) {
@@ -359,12 +385,22 @@ export function ContentWorkspace() {
         <div className="toolbar-actions">
           <button className="icon-button" type="button" aria-label="تحديث المحتوى" onClick={() => void refreshContent(workspace.organization.id)}><RefreshCw size={17} /></button>
           <Button href="/tasks" variant="secondary"><Route size={16} /> عرض كل المهام</Button>
-          {manager ? <Button type="button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> ريلز جديد</Button> : null}
+          {manager ? <Button type="button" onClick={() => { setShowQuickIntake((value) => !value); setShowCreate(false); }}><MessageSquareText size={16} /> طلب كامل من Telegram</Button> : null}
+          {manager ? <Button type="button" variant="secondary" onClick={() => { setShowCreate((value) => !value); setShowQuickIntake(false); }}><Plus size={16} /> إدخال يدوي</Button> : null}
         </div>
       </div>
 
       {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+
+      {showQuickIntake && manager ? <QuickIntakeForm
+        currentUserId={session.user.id}
+        defaultPublish={defaultPublish}
+        people={workspace.people}
+        working={working}
+        onCancel={() => setShowQuickIntake(false)}
+        onCreate={createQuickWorkflow}
+      /> : null}
 
       {showCreate && manager ? (
         <form className="panel content-create-form" onSubmit={createWorkflow}>
@@ -390,7 +426,7 @@ export function ContentWorkspace() {
           </div>
           <div className="assignment-block">
             <div><p className="overline">المساءلة</p><h3>مسؤول واحد لكل خطوة</h3><p>كل خطوة تصل لصاحبها بموعد واعتمادية واضحة.</p></div>
-            <div className="assignment-grid">{assignmentFields.map(({ step, name }) => (
+            <div className="assignment-grid">{contentAssignmentFields.map(({ step, name }) => (
               <label key={step}><span>{contentStepConfig[step].label}</span><select name={name} defaultValue={session.user.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
             ))}</div>
           </div>
@@ -402,20 +438,25 @@ export function ContentWorkspace() {
         const itemTasks = [...(tasksByContent.get(item.id) ?? [])].sort((a, b) => (a.content_step ? contentStepConfig[a.content_step].order : 99) - (b.content_step ? contentStepConfig[b.content_step].order : 99));
         const itemAssets = assetsByContent.get(item.id) ?? [];
         const itemRevisions = revisionsByContent.get(item.id) ?? [];
+        const itemTimeline = [...(timelineByContent.get(item.id) ?? [])].sort((a, b) => a.sort_order - b.sort_order);
         const doneCount = itemTasks.filter((task) => task.status === "done").length;
         const activeTasks = itemTasks.filter((task) => ["ready", "in_progress", "review", "blocked"].includes(task.status));
         const progress = itemTasks.length ? Math.round((doneCount / itemTasks.length) * 100) : 0;
         const openRevisions = itemRevisions.filter((revision) => ["requested", "in_progress"].includes(revision.status));
         const approvalTask = itemTasks.find((task) => task.content_step === "approval");
+        const editingTask = itemTasks.find((task) => task.content_step === "editing");
         const workflowOwner = itemTasks.some((task) => task.owner_id === session.user.id);
         const canAddAsset = manager || workflowOwner;
         const canRequestRevision = manager || approvalTask?.owner_id === session.user.id;
+        const canChangeTimeline = manager || editingTask?.owner_id === session.user.id;
+        const completedCueCount = itemTimeline.filter((cue) => cue.completed_at).length;
+        const openCueCount = itemTimeline.length - completedCueCount;
         const briefComplete = Boolean(item.script_outline.trim() && item.editing_brief.trim() && item.thumbnail_brief.trim());
 
         return <article className="panel content-card" id={`content-${item.id}`} key={item.id}>
           <header>
             <div className="content-card-title"><span className="icon-tile"><Film size={17} /></span><div><p className="overline">Reel · Instagram + Facebook · v{item.version}</p><h3>{item.title}</h3></div></div>
-            <div className="content-card-badges"><StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>{openRevisions.length ? <StatusBadge tone="warning">{openRevisions.length} تعديل مفتوح</StatusBadge> : null}</div>
+            <div className="content-card-badges"><StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>{openRevisions.length ? <StatusBadge tone="warning">{openRevisions.length} تعديل مفتوح</StatusBadge> : null}{openCueCount ? <StatusBadge tone="info">{openCueCount} تعليمة تنفيذ</StatusBadge> : null}</div>
           </header>
 
           <div className="content-brief-grid"><div><small>الهدف</small><p>{item.goal}</p></div><div><small>الـHook</small><p>{item.hook}</p></div><div><small>الـCTA</small><p>{item.cta}</p></div></div>
@@ -434,7 +475,21 @@ export function ContentWorkspace() {
             {item.brand_notes ? <div><small>قواعد البراند</small><p>{item.brand_notes}</p></div> : null}
           </div>}
 
+          {item.intake_request && item.intake_source_url ? <details className="telegram-intake-source">
+            <summary><MessageSquareText size={15} /> الطلب الأصلي من Telegram</summary>
+            <div><a href={item.intake_source_url} target="_blank" rel="noreferrer">فتح رسالة المادة الخام <ExternalLink size={12} /></a><pre>{item.intake_request}</pre></div>
+          </details> : null}
+
           <div className="production-tools-grid">
+            {itemTimeline.length ? <section className="production-tool-panel content-timeline-panel">
+              <div className="production-tool-heading"><div><TimerReset size={16} /><div><p className="overline">Execution Timeline</p><h4>تعليمات المونتاج بالثانية</h4></div></div><span className="timeline-progress">{completedCueCount}/{itemTimeline.length} تم</span></div>
+              <ol className="content-timeline-list">{itemTimeline.map((cue) => <li className={cue.completed_at ? "completed" : ""} key={cue.id}>
+                <div className="timeline-cue-time"><TimerReset size={13} /><strong>{formatTimelineSeconds(cue.start_seconds)}{cue.end_seconds === null ? "" : ` — ${formatTimelineSeconds(cue.end_seconds)}`}</strong></div>
+                <div className="timeline-cue-body"><span>{contentCueKindConfig[cue.kind].label}</span><p>{cue.action}</p>{cue.source_url ? <a href={cue.source_url} target="_blank" rel="noreferrer">فتح المصدر <ExternalLink size={11} /></a> : null}</div>
+                {canChangeTimeline ? <button className="timeline-toggle" type="button" disabled={working} onClick={() => void runCommand({ action: "change_timeline_cue", cue_id: cue.id, completed: !cue.completed_at }, cue.completed_at ? "أُعيد فتح تعليمة الـTimeline." : "تم تعليم سطر الـTimeline كمنفذ.")}>{cue.completed_at ? "إعادة فتح" : "تم التنفيذ"}</button> : null}
+              </li>)}</ol>
+              {openCueCount ? <p className="timeline-guard-note">لا يمكن إغلاق الاعتماد النهائي قبل تنفيذ كل تعليمات الـTimeline.</p> : <p className="timeline-guard-note complete"><CheckCircle2 size={13} /> كل تعليمات المونتاج منفذة.</p>}
+            </section> : null}
             <section className="production-tool-panel">
               <div className="production-tool-heading"><div><Paperclip size={16} /><div><p className="overline">ملفات ومراجع</p><h4>مركز الأصول</h4></div></div>{canAddAsset ? <button className="text-button" type="button" onClick={() => setAssetFormId(assetFormId === item.id ? null : item.id)}><Plus size={13} /> إضافة رابط</button> : null}</div>
               {itemAssets.length ? <ul className="asset-list">{itemAssets.map((asset) => <li key={asset.id}>

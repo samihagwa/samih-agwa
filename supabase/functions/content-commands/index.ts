@@ -113,6 +113,19 @@ async function changeRevision(body: Record<string, unknown>, context: Context, a
   return commandError(error, "تعذّر تحديث حالة التعديل.") ?? jsonResponse({ changed: data });
 }
 
+async function changeTimelineCue(body: Record<string, unknown>, context: Context) {
+  const cueId = text(body.cue_id);
+  if (!cueId || typeof body.completed !== "boolean") {
+    return jsonResponse({ message: "تعليمة الـTimeline أو حالتها غير صالحة." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("change_timeline_cue", {
+    target_user_id: context!.userClaims!.id,
+    target_cue_id: cueId,
+    target_completed: body.completed,
+  });
+  return commandError(error, "تعذّر تحديث تعليمة الـTimeline.") ?? jsonResponse({ changed: data });
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -135,6 +148,7 @@ export default {
     if (body.action === "start_revision") return changeRevision(body, context, "start");
     if (body.action === "resolve_revision") return changeRevision(body, context, "resolve");
     if (body.action === "cancel_revision") return changeRevision(body, context, "cancel");
+    if (body.action === "change_timeline_cue") return changeTimelineCue(body, context);
     return jsonResponse({ message: "أمر المحتوى غير معروف." }, 400);
   },
 };

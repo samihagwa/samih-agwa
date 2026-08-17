@@ -31,7 +31,7 @@ This starter does not use `wrangler.jsonc`.
 
 ## Important status
 
-The identity, task-management, reel-production, and campaign-launch foundations are live. The team has not been onboarded, no live tasks, content, or launches have been entered, and no production customer, sales, or social data is connected.
+The identity, task-management, reel-production, and campaign-launch foundations are live. Personal testing has started, but the team has not been onboarded and no production customer, sales, social, or external publishing data is connected.
 
 ## First owner setup
 
@@ -45,10 +45,12 @@ The bootstrap endpoint is authenticated and can create only the first organizati
 ## Personal content test
 
 1. Sign in and create the owner workspace from `/tasks`.
-2. Open `/content` and choose **New reel**.
-3. Complete the brief and publish date. The owner account is assigned to all seven steps by default.
+2. Open `/content`. Choose **Full request from Telegram** to paste an existing production request and review the extracted brief, timeline, links, and owners; or choose **Manual entry** to use the original form unchanged.
+3. Complete the review and publish date. Nothing from a pasted request is saved until **Approve and create production workflow** is selected. The owner account is assigned to all seven steps by default.
 4. Move linked tasks through the allowed states on `/tasks`. Completing a dependency unlocks the next eligible task automatically.
 5. The final publishing task is a manual confirmation until a verified Meta/platform integration is added.
+
+Telegram remains the raw-material inbox for now: paste the direct message/file link with the request. Direct uploads are deliberately deferred to the private Storage phase documented in `docs/roadmap.md`.
 
 ## Personal launch test
 

@@ -45,9 +45,44 @@ test("Supabase client consumes generated database types", async () => {
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(client, /createClient<Database>/);
-  for (const table of ["audit_events", "content_assets", "content_items", "content_revision_requests", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
+  for (const table of ["audit_events", "content_assets", "content_items", "content_revision_requests", "content_timeline_cues", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
     assert.match(types, new RegExp(`${table}:`));
   }
+});
+
+test("Telegram intake is an optional reviewed path with a secured execution timeline", async () => {
+  const [migration, parser, quickForm, workspace, createCommand, contentCommands, roadmap] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260817025228_telegram_smart_content_intake.sql", import.meta.url), "utf8"),
+    readFile(new URL("../lib/content-intake.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/QuickIntakeForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../docs/roadmap.md", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /create table public\.content_timeline_cues/);
+  assert.match(migration, /alter table public\.content_timeline_cues enable row level security/);
+  assert.match(migration, /grant select on table public\.content_timeline_cues to authenticated/);
+  assert.doesNotMatch(migration, /grant (insert|update|delete) on table public\.content_timeline_cues to authenticated/i);
+  for (const rpc of ["create_reel_from_intake", "change_timeline_cue"]) {
+    assert.match(migration, new RegExp(`function public\\.${rpc}`));
+    assert.match(migration, new RegExp(`grant execute on function public\\.${rpc}`));
+  }
+  assert.match(migration, /to service_role/);
+  assert.match(migration, /from public, anon, authenticated/);
+  assert.match(migration, /thumbnail_task_id, brief_task_id/);
+  assert.match(migration, /cue\.completed_at is null/);
+  assert.match(parser, /parseProductionRequest/);
+  assert.match(quickForm, /تحليل وترتيب الطلب/);
+  assert.match(quickForm, /لن يتوزع أي شيء قبل مراجعتك/);
+  assert.match(workspace, /طلب كامل من Telegram/);
+  assert.match(workspace, /إدخال يدوي/);
+  assert.match(workspace, /content_timeline_cues/);
+  assert.match(createCommand, /create_reel_from_intake/);
+  assert.match(contentCommands, /change_timeline_cue/);
+  assert.match(roadmap, /private Supabase Storage buckets/);
+  assert.match(roadmap, /does not download, copy, or re-upload Telegram files/);
 });
 
 test("task workflow is shared between UI types and database enforcement", async () => {

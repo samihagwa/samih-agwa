@@ -38,6 +38,40 @@ function isOptionalHttpUrl(value: unknown) {
   }
 }
 
+function isTelegramUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && ["t.me", "telegram.me"].includes(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function isTimelineCue(value: unknown) {
+  if (typeof value !== "object" || !value) return false;
+  const cue = value as Record<string, unknown>;
+  return Number.isInteger(cue.start_seconds)
+    && Number(cue.start_seconds) >= 0
+    && Number(cue.start_seconds) < 86400
+    && (cue.end_seconds === null || (Number.isInteger(cue.end_seconds) && Number(cue.end_seconds) >= Number(cue.start_seconds) && Number(cue.end_seconds) < 86400))
+    && ["cut", "visual", "text", "audio", "review", "note"].includes(String(cue.kind))
+    && isNonEmptyString(cue.action)
+    && String(cue.action).trim().length <= 2000
+    && isOptionalHttpUrl(cue.source_url);
+}
+
+function isExtractedAsset(value: unknown) {
+  if (typeof value !== "object" || !value) return false;
+  const asset = value as Record<string, unknown>;
+  return ["brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing"].includes(String(asset.stage))
+    && ["raw_video", "source", "b_roll", "image", "audio", "reference", "draft_video", "thumbnail", "caption", "final_export"].includes(String(asset.kind))
+    && isNonEmptyString(asset.title)
+    && String(asset.title).trim().length <= 160
+    && isOptionalHttpUrl(asset.url)
+    && isNonEmptyString(asset.url)
+    && (asset.notes === undefined || String(asset.notes).length <= 2000);
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") {
@@ -85,8 +119,26 @@ export default {
       return jsonResponse({ message: "روابط الملفات والمصادر يجب أن تبدأ بـ http أو https." }, 400);
     }
 
+    const intakeRequest = typeof body.intake_request_text === "string" ? body.intake_request_text.trim() : "";
+    const telegramSource = typeof body.telegram_source_url === "string" ? body.telegram_source_url.trim() : "";
+    const timeline = Array.isArray(body.parsed_timeline) ? body.parsed_timeline : [];
+    const extractedAssets = Array.isArray(body.parsed_assets) ? body.parsed_assets : [];
+    const isTelegramIntake = intakeRequest.length > 0 || telegramSource.length > 0;
+
+    if (isTelegramIntake) {
+      if (intakeRequest.length < 20 || intakeRequest.length > 30000 || !isTelegramUrl(telegramSource)) {
+        return jsonResponse({ message: "ألصق طلب Telegram وأضف رابط رسالة المادة الخام قبل التحليل والتوزيع." }, 400);
+      }
+      if (timeline.length > 120 || !timeline.every(isTimelineCue)) {
+        return jsonResponse({ message: "راجع تعليمات الـTimeline؛ يوجد توقيت أو إجراء غير صالح." }, 400);
+      }
+      if (extractedAssets.length > 60 || !extractedAssets.every(isExtractedAsset)) {
+        return jsonResponse({ message: "راجع روابط المصادر المستخرجة قبل التوزيع." }, 400);
+      }
+    }
+
     const { data: contentId, error } = await context.supabaseAdmin.rpc(
-      "create_reel_production_workflow",
+      isTelegramIntake ? "create_reel_from_intake" : "create_reel_production_workflow",
       {
         target_user_id: context.userClaims.id,
         target_organization_id: body.target_organization_id,
@@ -98,6 +150,12 @@ export default {
         content_editing_brief: body.content_editing_brief,
         content_thumbnail_brief: body.content_thumbnail_brief,
         content_brand_notes: typeof body.content_brand_notes === "string" ? body.content_brand_notes : "",
+        ...(isTelegramIntake ? {
+          intake_request_text: intakeRequest,
+          telegram_source_url: telegramSource,
+          parsed_timeline: timeline,
+          parsed_assets: extractedAssets,
+        } : {}),
         target_publish_at: body.target_publish_at,
         brief_owner_id: body.brief_owner_id,
         recording_owner_id: body.recording_owner_id,
@@ -106,14 +164,16 @@ export default {
         caption_owner_id: body.caption_owner_id,
         approval_owner_id: body.approval_owner_id,
         publishing_owner_id: body.publishing_owner_id,
-        initial_raw_url: typeof body.initial_raw_url === "string" ? body.initial_raw_url.trim() : "",
-        initial_source_url: typeof body.initial_source_url === "string" ? body.initial_source_url.trim() : "",
-        initial_reference_url: typeof body.initial_reference_url === "string" ? body.initial_reference_url.trim() : "",
+        ...(!isTelegramIntake ? {
+          initial_raw_url: typeof body.initial_raw_url === "string" ? body.initial_raw_url.trim() : "",
+          initial_source_url: typeof body.initial_source_url === "string" ? body.initial_source_url.trim() : "",
+          initial_reference_url: typeof body.initial_reference_url === "string" ? body.initial_reference_url.trim() : "",
+        } : {}),
       },
     );
 
     if (error) {
-      const userError = /Only organization leadership|active organization member|Publish time|fields are incomplete|asset link|valid HTTP/i.test(error.message);
+      const userError = /Only organization leadership|active organization member|Publish time|fields are incomplete|asset link|valid HTTP|Telegram|timeline|extracted links|Parsed intake/i.test(error.message);
       return jsonResponse(
         {
           message: userError

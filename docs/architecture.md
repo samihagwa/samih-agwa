@@ -53,9 +53,11 @@ Existing Market Whales application
 
 - `content_items` is the source of truth for a publishable asset and its brief.
 - A reel workflow is created atomically through the JWT-protected `create-content-workflow` Edge Function; its database command is executable by `service_role` only, so partial task sets cannot be saved.
+- The original manual brief stays available. The optional Telegram intake accepts the full request as one draft, parses it in the browser, and requires an editable review before the same guarded command stores anything.
+- Telegram remains the raw-file location in this phase. The approved request and direct Telegram message link are retained on the content item; extracted reference links and second-by-second instructions are stored as governed content assets and timeline cues.
 - Each workflow produces seven normal tasks: brief, recording, editing, thumbnail, caption, approval, and publishing.
 - `task_dependencies` models the handoff graph. Completing a predecessor unlocks only downstream tasks whose dependencies are all done.
-- Caption work can run in parallel after brief approval; final approval waits for editing, thumbnail, and caption.
+- In the Telegram intake path, raw-material verification follows brief approval, editing follows verification, and thumbnail plus caption can run in parallel after the brief. Final approval waits for editing, thumbnail, caption, every open revision, and every timeline cue.
 - Content status is derived by database triggers from linked task state, and important changes are written to the audit log.
 - External social publishing remains manual until a verified platform integration returns a real publish confirmation.
 

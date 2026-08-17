@@ -4,6 +4,7 @@ export type ContentStatus = Database["public"]["Enums"]["content_status"];
 export type ContentStep = Database["public"]["Enums"]["content_step"];
 export type ContentAssetKind = Database["public"]["Enums"]["content_asset_kind"];
 export type ContentRevisionStatus = Database["public"]["Enums"]["content_revision_status"];
+export type ContentCueKind = Database["public"]["Enums"]["content_cue_kind"];
 
 export const contentStatusConfig: Record<
   ContentStatus,
@@ -19,7 +20,7 @@ export const contentStatusConfig: Record<
 
 export const contentStepConfig: Record<ContentStep, { label: string; order: number }> = {
   brief: { label: "Brief", order: 1 },
-  recording: { label: "تسجيل", order: 2 },
+  recording: { label: "مادة خام / تسجيل", order: 2 },
   editing: { label: "مونتاج", order: 3 },
   thumbnail: { label: "غلاف", order: 4 },
   caption: { label: "كابشن", order: 5 },
@@ -30,6 +31,16 @@ export const contentStepConfig: Record<ContentStep, { label: string; order: numb
 export const contentSteps = (Object.keys(contentStepConfig) as ContentStep[]).sort(
   (a, b) => contentStepConfig[a].order - contentStepConfig[b].order,
 );
+
+export const contentAssignmentFields: Array<{ step: ContentStep; name: string }> = [
+  { step: "brief", name: "brief_owner_id" },
+  { step: "recording", name: "recording_owner_id" },
+  { step: "editing", name: "editing_owner_id" },
+  { step: "thumbnail", name: "thumbnail_owner_id" },
+  { step: "caption", name: "caption_owner_id" },
+  { step: "approval", name: "approval_owner_id" },
+  { step: "publishing", name: "publishing_owner_id" },
+];
 
 export const contentAssetKindConfig: Record<ContentAssetKind, { label: string }> = {
   raw_video: { label: "المادة الخام" },
@@ -52,4 +63,13 @@ export const contentRevisionStatusConfig: Record<
   in_progress: { label: "قيد التعديل", tone: "info" },
   resolved: { label: "تم تنفيذها", tone: "success" },
   cancelled: { label: "ملغاة", tone: "neutral" },
+};
+
+export const contentCueKindConfig: Record<ContentCueKind, { label: string }> = {
+  cut: { label: "حذف وقص" },
+  visual: { label: "حركة بصرية" },
+  text: { label: "كتابة على الشاشة" },
+  audio: { label: "صوت وموسيقى" },
+  review: { label: "مراجعة" },
+  note: { label: "ملاحظة تنفيذ" },
 };
