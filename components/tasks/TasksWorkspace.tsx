@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleUserRound,
+  ContactRound,
   FileText,
   Film,
   LoaderCircle,
@@ -14,6 +15,7 @@ import {
   RefreshCw,
   Route,
   Send,
+  ShieldCheck,
   UserRoundCheck,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
@@ -399,7 +401,7 @@ export function TasksWorkspace() {
               <div className="kanban-stack">
                 {statusTasks.map((task) => {
                   const owner = peopleById.get(task.owner_id);
-                  const canMove = manager || task.owner_id === session.user.id;
+                  const canMove = !task.crm_contact_id && (manager || task.owner_id === session.user.id);
                   const options = [task.status, ...allowedTaskTransitions[task.status]];
                   return (
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} key={task.id}>
@@ -407,12 +409,16 @@ export function TasksWorkspace() {
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
                       {task.content_item_id ? <a className="task-production-link" href={`/content#content-${task.content_item_id}`}><FileText size={12} /> فتح Production Brief والملفات</a> : null}
                       {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
+                      {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> CRM · متابعة عميل</span> : null}
+                      {task.crm_contact_id ? <a className="task-production-link" href={`/crm#lead-${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
                       <h3>{task.title}</h3>
                       {task.description ? <p>{task.description}</p> : null}
                       <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong>{task.acceptance_criteria}</span></div>
                       <dl className="task-meta"><div><dt><CircleUserRound size={14} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div><div><dt><CalendarClock size={14} /> الموعد</dt><dd>{formatDeadline(task.due_at)}</dd></div></dl>
                       {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة عن الموعد</span> : null}
-                      <label className="status-select"><span>نقل إلى</span><select value={task.status} disabled={!canMove || working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}>{options.map((option) => <option key={option} value={option}>{taskStatusConfig[option].label}</option>)}</select></label>
+                      {task.crm_contact_id
+                        ? <p className="crm-task-guard"><ShieldCheck size={13} /> تتحرك هذه المهمة تلقائيًا عند تسجيل النتيجة من CRM.</p>
+                        : <label className="status-select"><span>نقل إلى</span><select value={task.status} disabled={!canMove || working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}>{options.map((option) => <option key={option} value={option}>{taskStatusConfig[option].label}</option>)}</select></label>}
                     </article>
                   );
                 })}

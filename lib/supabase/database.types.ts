@@ -380,6 +380,207 @@ export type Database = {
           },
         ]
       }
+      crm_activities: {
+        Row: {
+          actor_id: string | null
+          contact_id: string
+          from_stage: Database["public"]["Enums"]["crm_lead_stage"] | null
+          id: number
+          kind: Database["public"]["Enums"]["crm_activity_kind"]
+          next_follow_up_at: string | null
+          occurred_at: string
+          organization_id: string
+          summary: string
+          to_stage: Database["public"]["Enums"]["crm_lead_stage"]
+        }
+        Insert: {
+          actor_id?: string | null
+          contact_id: string
+          from_stage?: Database["public"]["Enums"]["crm_lead_stage"] | null
+          id?: never
+          kind: Database["public"]["Enums"]["crm_activity_kind"]
+          next_follow_up_at?: string | null
+          occurred_at?: string
+          organization_id: string
+          summary: string
+          to_stage: Database["public"]["Enums"]["crm_lead_stage"]
+        }
+        Update: {
+          actor_id?: string | null
+          contact_id?: string
+          from_stage?: Database["public"]["Enums"]["crm_lead_stage"] | null
+          id?: never
+          kind?: Database["public"]["Enums"]["crm_activity_kind"]
+          next_follow_up_at?: string | null
+          occurred_at?: string
+          organization_id?: string
+          summary?: string
+          to_stage?: Database["public"]["Enums"]["crm_lead_stage"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_activities_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_activities_contact_org_fkey"
+            columns: ["contact_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "crm_activities_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_contacts: {
+        Row: {
+          closure_reason: string | null
+          consent_status: Database["public"]["Enums"]["crm_consent_status"]
+          converted_at: string | null
+          created_at: string
+          created_by: string
+          full_name: string
+          id: string
+          interest: Database["public"]["Enums"]["crm_interest"]
+          last_contacted_at: string | null
+          next_follow_up_at: string | null
+          notes: string | null
+          organization_id: string
+          owner_id: string
+          source: Database["public"]["Enums"]["crm_source"]
+          stage: Database["public"]["Enums"]["crm_lead_stage"]
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          closure_reason?: string | null
+          consent_status?: Database["public"]["Enums"]["crm_consent_status"]
+          converted_at?: string | null
+          created_at?: string
+          created_by: string
+          full_name: string
+          id?: string
+          interest: Database["public"]["Enums"]["crm_interest"]
+          last_contacted_at?: string | null
+          next_follow_up_at?: string | null
+          notes?: string | null
+          organization_id: string
+          owner_id: string
+          source: Database["public"]["Enums"]["crm_source"]
+          stage?: Database["public"]["Enums"]["crm_lead_stage"]
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          closure_reason?: string | null
+          consent_status?: Database["public"]["Enums"]["crm_consent_status"]
+          converted_at?: string | null
+          created_at?: string
+          created_by?: string
+          full_name?: string
+          id?: string
+          interest?: Database["public"]["Enums"]["crm_interest"]
+          last_contacted_at?: string | null
+          next_follow_up_at?: string | null
+          notes?: string | null
+          organization_id?: string
+          owner_id?: string
+          source?: Database["public"]["Enums"]["crm_source"]
+          stage?: Database["public"]["Enums"]["crm_lead_stage"]
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_contacts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_contacts_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_identities: {
+        Row: {
+          contact_id: string
+          created_at: string
+          created_by: string
+          id: string
+          is_primary: boolean
+          kind: Database["public"]["Enums"]["crm_identity_kind"]
+          normalized_value: string
+          organization_id: string
+          value: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          is_primary?: boolean
+          kind: Database["public"]["Enums"]["crm_identity_kind"]
+          normalized_value: string
+          organization_id: string
+          value: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_primary?: boolean
+          kind?: Database["public"]["Enums"]["crm_identity_kind"]
+          normalized_value?: string
+          organization_id?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_identities_contact_org_fkey"
+            columns: ["contact_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "crm_identities_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_identities_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_content_items: {
         Row: {
           content_item_id: string
@@ -711,6 +912,7 @@ export type Database = {
           content_step: Database["public"]["Enums"]["content_step"] | null
           created_at: string
           created_by: string
+          crm_contact_id: string | null
           description: string | null
           due_at: string
           id: string
@@ -732,6 +934,7 @@ export type Database = {
           content_step?: Database["public"]["Enums"]["content_step"] | null
           created_at?: string
           created_by?: string
+          crm_contact_id?: string | null
           description?: string | null
           due_at: string
           id?: string
@@ -753,6 +956,7 @@ export type Database = {
           content_step?: Database["public"]["Enums"]["content_step"] | null
           created_at?: string
           created_by?: string
+          crm_contact_id?: string | null
           description?: string | null
           due_at?: string
           id?: string
@@ -781,6 +985,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_crm_contact_org_fkey"
+            columns: ["crm_contact_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id", "organization_id"]
           },
           {
             foreignKeyName: "tasks_launch_id_organization_id_fkey"
@@ -849,6 +1060,22 @@ export type Database = {
           target_user_id: string
         }
         Returns: boolean
+      }
+      create_crm_lead: {
+        Args: {
+          contact_consent_status: Database["public"]["Enums"]["crm_consent_status"]
+          contact_full_name: string
+          contact_interest: Database["public"]["Enums"]["crm_interest"]
+          contact_owner_id: string
+          contact_source: Database["public"]["Enums"]["crm_source"]
+          identity_kind: Database["public"]["Enums"]["crm_identity_kind"]
+          identity_value: string
+          initial_notes: string
+          target_follow_up_at: string
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
       }
       create_launch_workflow: {
         Args: {
@@ -975,6 +1202,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      record_crm_activity: {
+        Args: {
+          activity_kind: Database["public"]["Enums"]["crm_activity_kind"]
+          activity_summary: string
+          next_stage: Database["public"]["Enums"]["crm_lead_stage"]
+          target_contact_id: string
+          target_next_follow_up_at: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
       remove_content_asset: {
         Args: { target_asset_id: string; target_user_id: string }
         Returns: boolean
@@ -1042,6 +1280,37 @@ export type Database = {
         | "caption"
         | "approval"
         | "publishing"
+      crm_activity_kind: "created" | "call" | "message" | "email" | "note"
+      crm_consent_status: "unknown" | "granted" | "denied"
+      crm_identity_kind: "phone" | "email" | "telegram"
+      crm_interest:
+        | "indicator"
+        | "signals_gold"
+        | "signals_fx"
+        | "course"
+        | "brokerage"
+        | "book"
+        | "service"
+        | "other"
+      crm_lead_stage:
+        | "new"
+        | "contacted"
+        | "qualified"
+        | "follow_up"
+        | "won"
+        | "lost"
+        | "do_not_contact"
+      crm_source:
+        | "manual"
+        | "whales_zone"
+        | "samihagwa_site"
+        | "telegram"
+        | "meta"
+        | "market_whales_app"
+        | "exness"
+        | "tickmill"
+        | "referral"
+        | "other"
       launch_gate:
         | "strategy"
         | "offer"
@@ -1242,6 +1511,40 @@ export const Constants = {
         "caption",
         "approval",
         "publishing",
+      ],
+      crm_activity_kind: ["created", "call", "message", "email", "note"],
+      crm_consent_status: ["unknown", "granted", "denied"],
+      crm_identity_kind: ["phone", "email", "telegram"],
+      crm_interest: [
+        "indicator",
+        "signals_gold",
+        "signals_fx",
+        "course",
+        "brokerage",
+        "book",
+        "service",
+        "other",
+      ],
+      crm_lead_stage: [
+        "new",
+        "contacted",
+        "qualified",
+        "follow_up",
+        "won",
+        "lost",
+        "do_not_contact",
+      ],
+      crm_source: [
+        "manual",
+        "whales_zone",
+        "samihagwa_site",
+        "telegram",
+        "meta",
+        "market_whales_app",
+        "exness",
+        "tickmill",
+        "referral",
+        "other",
       ],
       launch_gate: [
         "strategy",

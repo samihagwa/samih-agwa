@@ -31,7 +31,7 @@ This starter does not use `wrangler.jsonc`.
 
 ## Important status
 
-The identity, task-management, reel-production, and campaign-launch foundations are live. Personal testing has started, but the team has not been onboarded and no production customer, sales, social, or external publishing data is connected.
+The identity, task-management, reel-production, campaign-launch, and manual CRM foundations are ready for personal testing. The team has not been onboarded, no production customers have been imported, and no sales message, social publishing, or external analytics integration is active.
 
 ## First owner setup
 
@@ -59,3 +59,11 @@ Telegram remains the raw-material inbox for now: paste the direct message/file l
 3. Move the active gate through the task board. Completing a gate unlocks only the next eligible gates; Go / No-Go remains locked until registration, delivery, promotion, and tracking are complete.
 4. Create content in `/content`, then attach it to the launch from the launch card. Removing the link never deletes either record.
 5. Target values are planning data. Actual registrations, revenue, and social results remain visibly unavailable until a verified source is connected.
+
+## Personal CRM test
+
+1. Sign in with the owner account and open `/crm`.
+2. Add one clearly identified personal test lead with a future follow-up. This creates the contact record, immutable first activity, and one linked task atomically.
+3. Open `/tasks` and confirm the generic CRM follow-up task appears without the person's name or contact details.
+4. Return to the linked CRM record and log a call, message, email, or note. An active stage requires a future follow-up and creates exactly one next task.
+5. Choose a closed stage to stop follow-up. `do_not_contact` also records denied consent. No action in this test sends a message or imports external customers.

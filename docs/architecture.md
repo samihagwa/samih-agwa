@@ -70,11 +70,20 @@ Existing Market Whales application
 - Content association is many-to-many and tenant-safe through composite foreign keys. Attach and detach commands are reversible, leadership-only, and audited; neither operation deletes the launch or content item.
 - Targets are plan data. Actual performance stays unavailable until a verified ingestion or approved manual observation workflow is implemented.
 
+## CRM contract
+
+- `crm_contacts` is the governed lead record; `crm_identities` deduplicates the primary phone, email, or Telegram username inside one organization.
+- A lead is created atomically through the JWT-protected `crm-commands` Edge Function. The two database commands are executable by `service_role` only, so the browser cannot write contact, identity, or activity tables directly.
+- Leadership can see the organization pipeline. A working member can see and act only on leads they own. The same ownership rule protects identities and immutable activity history through RLS.
+- Every active lead has exactly one open, ordinary task linked by `crm_contact_id`. The task contains no customer name or contact value, so the shared task board does not leak CRM details.
+- CRM task status is controlled only by the CRM command. Recording a result closes the current task and either creates the next future follow-up or closes the lead with a reason.
+- Selecting `do_not_contact` records denied consent and prevents another follow-up. No message, import, or external synchronization is active in this foundation.
+
 ## Initial domains
 
 1. Identity, organizations, memberships, and roles — foundation live; team onboarding pending.
 2. Tasks, transitions, ownership, deadlines, acceptance criteria, Realtime, and activity — foundation live.
 3. Content assets, briefs, dependency-based production stages, and manual publish confirmation — foundation live; external publishing and metrics pending.
 4. Campaigns, launches, assets, readiness gates, and Go / No-Go — foundation live; external performance ingestion pending.
-5. People, leads, customers, sources, consent, and pipeline.
+5. People, leads, customers, sources, consent, pipeline, and accountable follow-up tasks — foundation ready for personal testing; imports and messages pending.
 6. Metric definitions, observations, targets, experiments, and decisions.

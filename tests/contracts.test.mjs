@@ -45,7 +45,7 @@ test("Supabase client consumes generated database types", async () => {
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(client, /createClient<Database>/);
-  for (const table of ["audit_events", "content_assets", "content_items", "content_revision_requests", "content_timeline_cues", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
+  for (const table of ["audit_events", "content_assets", "content_items", "content_revision_requests", "content_timeline_cues", "crm_activities", "crm_contacts", "crm_identities", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
     assert.match(types, new RegExp(`${table}:`));
   }
 });
@@ -172,6 +172,41 @@ test("application shell does not impersonate an authenticated owner", async () =
   const source = await readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /سميح عجوة/);
   assert.match(source, /SessionChip/);
+});
+
+test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task system", async () => {
+  const [migration, edgeFunction, workspace, taskWorkspace, contract, roadmap] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260817033924_crm_foundation.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/crm.ts", import.meta.url), "utf8"),
+    readFile(new URL("../docs/roadmap.md", import.meta.url), "utf8"),
+  ]);
+
+  for (const table of ["crm_contacts", "crm_identities", "crm_activities"]) {
+    assert.match(migration, new RegExp(`create table public\\.${table}`));
+    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(migration, new RegExp(`grant select on table public\\.${table} to authenticated`));
+  }
+  assert.doesNotMatch(migration, /grant (insert|update|delete) on table public\.crm_(contacts|identities|activities) to authenticated/i);
+  for (const rpc of ["create_crm_lead", "record_crm_activity"]) {
+    assert.match(migration, new RegExp(`function public\\.${rpc}`));
+  }
+  assert.match(migration, /tasks_one_open_crm_follow_up_idx/);
+  assert.match(migration, /CRM follow-up tasks are managed through the CRM workflow only/);
+  assert.match(migration, /to service_role/);
+  assert.match(migration, /from public, anon, authenticated/);
+  assert.match(edgeFunction, /createSupabaseContext/);
+  assert.match(edgeFunction, /auth: "user"/);
+  assert.match(workspace, /لن تُرسل أي رسالة/);
+  assert.match(workspace, /functions\.invoke\("crm-commands"/);
+  assert.match(taskWorkspace, /فتح ملف العميل وتسجيل النتيجة/);
+  assert.doesNotMatch(migration, /'متابعة عميل محتمل[^']*'\s*,\s*contact_full_name/);
+  assert.match(contract, /allowedCrmTransitions/);
+  assert.match(roadmap, /Deferred scheduled Telegram publishing/);
+  assert.match(roadmap, /test_mode/);
+  assert.match(roadmap, /idempotency key/);
 });
 
 test("launch workflow uses guarded gates, shared tasks, and reversible content links", async () => {
