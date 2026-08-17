@@ -30,21 +30,24 @@ Applied migrations:
 16. `crm_contact_context_and_chat_links`: custom acquisition sources and registration reasons, tenant-scoped direct conversation links, and an atomic service-only lead command.
 17. `brand_knowledge_center`: versioned brand drafts and owner approval, immutable approved history, audience-aware RLS, exact approved references on content workflows, Realtime, audit events, and service-only mutations.
 18. `brand_reference_fk_index`: covering index for the content/organization composite foreign key reported by the performance advisor.
+19. `crm_search_multi_identity_owner_performance`: RLS-aware paginated search, trigram indexes, atomic multi-identity lead creation, controlled identity additions, and evidence-based owner performance metrics.
+20. `launch_execution_plan`: versioned gate outputs, quantified/budgeted launch deliverables, canonical linked tasks, dependency mirroring, delivery evidence guards, RLS, audit events, and Realtime state.
+21. `launch_execution_fk_indexes`: exact-order covering indexes for all new composite launch-execution foreign keys reported by the performance advisor.
 
 Deployed Edge Functions:
 
 1. `bootstrap-organization` v1: JWT-protected, one-time owner workspace initialization. Unauthenticated requests return `401`.
 2. `create-content-workflow` v4: JWT-protected, preserves both manual and reviewed Telegram intake, validates approved brand references, and creates the brief, exact reference links, timeline/assets when present, and seven dependent tasks atomically. Unauthenticated requests return `401`.
-3. `launch-commands` v3: JWT-protected launch creation plus audited content attach/detach commands, including positive-target validation. Unauthenticated requests return `401`.
+3. `launch-commands` v4: JWT-protected launch creation, audited content attach/detach, versioned gate-output saving, quantified deliverable/task creation, and controlled delivery submission. Unauthenticated requests return `401`.
 4. `content-commands` v2: JWT-protected content brief, asset, revision, and timeline commands. Timeline completion is restricted to the assigned editor or organization leadership.
-5. `crm-commands` v2: JWT-protected manual lead creation with optional direct chat link and custom acquisition context, plus follow-up recording. It sends no message, performs no import, and rejects unauthenticated requests with `401`.
+5. `crm-commands` v3: JWT-protected manual lead creation with one to three deduplicated contact methods, optional direct chat link and custom acquisition context, controlled identity additions, plus follow-up recording. It sends no message, performs no import, and rejects unauthenticated requests with `401`.
 6. `brand-commands` v1: JWT-protected brand draft, edit, revision, owner approval, and archive commands. The browser has no direct table-write or database-command privilege.
 
 Verification on 2026-08-17:
 
 - Project status: `ACTIVE_HEALTHY`.
 - Security advisor: no schema or RLS findings. A project-level warning remains for leaked-password protection; the current application uses passwordless one-time email links and does not expose password sign-in.
-- RLS: enabled on all nineteen public application tables.
+- RLS: enabled on all twenty-two public application tables.
 - `anon`: no table read grant.
 - `authenticated`: explicit reads, column-scoped task writes, and one validated workflow command; all access is filtered by RLS and database rules.
 - Performance advisor: only unused-index informational notices, expected while the personally tested database has almost no operational volume.

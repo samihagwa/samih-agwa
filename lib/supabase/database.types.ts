@@ -851,6 +851,204 @@ export type Database = {
           },
         ]
       }
+      launch_deliverable_dependencies: {
+        Row: {
+          created_at: string
+          created_by: string
+          deliverable_id: string
+          depends_on_deliverable_id: string
+          launch_id: string
+          organization_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          deliverable_id: string
+          depends_on_deliverable_id: string
+          launch_id: string
+          organization_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          deliverable_id?: string
+          depends_on_deliverable_id?: string
+          launch_id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_deliverable_dependenci_deliverable_id_launch_id_org_fkey"
+            columns: ["deliverable_id", "launch_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "launch_deliverables"
+            referencedColumns: ["id", "launch_id", "organization_id"]
+          },
+          {
+            foreignKeyName: "launch_deliverable_dependenci_depends_on_deliverable_id_la_fkey"
+            columns: [
+              "depends_on_deliverable_id",
+              "launch_id",
+              "organization_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "launch_deliverables"
+            referencedColumns: ["id", "launch_id", "organization_id"]
+          },
+          {
+            foreignKeyName: "launch_deliverable_dependencies_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      launch_deliverables: {
+        Row: {
+          brief: string
+          budget_amount: number
+          budget_category: Database["public"]["Enums"]["launch_budget_category"]
+          channel: string | null
+          created_at: string
+          created_by: string
+          currency: string
+          delivered_at: string | null
+          destination: string | null
+          due_at: string
+          id: string
+          kind: Database["public"]["Enums"]["launch_deliverable_kind"]
+          launch_id: string
+          organization_id: string
+          owner_id: string
+          planned_quantity: number
+          result_note: string | null
+          result_url: string | null
+          title: string
+        }
+        Insert: {
+          brief: string
+          budget_amount?: number
+          budget_category?: Database["public"]["Enums"]["launch_budget_category"]
+          channel?: string | null
+          created_at?: string
+          created_by: string
+          currency?: string
+          delivered_at?: string | null
+          destination?: string | null
+          due_at: string
+          id?: string
+          kind: Database["public"]["Enums"]["launch_deliverable_kind"]
+          launch_id: string
+          organization_id: string
+          owner_id: string
+          planned_quantity?: number
+          result_note?: string | null
+          result_url?: string | null
+          title: string
+        }
+        Update: {
+          brief?: string
+          budget_amount?: number
+          budget_category?: Database["public"]["Enums"]["launch_budget_category"]
+          channel?: string | null
+          created_at?: string
+          created_by?: string
+          currency?: string
+          delivered_at?: string | null
+          destination?: string | null
+          due_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["launch_deliverable_kind"]
+          launch_id?: string
+          organization_id?: string
+          owner_id?: string
+          planned_quantity?: number
+          result_note?: string | null
+          result_url?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_deliverables_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_deliverables_launch_id_organization_id_fkey"
+            columns: ["launch_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "launch_deliverables_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      launch_documents: {
+        Row: {
+          created_at: string
+          created_by: string
+          document_url: string | null
+          gate: Database["public"]["Enums"]["launch_gate"]
+          id: string
+          launch_id: string
+          organization_id: string
+          status: Database["public"]["Enums"]["launch_document_status"]
+          summary: string
+          title: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          document_url?: string | null
+          gate: Database["public"]["Enums"]["launch_gate"]
+          id?: string
+          launch_id: string
+          organization_id: string
+          status?: Database["public"]["Enums"]["launch_document_status"]
+          summary: string
+          title: string
+          version: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          document_url?: string | null
+          gate?: Database["public"]["Enums"]["launch_gate"]
+          id?: string
+          launch_id?: string
+          organization_id?: string
+          status?: Database["public"]["Enums"]["launch_document_status"]
+          summary?: string
+          title?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_documents_launch_id_organization_id_fkey"
+            columns: ["launch_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
       launches: {
         Row: {
           audience: string
@@ -1140,6 +1338,7 @@ export type Database = {
           description: string | null
           due_at: string
           id: string
+          launch_deliverable_id: string | null
           launch_gate: Database["public"]["Enums"]["launch_gate"] | null
           launch_id: string | null
           organization_id: string
@@ -1162,6 +1361,7 @@ export type Database = {
           description?: string | null
           due_at: string
           id?: string
+          launch_deliverable_id?: string | null
           launch_gate?: Database["public"]["Enums"]["launch_gate"] | null
           launch_id?: string | null
           organization_id: string
@@ -1184,6 +1384,7 @@ export type Database = {
           description?: string | null
           due_at?: string
           id?: string
+          launch_deliverable_id?: string | null
           launch_gate?: Database["public"]["Enums"]["launch_gate"] | null
           launch_id?: string | null
           organization_id?: string
@@ -1215,6 +1416,13 @@ export type Database = {
             columns: ["crm_contact_id", "organization_id"]
             isOneToOne: false
             referencedRelation: "crm_contacts"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "tasks_launch_deliverable_org_fkey"
+            columns: ["launch_deliverable_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "launch_deliverables"
             referencedColumns: ["id", "organization_id"]
           },
           {
@@ -1253,6 +1461,16 @@ export type Database = {
           asset_title: string
           asset_url: string
           target_content_item_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
+      add_crm_identity: {
+        Args: {
+          identity_kind: Database["public"]["Enums"]["crm_identity_kind"]
+          identity_value: string
+          make_primary?: boolean
+          target_contact_id: string
           target_user_id: string
         }
         Returns: string
@@ -1343,6 +1561,45 @@ export type Database = {
           target_conversation_url: string
           target_follow_up_at: string
           target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
+      create_crm_lead_v3: {
+        Args: {
+          contact_consent_status: Database["public"]["Enums"]["crm_consent_status"]
+          contact_full_name: string
+          contact_identities: Json
+          contact_interest: Database["public"]["Enums"]["crm_interest"]
+          contact_interest_detail: string
+          contact_owner_id: string
+          contact_source: Database["public"]["Enums"]["crm_source"]
+          contact_source_detail: string
+          initial_notes: string
+          target_conversation_channel: Database["public"]["Enums"]["crm_conversation_channel"]
+          target_conversation_label: string
+          target_conversation_url: string
+          target_follow_up_at: string
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
+      create_launch_deliverable: {
+        Args: {
+          deliverable_brief: string
+          deliverable_budget_amount: number
+          deliverable_budget_category: Database["public"]["Enums"]["launch_budget_category"]
+          deliverable_channel: string
+          deliverable_currency: string
+          deliverable_destination: string
+          deliverable_due_at: string
+          deliverable_kind: Database["public"]["Enums"]["launch_deliverable_kind"]
+          deliverable_owner_id: string
+          deliverable_quantity: number
+          deliverable_title: string
+          depends_on_deliverable_id: string
+          target_launch_id: string
           target_user_id: string
         }
         Returns: string
@@ -1527,6 +1784,23 @@ export type Database = {
         }
         Returns: boolean
       }
+      get_crm_owner_performance: {
+        Args: { target_organization_id: string; target_range_days: number }
+        Returns: {
+          active_contacts: number
+          activities_in_period: number
+          completed_follow_ups: number
+          last_activity_at: string
+          lost_contacts: number
+          new_contacts: number
+          on_time_follow_ups: number
+          overdue_contacts: number
+          owner_id: string
+          total_contacts: number
+          won_contacts: number
+          won_in_period: number
+        }[]
+      }
       record_crm_activity: {
         Args: {
           activity_kind: Database["public"]["Enums"]["crm_activity_kind"]
@@ -1558,6 +1832,42 @@ export type Database = {
           target_user_id: string
         }
         Returns: string
+      }
+      save_launch_gate_document: {
+        Args: {
+          document_gate: Database["public"]["Enums"]["launch_gate"]
+          document_status: Database["public"]["Enums"]["launch_document_status"]
+          document_summary: string
+          document_title: string
+          target_document_url: string
+          target_launch_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
+      search_crm_contacts: {
+        Args: {
+          result_limit: number
+          result_offset: number
+          search_query: string
+          target_organization_id: string
+          target_owner_id: string
+          target_scope: string
+          target_stage: Database["public"]["Enums"]["crm_lead_stage"]
+        }
+        Returns: {
+          contact_id: string
+          total_count: number
+        }[]
+      }
+      submit_launch_deliverable: {
+        Args: {
+          deliverable_result_note: string
+          deliverable_result_url: string
+          target_deliverable_id: string
+          target_user_id: string
+        }
+        Returns: boolean
       }
       update_brand_article_draft: {
         Args: {
@@ -1687,6 +1997,24 @@ export type Database = {
         | "tickmill"
         | "referral"
         | "other"
+      launch_budget_category:
+        | "production"
+        | "media_spend"
+        | "tools"
+        | "event"
+        | "other"
+      launch_deliverable_kind:
+        | "reel"
+        | "story"
+        | "design"
+        | "telegram_post"
+        | "social_post"
+        | "email"
+        | "ad"
+        | "landing_page"
+        | "webinar_asset"
+        | "other"
+      launch_document_status: "draft" | "submitted" | "approved"
       launch_gate:
         | "strategy"
         | "offer"
@@ -1950,6 +2278,26 @@ export const Constants = {
         "referral",
         "other",
       ],
+      launch_budget_category: [
+        "production",
+        "media_spend",
+        "tools",
+        "event",
+        "other",
+      ],
+      launch_deliverable_kind: [
+        "reel",
+        "story",
+        "design",
+        "telegram_post",
+        "social_post",
+        "email",
+        "ad",
+        "landing_page",
+        "webinar_asset",
+        "other",
+      ],
+      launch_document_status: ["draft", "submitted", "approved"],
       launch_gate: [
         "strategy",
         "offer",

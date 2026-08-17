@@ -7,6 +7,10 @@ const responseHeaders = {
 };
 
 const launchTypes = new Set(["webinar", "course", "service", "book", "indicator"]);
+const launchGates = new Set(["strategy", "offer", "registration", "delivery", "promotion", "tracking", "go_no_go", "launch_day"]);
+const documentStatuses = new Set(["draft", "submitted", "approved"]);
+const deliverableKinds = new Set(["reel", "story", "design", "telegram_post", "social_post", "email", "ad", "landing_page", "webinar_asset", "other"]);
+const budgetCategories = new Set(["production", "media_spend", "tools", "event", "other"]);
 
 const ownerFields = [
   "strategy_owner_id",
@@ -28,6 +32,20 @@ function jsonResponse(body: unknown, status = 200) {
 
 function isNonEmptyString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function text(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function validHttpUrl(value: string) {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function nullableTarget(value: unknown) {
@@ -183,6 +201,103 @@ async function updateContentLink(
   return jsonResponse({ changed, unchanged: !changed });
 }
 
+async function saveGateDocument(
+  body: Record<string, unknown>,
+  context: Awaited<ReturnType<typeof createSupabaseContext>>["data"],
+) {
+  const gate = text(body.gate);
+  const status = text(body.status) || "submitted";
+  const title = text(body.title);
+  const summary = text(body.summary);
+  const documentUrl = text(body.document_url);
+  if (!isNonEmptyString(body.launch_id) || !launchGates.has(gate) || !documentStatuses.has(status)
+    || title.length < 3 || title.length > 180 || summary.length < 5 || summary.length > 10000) {
+    return jsonResponse({ message: "اختر البوابة واكتب عنوانًا وملخصًا واضحين للمخرج." }, 400);
+  }
+  if (documentUrl.length > 2000 || !validHttpUrl(documentUrl)) {
+    return jsonResponse({ message: "لينك مخرج البوابة غير صحيح." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("save_launch_gate_document", {
+    target_user_id: context!.userClaims!.id,
+    target_launch_id: body.launch_id,
+    document_gate: gate,
+    document_title: title,
+    document_summary: summary,
+    target_document_url: documentUrl || null,
+    document_status: status,
+  });
+  if (error) {
+    const userError = /Only |not found|incomplete|URL|approve/i.test(error.message);
+    return jsonResponse({ message: userError ? error.message : "تعذّر حفظ مخرج بوابة الإطلاق." }, userError ? 400 : 500);
+  }
+  return jsonResponse({ documentId: data }, 201);
+}
+
+async function createDeliverable(
+  body: Record<string, unknown>,
+  context: Awaited<ReturnType<typeof createSupabaseContext>>["data"],
+) {
+  const kind = text(body.kind);
+  const budgetCategory = text(body.budget_category);
+  const quantity = Number(body.planned_quantity);
+  const budget = Number(body.budget_amount ?? 0);
+  const dueAt = text(body.due_at);
+  const currency = text(body.currency).toUpperCase();
+  if (!isNonEmptyString(body.launch_id) || !isNonEmptyString(body.owner_id)
+    || !deliverableKinds.has(kind) || !budgetCategories.has(budgetCategory)
+    || text(body.title).length < 3 || text(body.title).length > 180
+    || text(body.brief).length < 5 || text(body.brief).length > 5000
+    || !Number.isInteger(quantity) || quantity < 1 || quantity > 500
+    || !Number.isFinite(budget) || budget < 0 || Number.isNaN(Date.parse(dueAt))
+    || !/^[A-Z]{3}$/.test(currency)) {
+    return jsonResponse({ message: "أكمل نوع المخرج وكميته ومسؤوله وموعده وميزانيته بشكل صحيح." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("create_launch_deliverable", {
+    target_user_id: context!.userClaims!.id,
+    target_launch_id: body.launch_id,
+    deliverable_kind: kind,
+    deliverable_title: text(body.title),
+    deliverable_brief: text(body.brief),
+    deliverable_channel: text(body.channel) || null,
+    deliverable_destination: text(body.destination) || null,
+    deliverable_quantity: quantity,
+    deliverable_owner_id: body.owner_id,
+    deliverable_due_at: dueAt,
+    deliverable_budget_category: budgetCategory,
+    deliverable_budget_amount: budget,
+    deliverable_currency: currency,
+    depends_on_deliverable_id: text(body.depends_on_deliverable_id) || null,
+  });
+  if (error) {
+    const userError = /Only |not found|active working member|incomplete|quantity|deadline|budget|Currency|dependency/i.test(error.message);
+    return jsonResponse({ message: userError ? error.message : "تعذّر إنشاء مخرج الإطلاق ومهمته." }, userError ? 400 : 500);
+  }
+  return jsonResponse({ deliverableId: data }, 201);
+}
+
+async function submitDeliverable(
+  body: Record<string, unknown>,
+  context: Awaited<ReturnType<typeof createSupabaseContext>>["data"],
+) {
+  const note = text(body.result_note);
+  const resultUrl = text(body.result_url);
+  if (!isNonEmptyString(body.deliverable_id) || (!note && !resultUrl)
+    || note.length > 5000 || resultUrl.length > 2000 || !validHttpUrl(resultUrl)) {
+    return jsonResponse({ message: "أضف ملاحظة نتيجة أو لينك تسليم صحيحًا." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("submit_launch_deliverable", {
+    target_user_id: context!.userClaims!.id,
+    target_deliverable_id: body.deliverable_id,
+    deliverable_result_note: note || null,
+    deliverable_result_url: resultUrl || null,
+  });
+  if (error) {
+    const userError = /Only |not found|result|dependency|Resolve|reopen/i.test(error.message);
+    return jsonResponse({ message: userError ? error.message : "تعذّر تسليم مخرج الإطلاق." }, userError ? 400 : 500);
+  }
+  return jsonResponse({ changed: data });
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") {
@@ -219,6 +334,18 @@ export default {
 
     if (body.action === "detach_content") {
       return updateContentLink(body, context, "detach_content");
+    }
+
+    if (body.action === "save_gate_document") {
+      return saveGateDocument(body, context);
+    }
+
+    if (body.action === "create_deliverable") {
+      return createDeliverable(body, context);
+    }
+
+    if (body.action === "submit_deliverable") {
+      return submitDeliverable(body, context);
     }
 
     return jsonResponse({ message: "أمر الإطلاق غير معروف." }, 400);

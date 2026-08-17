@@ -211,9 +211,10 @@ test("application shell does not impersonate an authenticated owner", async () =
 });
 
 test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task system", async () => {
-  const [migration, contextMigration, edgeFunction, workspace, taskWorkspace, contract, roadmap] = await Promise.all([
+  const [migration, contextMigration, scaleMigration, edgeFunction, workspace, taskWorkspace, contract, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817033924_crm_foundation.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817151104_crm_contact_context_and_chat_links.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260817205723_crm_search_multi_identity_owner_performance.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
@@ -236,7 +237,8 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(migration, /from public, anon, authenticated/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
-  assert.match(edgeFunction, /create_crm_lead_v2/);
+  assert.match(edgeFunction, /create_crm_lead_v3/);
+  assert.match(edgeFunction, /add_crm_identity/);
   assert.match(contextMigration, /create table public\.crm_conversation_links/);
   assert.match(contextMigration, /alter table public\.crm_conversation_links enable row level security/);
   assert.match(contextMigration, /grant select on table public\.crm_conversation_links to authenticated/);
@@ -244,10 +246,20 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(contextMigration, /function public\.create_crm_lead_v2/);
   assert.match(contextMigration, /to service_role/);
   assert.match(contextMigration, /from public, anon, authenticated/);
+  for (const rpc of ["create_crm_lead_v3", "add_crm_identity", "search_crm_contacts", "get_crm_owner_performance"]) {
+    assert.match(scaleMigration, new RegExp(`function public\\.${rpc}`));
+  }
+  assert.match(scaleMigration, /create extension if not exists pg_trgm/);
+  assert.match(scaleMigration, /security invoker/);
+  assert.match(scaleMigration, /grant execute on function public\.search_crm_contacts[\s\S]*to authenticated/);
+  assert.match(scaleMigration, /grant execute on function public\.create_crm_lead_v3[\s\S]*to service_role/);
   assert.match(workspace, /لن تُرسل أي رسالة/);
   assert.match(workspace, /لينك شات/);
   assert.match(workspace, /اسم المصدر الجديد/);
   assert.match(workspace, /سبب التسجيل الجديد/);
+  assert.match(workspace, /ابحث بالاسم، الهاتف، البريد، Telegram/);
+  assert.match(workspace, /أداء مسؤولي العملاء/);
+  assert.match(workspace, /وسائل التواصل — املأ واحدة أو أكثر/);
   assert.match(workspace, /functions\.invoke\("crm-commands"/);
   assert.match(taskWorkspace, /فتح ملف العميل وتسجيل النتيجة/);
   assert.doesNotMatch(migration, /'متابعة عميل محتمل[^']*'\s*,\s*contact_full_name/);
@@ -272,11 +284,12 @@ test("Edge Function errors expose safe server messages through one shared parser
 });
 
 test("launch workflow uses guarded gates, shared tasks, and reversible content links", async () => {
-  const [launchContract, migration, detachMigration, targetMigration, edgeFunction, workspace, taskWorkspace, indexMigration] = await Promise.all([
+  const [launchContract, migration, detachMigration, targetMigration, executionMigration, edgeFunction, workspace, taskWorkspace, indexMigration] = await Promise.all([
     readFile(new URL("../lib/launches.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817002626_campaign_launch_pipeline.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817003302_campaign_launch_detach_content.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817004019_campaign_launch_positive_target.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260818010000_launch_execution_plan.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/launch-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
@@ -299,12 +312,31 @@ test("launch workflow uses guarded gates, shared tasks, and reversible content l
   assert.match(detachMigration, /launch\.content_detached/);
   assert.match(targetMigration, /launches_has_positive_target/);
   assert.match(indexMigration, /tasks_launch_org_fk_idx/);
+  for (const table of ["launch_documents", "launch_deliverables", "launch_deliverable_dependencies"]) {
+    assert.match(executionMigration, new RegExp(`create table public\\.${table}`));
+    assert.match(executionMigration, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(executionMigration, new RegExp(`grant select on table public\\.${table} to authenticated`));
+  }
+  for (const rpc of ["save_launch_gate_document", "create_launch_deliverable", "submit_launch_deliverable"]) {
+    assert.match(executionMigration, new RegExp(`function public\\.${rpc}`));
+  }
+  assert.match(executionMigration, /tasks_require_launch_output/);
+  assert.match(executionMigration, /launch_deliverable_id/);
+  assert.match(executionMigration, /to service_role/);
+  assert.doesNotMatch(executionMigration, /grant (insert|update|delete) on table public\.launch_/i);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
   assert.match(edgeFunction, /attach_content/);
   assert.match(edgeFunction, /detach_content/);
+  assert.match(edgeFunction, /save_gate_document/);
+  assert.match(edgeFunction, /create_deliverable/);
+  assert.match(edgeFunction, /submit_deliverable/);
   assert.match(workspace, /functions\.invoke\("launch-commands"/);
   assert.match(workspace, /8 بوابات مترابطة/);
   assert.match(workspace, /الفعلي غير مربوط بعد/);
+  assert.match(workspace, /هنا تُحفظ الاستراتيجية وباقي قرارات الإطلاق/);
+  assert.match(workspace, /الكميات والمواعيد والميزانية والاعتماديات/);
+  assert.match(workspace, /إنشاء البند والمهمة/);
   assert.match(taskWorkspace, /launchGateConfig/);
+  assert.match(taskWorkspace, /فتح التفاصيل وتسليم النتيجة/);
 });

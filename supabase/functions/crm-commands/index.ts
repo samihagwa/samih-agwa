@@ -12,6 +12,7 @@ const leadStages = new Set(["new", "contacted", "qualified", "follow_up", "won",
 const activeStages = new Set(["new", "contacted", "qualified", "follow_up"]);
 
 type Context = Awaited<ReturnType<typeof createSupabaseContext>>["data"];
+type ContactIdentity = { kind: string; value: string; is_primary: boolean };
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: responseHeaders });
@@ -38,6 +39,10 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/owner must be an active/i, "مسؤول المتابعة يجب أن يكون عضوًا نشطًا في مساحة العمل."],
     [/Only an active working member/i, "حسابك لا يملك صلاحية إضافة عميل محتمل."],
     [/Team members can create CRM leads for themselves only/i, "عضو الفريق يمكنه إسناد العميل لنفسه فقط."],
+    [/between one and three CRM contact identities/i, "أضف وسيلة تواصل واحدة على الأقل، وبحد أقصى هاتف وبريد وTelegram."],
+    [/each CRM identity kind only once/i, "يمكن إضافة هاتف واحد وبريد واحد واسم Telegram واحد عند إنشاء الملف."],
+    [/exactly one primary CRM identity/i, "اختر وسيلة تواصل أساسية واحدة."],
+    [/Only the CRM owner or organization leadership/i, "إضافة وسيلة تواصل متاحة لمسؤول العميل أو إدارة الشركة فقط."],
   ];
   const translated = friendlyMessages.find(([pattern]) => pattern.test(error.message))?.[1];
   if (translated) return jsonResponse({ message: translated }, 400);
@@ -61,6 +66,21 @@ function validHttpUrl(value: string) {
   }
 }
 
+function parseIdentities(body: Record<string, unknown>): ContactIdentity[] | null {
+  const requested = Array.isArray(body.identities)
+    ? body.identities
+    : [{ kind: body.identity_kind, value: body.identity_value }];
+  const parsed = requested.map((entry) => {
+    const item = typeof entry === "object" && entry ? entry as Record<string, unknown> : {};
+    return { kind: text(item.kind), value: text(item.value), is_primary: false };
+  }).filter((identity) => identity.kind || identity.value);
+  const primaryKind = text(body.primary_identity_kind) || parsed[0]?.kind;
+  for (const identity of parsed) identity.is_primary = identity.kind === primaryKind;
+  if (parsed.length < 1 || parsed.length > 3 || new Set(parsed.map((identity) => identity.kind)).size !== parsed.length) return null;
+  if (parsed.filter((identity) => identity.is_primary).length !== 1) return null;
+  return parsed;
+}
+
 async function createLead(body: Record<string, unknown>, context: Context) {
   const fullName = text(body.full_name);
   const source = text(body.source);
@@ -69,8 +89,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   const interestDetail = text(body.interest_detail);
   const ownerId = text(body.owner_id);
   const consentStatus = text(body.consent_status) || "unknown";
-  const identityKind = text(body.identity_kind);
-  const identityValue = text(body.identity_value);
+  const identities = parseIdentities(body);
   const followUpAt = futureIso(body.follow_up_at);
   const organizationId = text(body.organization_id);
   const conversationChannel = text(body.conversation_channel);
@@ -83,13 +102,14 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   if (!sources.has(source) || !interests.has(interest) || !consentStatuses.has(consentStatus)) {
     return jsonResponse({ message: "مصدر العميل أو اهتمامه أو حالة الموافقة غير صالحة." }, 400);
   }
-  if (!identityKinds.has(identityKind) || identityValue.length < 3 || identityValue.length > 320) {
-    return jsonResponse({ message: "أضف وسيلة تواصل صحيحة: هاتف أو بريد أو Telegram." }, 400);
+  if (!identities || identities.some((identity) => !identityKinds.has(identity.kind) || identity.value.length < 3 || identity.value.length > 320)) {
+    return jsonResponse({ message: "أضف وسيلة تواصل واحدة على الأقل: هاتف أو بريد أو Telegram، بدون تكرار النوع." }, 400);
   }
-  if (!validIdentity(identityKind, identityValue)) {
-    const message = identityKind === "telegram"
+  const invalidIdentity = identities.find((identity) => !validIdentity(identity.kind, identity.value));
+  if (invalidIdentity) {
+    const message = invalidIdentity.kind === "telegram"
       ? "اكتب اسم مستخدم Telegram فقط مثل @username، وضع لينك الشات في خانته المنفصلة."
-      : identityKind === "email"
+      : invalidIdentity.kind === "email"
         ? "البريد الإلكتروني غير صحيح."
         : "رقم الهاتف غير صحيح. استخدم رقمًا من 7 إلى 16 رقمًا ويمكن أن يبدأ بعلامة +.";
     return jsonResponse({ message }, 400);
@@ -121,7 +141,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   if (!followUpAt) return jsonResponse({ message: "حدد موعد متابعة صحيحًا في المستقبل." }, 400);
   if (text(body.notes).length > 5000) return jsonResponse({ message: "ملاحظات العميل أطول من الحد المسموح." }, 400);
 
-  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v2", {
+  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v3", {
     target_user_id: context!.userClaims!.id,
     target_organization_id: organizationId,
     contact_full_name: fullName,
@@ -131,8 +151,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     contact_interest_detail: interest === "other" ? interestDetail : null,
     contact_owner_id: ownerId,
     contact_consent_status: consentStatus,
-    identity_kind: identityKind,
-    identity_value: identityValue,
+    contact_identities: identities,
     initial_notes: text(body.notes),
     target_follow_up_at: followUpAt,
     target_conversation_channel: conversationChannel || null,
@@ -140,6 +159,24 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     target_conversation_label: conversationLabel || null,
   });
   return commandError(error, "تعذّر إنشاء ملف العميل. لم يتم حفظ أي جزء من العملية.") ?? jsonResponse({ contactId: data }, 201);
+}
+
+async function addIdentity(body: Record<string, unknown>, context: Context) {
+  const contactId = text(body.contact_id);
+  const identityKind = text(body.identity_kind);
+  const identityValue = text(body.identity_value);
+  if (!contactId || !identityKinds.has(identityKind) || !validIdentity(identityKind, identityValue)) {
+    return jsonResponse({ message: "اختر نوع وسيلة التواصل وأدخل قيمة صحيحة." }, 400);
+  }
+
+  const { data, error } = await context!.supabaseAdmin.rpc("add_crm_identity", {
+    target_user_id: context!.userClaims!.id,
+    target_contact_id: contactId,
+    identity_kind: identityKind,
+    identity_value: identityValue,
+    make_primary: body.make_primary === true,
+  });
+  return commandError(error, "تعذّرت إضافة وسيلة التواصل.") ?? jsonResponse({ identityId: data }, 201);
 }
 
 async function recordActivity(body: Record<string, unknown>, context: Context) {
@@ -189,6 +226,7 @@ export default {
     }
 
     if (body.action === "create_lead") return createLead(body, context);
+    if (body.action === "add_identity") return addIdentity(body, context);
     if (body.action === "record_activity") return recordActivity(body, context);
     return jsonResponse({ message: "أمر CRM غير معروف." }, 400);
   },

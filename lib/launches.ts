@@ -3,6 +3,9 @@ import type { Database } from "./supabase/database.types";
 export type LaunchType = Database["public"]["Enums"]["launch_type"];
 export type LaunchStatus = Database["public"]["Enums"]["launch_status"];
 export type LaunchGate = Database["public"]["Enums"]["launch_gate"];
+export type LaunchDocumentStatus = Database["public"]["Enums"]["launch_document_status"];
+export type LaunchDeliverableKind = Database["public"]["Enums"]["launch_deliverable_kind"];
+export type LaunchBudgetCategory = Database["public"]["Enums"]["launch_budget_category"];
 
 type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -41,3 +44,30 @@ export const launchGateConfig: Record<
 export const launchGates = (Object.keys(launchGateConfig) as LaunchGate[]).sort(
   (a, b) => launchGateConfig[a].order - launchGateConfig[b].order,
 );
+
+export const launchDocumentStatusConfig: Record<LaunchDocumentStatus, { label: string; tone: Tone }> = {
+  draft: { label: "مسودة", tone: "neutral" },
+  submitted: { label: "مُسلّم", tone: "info" },
+  approved: { label: "معتمد", tone: "success" },
+};
+
+export const launchDeliverableKindConfig: Record<LaunchDeliverableKind, { label: string }> = {
+  reel: { label: "ريلز" },
+  story: { label: "ستوري" },
+  design: { label: "تصميم" },
+  telegram_post: { label: "بوست Telegram" },
+  social_post: { label: "بوست سوشيال" },
+  email: { label: "رسالة بريد" },
+  ad: { label: "إعلان" },
+  landing_page: { label: "صفحة هبوط" },
+  webinar_asset: { label: "أصل ويبنار" },
+  other: { label: "مخرج آخر" },
+};
+
+export const launchBudgetCategoryConfig: Record<LaunchBudgetCategory, { label: string }> = {
+  production: { label: "إنتاج" },
+  media_spend: { label: "ميزانية إعلانية" },
+  tools: { label: "أدوات وبرامج" },
+  event: { label: "ويبنار / حدث" },
+  other: { label: "تكلفة أخرى" },
+};

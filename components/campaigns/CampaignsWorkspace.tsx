@@ -3,10 +3,13 @@
 import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
+  Banknote,
   CalendarClock,
   CheckCircle2,
   CircleUserRound,
   Film,
+  FileText,
+  ListChecks,
   Link2,
   LoaderCircle,
   LockKeyhole,
@@ -14,25 +17,35 @@ import {
   RefreshCw,
   Route,
   Sparkles,
+  Upload,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   launchGateConfig,
   launchGates,
+  launchBudgetCategoryConfig,
+  launchDeliverableKindConfig,
+  launchDocumentStatusConfig,
   launchStatusConfig,
   launchTypeConfig,
+  type LaunchBudgetCategory,
+  type LaunchDeliverableKind,
+  type LaunchDocumentStatus,
   type LaunchGate,
   type LaunchType,
 } from "../../lib/launches";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
-import { canManageTasks } from "../../lib/tasks";
+import { canManageTasks, taskStatusConfig } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 
 type Launch = Tables<"launches">;
 type LaunchContentLink = Tables<"launch_content_items">;
+type LaunchDocument = Tables<"launch_documents">;
+type LaunchDeliverable = Tables<"launch_deliverables">;
+type LaunchDeliverableDependency = Tables<"launch_deliverable_dependencies">;
 type ContentItem = Tables<"content_items">;
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
@@ -96,10 +109,16 @@ export function CampaignsWorkspace() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [contentLinks, setContentLinks] = useState<LaunchContentLink[]>([]);
+  const [documents, setDocuments] = useState<LaunchDocument[]>([]);
+  const [deliverables, setDeliverables] = useState<LaunchDeliverable[]>([]);
+  const [deliverableDependencies, setDeliverableDependencies] = useState<LaunchDeliverableDependency[]>([]);
   const [contentSelection, setContentSelection] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [documentFormId, setDocumentFormId] = useState<string | null>(null);
+  const [deliverableFormId, setDeliverableFormId] = useState<string | null>(null);
+  const [submissionFormId, setSubmissionFormId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
   const [renderNow] = useState(() => Date.now());
@@ -108,7 +127,7 @@ export function CampaignsWorkspace() {
 
   const refreshLaunches = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
-    const [launchResult, taskResult, contentResult, linkResult] = await Promise.all([
+    const [launchResult, taskResult, contentResult, linkResult, documentResult, deliverableResult, dependencyResult] = await Promise.all([
       supabase
         .from("launches")
         .select("*")
@@ -118,7 +137,7 @@ export function CampaignsWorkspace() {
         .from("tasks")
         .select("*")
         .eq("organization_id", organizationId)
-        .not("launch_id", "is", null)
+        .or("launch_id.not.is.null,launch_deliverable_id.not.is.null")
         .order("due_at", { ascending: true }),
       supabase
         .from("content_items")
@@ -130,17 +149,26 @@ export function CampaignsWorkspace() {
         .select("*")
         .eq("organization_id", organizationId)
         .order("created_at", { ascending: true }),
+      supabase.from("launch_documents").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
+      supabase.from("launch_deliverables").select("*").eq("organization_id", organizationId).order("due_at", { ascending: true }),
+      supabase.from("launch_deliverable_dependencies").select("*").eq("organization_id", organizationId).order("created_at", { ascending: true }),
     ]);
 
     if (launchResult.error) throw launchResult.error;
     if (taskResult.error) throw taskResult.error;
     if (contentResult.error) throw contentResult.error;
     if (linkResult.error) throw linkResult.error;
+    if (documentResult.error) throw documentResult.error;
+    if (deliverableResult.error) throw deliverableResult.error;
+    if (dependencyResult.error) throw dependencyResult.error;
 
     setLaunches(launchResult.data ?? []);
     setTasks(taskResult.data ?? []);
     setContentItems(contentResult.data ?? []);
     setContentLinks(linkResult.data ?? []);
+    setDocuments(documentResult.data ?? []);
+    setDeliverables(deliverableResult.data ?? []);
+    setDeliverableDependencies(dependencyResult.data ?? []);
   }, []);
 
   const loadWorkspace = useCallback(async (activeSession: Session) => {
@@ -164,6 +192,9 @@ export function CampaignsWorkspace() {
         setTasks([]);
         setContentItems([]);
         setContentLinks([]);
+        setDocuments([]);
+        setDeliverables([]);
+        setDeliverableDependencies([]);
         return;
       }
 
@@ -228,6 +259,9 @@ export function CampaignsWorkspace() {
         setTasks([]);
         setContentItems([]);
         setContentLinks([]);
+        setDocuments([]);
+        setDeliverables([]);
+        setDeliverableDependencies([]);
         setLoading(false);
       }
     });
@@ -259,6 +293,9 @@ export function CampaignsWorkspace() {
         table: "launch_content_items",
         filter: `organization_id=eq.${workspace.organization.id}`,
       }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "launch_documents", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "launch_deliverables", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "launch_deliverable_dependencies", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
       .subscribe();
 
     return () => {
@@ -286,6 +323,106 @@ export function CampaignsWorkspace() {
     }
     return grouped;
   }, [contentLinks]);
+
+  const documentsByLaunch = useMemo(() => {
+    const grouped = new Map<string, LaunchDocument[]>();
+    for (const document of documents) grouped.set(document.launch_id, [...(grouped.get(document.launch_id) ?? []), document]);
+    return grouped;
+  }, [documents]);
+
+  const deliverablesByLaunch = useMemo(() => {
+    const grouped = new Map<string, LaunchDeliverable[]>();
+    for (const deliverable of deliverables) grouped.set(deliverable.launch_id, [...(grouped.get(deliverable.launch_id) ?? []), deliverable]);
+    return grouped;
+  }, [deliverables]);
+
+  const dependenciesByDeliverable = useMemo(() => {
+    const grouped = new Map<string, LaunchDeliverableDependency[]>();
+    for (const dependency of deliverableDependencies) grouped.set(dependency.deliverable_id, [...(grouped.get(dependency.deliverable_id) ?? []), dependency]);
+    return grouped;
+  }, [deliverableDependencies]);
+
+  async function invokeLaunch(body: Record<string, unknown>, successMessage: string) {
+    if (!workspace) return false;
+    setWorking(true);
+    setError(null);
+    setNotice(null);
+    const { error: commandError } = await getSupabaseBrowserClient().functions.invoke("launch-commands", { body });
+    setWorking(false);
+    if (commandError) {
+      setError(await getSupabaseFunctionErrorMessage(commandError, "تعذّر تنفيذ أمر الإطلاق. لم يتم حفظ أي جزء من العملية."));
+      return false;
+    }
+    setNotice(successMessage);
+    await refreshLaunches(workspace.organization.id);
+    return true;
+  }
+
+  async function saveGateDocument(event: FormEvent<HTMLFormElement>, launch: Launch) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const saved = await invokeLaunch({
+      action: "save_gate_document",
+      launch_id: launch.id,
+      gate: String(form.get("gate") ?? "strategy") as LaunchGate,
+      title: String(form.get("title") ?? "").trim(),
+      summary: String(form.get("summary") ?? "").trim(),
+      document_url: String(form.get("document_url") ?? "").trim(),
+      status: String(form.get("status") ?? "submitted") as LaunchDocumentStatus,
+    }, "تم حفظ مخرج البوابة داخل الإطلاق وأصبح مرئيًا للفريق.");
+    if (saved) {
+      formElement.reset();
+      setDocumentFormId(null);
+    }
+  }
+
+  async function createDeliverable(event: FormEvent<HTMLFormElement>, launch: Launch) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const dueAt = new Date(String(form.get("due_at") ?? ""));
+    if (Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
+      setError("حدد موعد تسليم صحيحًا في المستقبل.");
+      return;
+    }
+    const created = await invokeLaunch({
+      action: "create_deliverable",
+      launch_id: launch.id,
+      kind: String(form.get("kind") ?? "other") as LaunchDeliverableKind,
+      title: String(form.get("title") ?? "").trim(),
+      brief: String(form.get("brief") ?? "").trim(),
+      channel: String(form.get("channel") ?? "").trim(),
+      destination: String(form.get("destination") ?? "").trim(),
+      planned_quantity: Number(form.get("planned_quantity") ?? 1),
+      owner_id: String(form.get("owner_id") ?? ""),
+      due_at: dueAt.toISOString(),
+      budget_category: String(form.get("budget_category") ?? "production") as LaunchBudgetCategory,
+      budget_amount: Number(form.get("budget_amount") ?? 0),
+      currency: String(form.get("currency") ?? launch.currency).trim().toUpperCase(),
+      depends_on_deliverable_id: String(form.get("depends_on_deliverable_id") ?? ""),
+    }, "تم إنشاء مخرج الإطلاق ومهمته واعتماديته معًا.");
+    if (created) {
+      formElement.reset();
+      setDeliverableFormId(null);
+    }
+  }
+
+  async function submitDeliverable(event: FormEvent<HTMLFormElement>, deliverable: LaunchDeliverable) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const submitted = await invokeLaunch({
+      action: "submit_deliverable",
+      deliverable_id: deliverable.id,
+      result_note: String(form.get("result_note") ?? "").trim(),
+      result_url: String(form.get("result_url") ?? "").trim(),
+    }, "تم حفظ التسليم ونقل المهمة تلقائيًا إلى المراجعة.");
+    if (submitted) {
+      formElement.reset();
+      setSubmissionFormId(null);
+    }
+  }
 
   async function createLaunch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -467,6 +604,12 @@ export function CampaignsWorkspace() {
               const bOrder = b.launch_gate ? launchGateConfig[b.launch_gate].order : 99;
               return aOrder - bOrder;
             });
+            const launchDocuments = documentsByLaunch.get(launch.id) ?? [];
+            const launchDeliverables = deliverablesByLaunch.get(launch.id) ?? [];
+            const deliverableById = new Map(launchDeliverables.map((deliverable) => [deliverable.id, deliverable]));
+            const deliverableTaskById = new Map(
+              tasks.filter((task) => task.launch_deliverable_id).map((task) => [task.launch_deliverable_id as string, task]),
+            );
             const linkedItems = (linksByLaunch.get(launch.id) ?? [])
               .map((link) => contentById.get(link.content_item_id))
               .filter((item): item is ContentItem => Boolean(item));
@@ -482,6 +625,19 @@ export function CampaignsWorkspace() {
               launch.sales_target === null ? null : { label: "مبيعات", value: formatTarget(launch.sales_target, "Sale") },
               launch.revenue_target === null ? null : { label: "إيراد", value: formatTarget(launch.revenue_target, launch.currency) },
             ].filter((target): target is { label: string; value: string } => Boolean(target));
+            const quantitySummary = Object.entries(launchDeliverables.reduce<Record<string, number>>((summary, deliverable) => {
+              summary[deliverable.kind] = (summary[deliverable.kind] ?? 0) + deliverable.planned_quantity;
+              return summary;
+            }, {}));
+            const budgetSummary = Object.entries(launchDeliverables.reduce<Record<string, number>>((summary, deliverable) => {
+              summary[deliverable.currency] = (summary[deliverable.currency] ?? 0) + Number(deliverable.budget_amount);
+              return summary;
+            }, {}));
+            const executionDone = launchDeliverables.filter((deliverable) => deliverableTaskById.get(deliverable.id)?.status === "done").length;
+            const canSaveGateOutput = manager || launchTasks.some((task) => task.owner_id === session.user.id);
+            const launchEndTime = new Date(launch.ends_at).getTime();
+            const canPlanMore = manager && launchEndTime > renderNow;
+            const suggestedDue = toLocalDateTimeInput(new Date(Math.min(renderNow + 7 * 24 * 60 * 60 * 1000, launchEndTime - 60 * 60 * 1000)));
 
             return (
               <article className="panel launch-card" key={launch.id}>
@@ -518,6 +674,46 @@ export function CampaignsWorkspace() {
                     );
                   })}
                 </ol>
+
+                <section className="launch-execution-section">
+                  <div className="launch-execution-heading"><div><p className="overline">مخرجات البوابات</p><h4>هنا تُحفظ الاستراتيجية وباقي قرارات الإطلاق</h4><p>كل تسليم يبقى داخل الكورس بإصداره وحالته ورابطه؛ إكمال مهمة البوابة يتطلب وجود مخرج محفوظ.</p></div>{canSaveGateOutput ? <Button type="button" variant="secondary" onClick={() => setDocumentFormId(documentFormId === launch.id ? null : launch.id)}><FileText size={14} /> إضافة مخرج بوابة</Button> : null}</div>
+                  {documentFormId === launch.id && canSaveGateOutput ? <form className="launch-inline-form" onSubmit={(event) => void saveGateDocument(event, launch)}>
+                    <label><span>البوابة</span><select name="gate" defaultValue="strategy">{launchGates.map((gate) => <option value={gate} key={gate}>{launchGateConfig[gate].label}</option>)}</select></label>
+                    <label><span>حالة المخرج</span><select name="status" defaultValue={manager ? "approved" : "submitted"}>{(Object.keys(launchDocumentStatusConfig) as LaunchDocumentStatus[]).filter((status) => manager || status !== "approved").map((status) => <option value={status} key={status}>{launchDocumentStatusConfig[status].label}</option>)}</select></label>
+                    <label className="wide"><span>عنوان المخرج</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: الاستراتيجية التسويقية المعتمدة لإطلاق كورس أيمن" /></label>
+                    <label className="wide"><span>القرار والملخص التنفيذي</span><textarea name="summary" minLength={5} maxLength={10000} rows={4} required placeholder="الرسالة، الجمهور، الزوايا، القنوات، الأهداف والقرارات التي سيعمل عليها الفريق…" /></label>
+                    <label className="wide"><span>رابط الملف أو المستند — اختياري</span><input name="document_url" type="url" dir="ltr" maxLength={2000} placeholder="https://drive.google.com/..." /></label>
+                    <div className="form-actions"><Button type="submit" disabled={working}><Upload size={14} /> حفظ داخل الإطلاق</Button><button className="text-button" type="button" onClick={() => setDocumentFormId(null)}>إلغاء</button></div>
+                  </form> : null}
+                  {launchDocuments.length ? <div className="launch-document-list">{launchDocuments.map((document) => <article key={document.id}><header><div><strong>{document.title}</strong><small>{launchGateConfig[document.gate].label} · إصدار {document.version}</small></div><StatusBadge tone={launchDocumentStatusConfig[document.status].tone}>{launchDocumentStatusConfig[document.status].label}</StatusBadge></header><p>{document.summary}</p><footer><span>{peopleById.get(document.created_by)?.name ?? "عضو فريق"} · {formatDate(document.created_at)}</span>{document.document_url ? <a href={document.document_url} target="_blank" rel="noreferrer">فتح الملف <Link2 size={12} /></a> : null}</footer></article>)}</div> : <p className="launch-assets-empty">لم يُحفظ مخرج للاستراتيجية أو لأي بوابة بعد. ابدأ بالاستراتيجية حتى يعرف الفريق ما الذي سينفذه.</p>}
+                </section>
+
+                <section className="launch-execution-section">
+                  <div className="launch-execution-heading"><div><p className="overline">الخطة التنفيذية</p><h4>الكميات والمواعيد والميزانية والاعتماديات</h4><p>{launchDeliverables.length ? `اكتمل ${executionDone} من ${launchDeliverables.length} بنود تنفيذية.` : "حوّل الاستراتيجية إلى مخرجات قابلة للتسليم؛ كل بند ينشئ مهمة تلقائيًا."}</p></div>{canPlanMore ? <Button type="button" onClick={() => setDeliverableFormId(deliverableFormId === launch.id ? null : launch.id)}><Plus size={14} /> إضافة بند تنفيذي</Button> : null}</div>
+                  {quantitySummary.length || budgetSummary.length ? <div className="launch-execution-kpis"><div><ListChecks size={16} /><span>{quantitySummary.map(([kind, quantity]) => `${quantity} ${launchDeliverableKindConfig[kind as LaunchDeliverableKind].label}`).join(" · ")}</span></div><div><Banknote size={16} /><span>{budgetSummary.map(([currency, amount]) => formatTarget(amount, currency)).join(" · ") || "لا توجد ميزانية مرصودة"}</span></div></div> : null}
+                  {deliverableFormId === launch.id && canPlanMore ? <form className="launch-inline-form launch-deliverable-form" onSubmit={(event) => void createDeliverable(event, launch)}>
+                    <label><span>نوع المخرج</span><select name="kind" defaultValue="reel">{(Object.keys(launchDeliverableKindConfig) as LaunchDeliverableKind[]).map((kind) => <option value={kind} key={kind}>{launchDeliverableKindConfig[kind].label}</option>)}</select></label>
+                    <label><span>الكمية المطلوبة</span><input name="planned_quantity" type="number" min="1" max="500" step="1" defaultValue="1" required /></label>
+                    <label className="wide"><span>عنوان البند</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: ريلز التسجيل المبكر للكورس" /></label>
+                    <label><span>القناة</span><input name="channel" minLength={2} maxLength={120} placeholder="Instagram / Telegram / Meta" /></label>
+                    <label><span>مكان النشر أو التسليم</span><input name="destination" minLength={2} maxLength={500} placeholder="حساب Instagram أو فولدر Drive" /></label>
+                    <label><span>المسؤول</span><select name="owner_id" defaultValue={session.user.id}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+                    <label><span>الموعد النهائي</span><input name="due_at" type="datetime-local" defaultValue={suggestedDue} required /></label>
+                    <label><span>نوع التكلفة</span><select name="budget_category" defaultValue="production">{(Object.keys(launchBudgetCategoryConfig) as LaunchBudgetCategory[]).map((category) => <option value={category} key={category}>{launchBudgetCategoryConfig[category].label}</option>)}</select></label>
+                    <label><span>الميزانية</span><input name="budget_amount" type="number" min="0" step="0.01" defaultValue="0" required /></label>
+                    <label><span>العملة</span><input name="currency" defaultValue={launch.currency} minLength={3} maxLength={3} pattern="[A-Za-z]{3}" dir="ltr" required /></label>
+                    <label><span>يعتمد على — اختياري</span><select name="depends_on_deliverable_id"><option value="">لا يعتمد على بند سابق</option>{launchDeliverables.map((deliverable) => <option value={deliverable.id} key={deliverable.id}>{deliverable.title}</option>)}</select></label>
+                    <label className="wide"><span>التفاصيل ومعيار التسليم</span><textarea name="brief" minLength={5} maxLength={5000} rows={4} required placeholder="الفكرة، الرسالة، المطلوب، المقاسات، المراجع، ما الذي يعتبر تسليمًا مقبولًا…" /></label>
+                    <div className="form-actions"><Button type="submit" disabled={working}><Sparkles size={14} /> إنشاء البند والمهمة</Button><button className="text-button" type="button" onClick={() => setDeliverableFormId(null)}>إلغاء</button></div>
+                  </form> : null}
+                  {launchDeliverables.length ? <div className="launch-deliverable-list">{launchDeliverables.map((deliverable) => {
+                    const task = deliverableTaskById.get(deliverable.id);
+                    const dependencies = (dependenciesByDeliverable.get(deliverable.id) ?? []).map((dependency) => deliverableById.get(dependency.depends_on_deliverable_id)).filter((item): item is LaunchDeliverable => Boolean(item));
+                    const canSubmit = manager || deliverable.owner_id === session.user.id;
+                    const submittable = task && ["ready", "in_progress", "review"].includes(task.status);
+                    return <article key={deliverable.id} id={`deliverable-${deliverable.id}`}><header><div><span className="launch-deliverable-kind">{deliverable.planned_quantity} × {launchDeliverableKindConfig[deliverable.kind].label}</span><h5>{deliverable.title}</h5></div>{task ? <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusConfig[task.status].label}</StatusBadge> : null}</header><p>{deliverable.brief}</p><dl><div><dt>المسؤول</dt><dd>{peopleById.get(deliverable.owner_id)?.name ?? "عضو فريق"}</dd></div><div><dt>الموعد</dt><dd>{formatDate(deliverable.due_at)}</dd></div><div><dt>القناة / المكان</dt><dd>{[deliverable.channel, deliverable.destination].filter(Boolean).join(" · ") || "غير محدد"}</dd></div><div><dt>{launchBudgetCategoryConfig[deliverable.budget_category].label}</dt><dd>{formatTarget(Number(deliverable.budget_amount), deliverable.currency)}</dd></div></dl>{dependencies.length ? <p className="launch-dependency-note"><Route size={12} /> يبدأ بعد: {dependencies.map((dependency) => dependency.title).join(" + ")}</p> : null}{deliverable.delivered_at ? <div className="launch-delivery-result"><strong>التسليم المحفوظ</strong>{deliverable.result_note ? <p>{deliverable.result_note}</p> : null}{deliverable.result_url ? <a href={deliverable.result_url} target="_blank" rel="noreferrer">فتح التسليم <Link2 size={12} /></a> : null}<small>{formatDate(deliverable.delivered_at)}</small></div> : null}{canSubmit && submittable ? <button className="text-button" type="button" onClick={() => setSubmissionFormId(submissionFormId === deliverable.id ? null : deliverable.id)}><Upload size={12} /> {deliverable.delivered_at ? "تحديث التسليم" : "تسليم النتيجة"}</button> : null}{submissionFormId === deliverable.id && canSubmit && submittable ? <form className="launch-submission-form" onSubmit={(event) => void submitDeliverable(event, deliverable)}><label><span>ملاحظة النتيجة</span><textarea name="result_note" maxLength={5000} rows={3} placeholder="ما الذي تم؟ وما الذي يجب أن يراجعه المدير؟" /></label><label><span>رابط التسليم — اختياري إذا كتبت ملاحظة</span><input name="result_url" type="url" dir="ltr" maxLength={2000} placeholder="https://drive.google.com/..." /></label><div className="form-actions"><Button type="submit" disabled={working}>حفظ وإرسال للمراجعة</Button><button className="text-button" type="button" onClick={() => setSubmissionFormId(null)}>إلغاء</button></div></form> : null}</article>;
+                  })}</div> : <p className="launch-assets-empty">لا توجد بنود تنفيذية بعد. مثال مناسب للبداية: 6 ريلز + 12 ستوري + 4 تصميمات + 3 إعلانات، لكن الأرقام تعتمد على الاستراتيجية التي تعتمدها أنت.</p>}
+                </section>
 
                 <div className="launch-lower-grid">
                   <section className="launch-target-panel">

@@ -65,14 +65,19 @@ Telegram remains the raw-material inbox for now: paste the direct message/file l
 
 1. Sign in with the owner account and open `/campaigns`.
 2. Create a launch with a real brief, future start/end, and at least one measurable target. The owner can remain assigned to all eight gates during personal testing.
-3. Move the active gate through the task board. Completing a gate unlocks only the next eligible gates; Go / No-Go remains locked until registration, delivery, promotion, and tracking are complete.
-4. Create content in `/content`, then attach it to the launch from the launch card. Removing the link never deletes either record.
-5. Target values are planning data. Actual registrations, revenue, and social results remain visibly unavailable until a verified source is connected.
+3. Inside the launch, save the strategy as the **strategy gate output** with its summary and optional Drive link. The strategy task cannot be completed without this evidence.
+4. Add two execution lines, such as a reel batch and thumbnail/design batch. Give each a quantity, owner, deadline, destination, and budget; make the second depend on the first and confirm both tasks appear in `/tasks`.
+5. Start the first execution task, return to the launch, submit its result note or URL, and confirm it moves to review. Complete it to verify the dependent task unlocks.
+6. Move launch gates through the task board. Completing a gate unlocks only the next eligible gates; Go / No-Go remains locked until registration, delivery, promotion, and tracking are complete.
+7. Create content in `/content`, then attach it to the launch from the launch card. Removing the link never deletes either record.
+8. Target values are planning data. Actual registrations, revenue, and social results remain visibly unavailable until a verified source is connected.
 
 ## Personal CRM test
 
 1. Sign in with the owner account and open `/crm`.
-2. Add one clearly identified personal test lead with a future follow-up. You can select a standard source/reason or choose the custom option and type a new one. Add an optional direct Telegram, WhatsApp, Instagram, Facebook, Messenger, or other chat link. This creates the contact record, immutable first activity, chat link, and one linked task atomically.
-3. Open `/tasks` and confirm the generic CRM follow-up task appears without the person's name or contact details.
-4. Return to the linked CRM record, confirm that **فتح شات** opens the correct external conversation, and log a call, message, email, or note. An active stage requires a future follow-up and creates exactly one next task.
-5. Choose a closed stage to stop follow-up. `do_not_contact` also records denied consent. No action in this test sends a message or imports external customers.
+2. Create one test lead with both phone and email, then verify both appear on the card and either value finds the same lead through search.
+3. Filter by owner and stage, open the owner performance panel, and confirm totals change only from recorded CRM work.
+4. Add an optional direct Telegram, WhatsApp, Instagram, Facebook, Messenger, or other chat link. The contact record, immutable first activity, chat link, identities, and one linked task are created atomically.
+5. Open `/tasks` and confirm the generic CRM follow-up task appears without the person's name or contact details.
+6. Return to the linked CRM record, confirm that **فتح شات** opens the correct external conversation, and log a call, message, email, or note. An active stage requires a future follow-up and creates exactly one next task.
+7. Choose a closed stage to stop follow-up. `do_not_contact` also records denied consent. No action in this test sends a message or imports external customers.

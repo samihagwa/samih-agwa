@@ -66,17 +66,22 @@ Existing Market Whales application
 - `launches` is the strategic source of truth for the objective, audience, offer, CTA, schedule, and measurable targets.
 - A launch is created atomically through the JWT-protected `launch-commands` Edge Function; the database command is executable by `service_role` only.
 - Each launch produces eight normal tasks: strategy, offer, registration, delivery, promotion, tracking, Go / No-Go, and launch-day operation.
+- `launch_documents` is the versioned home for each gate's real output. Strategy, offer, promotion plan, tracking plan, Go / No-Go decision, and launch report stay inside the launch with a summary, status, author, and optional Drive/document URL. A gate cannot be completed without a submitted output.
+- `launch_deliverables` converts the strategy into quantified execution lines such as reels, stories, designs, Telegram posts, emails, ads, landing pages, and webinar assets. Every line records quantity, brief, channel/destination, owner, deadline, budget category, amount, currency, and delivery evidence.
+- Creating a deliverable also creates one canonical task. Deliverable dependencies are mirrored into the shared task dependency graph, so downstream work stays in backlog until its predecessors are complete; a result must be saved inside the launch before the task can enter review.
 - The shared task dependency engine unlocks gates only after every predecessor is done. Launch status is derived by database triggers from those tasks and cannot drift through a separate browser control.
 - Content association is many-to-many and tenant-safe through composite foreign keys. Attach and detach commands are reversible, leadership-only, and audited; neither operation deletes the launch or content item.
 - Targets are plan data. Actual performance stays unavailable until a verified ingestion or approved manual observation workflow is implemented.
 
 ## CRM contract
 
-- `crm_contacts` is the governed lead record; `crm_identities` deduplicates the primary phone, email, or Telegram username inside one organization. A structured source and registration reason remain available for reporting, while `source_detail` and `interest_detail` capture new custom values without changing the schema for every campaign.
+- `crm_contacts` is the governed lead record; `crm_identities` stores and deduplicates up to one phone, one email, and one Telegram username per lead inside one organization, with exactly one marked primary. A structured source and registration reason remain available for reporting, while `source_detail` and `interest_detail` capture new custom values without changing the schema for every campaign.
 - `crm_conversation_links` stores direct Telegram, WhatsApp, Instagram, Facebook, Messenger, or other chat URLs separately from contact identity. This keeps deduplication stable while allowing one-click access to the exact conversation.
 - A lead is created atomically through the JWT-protected `crm-commands` Edge Function. The database commands are executable by `service_role` only, so the browser cannot write contact, identity, conversation-link, or activity tables directly.
 - Leadership can see the organization pipeline. A working member can see and act only on leads they own. The same ownership rule protects identities, conversation links, and immutable activity history through RLS.
 - Every active lead has exactly one open, ordinary task linked by `crm_contact_id`. The task contains no customer name or contact value, so the shared task board does not leak CRM details.
+- CRM discovery is server-side and paginated. The RLS-aware search covers names, notes, custom acquisition context, every identity, direct conversation URLs/labels, and activity summaries without downloading the full customer database into the browser.
+- Leadership performance views report recorded evidence only: active and overdue leads, wins, activities, completed follow-ups, on-time follow-ups, and last activity. They deliberately do not assign subjective labels to people.
 - CRM task status is controlled only by the CRM command. Recording a result closes the current task and either creates the next future follow-up or closes the lead with a reason.
 - Selecting `do_not_contact` records denied consent and prevents another follow-up. No message, import, or external synchronization is active in this foundation.
 
