@@ -59,11 +59,20 @@ Existing Market Whales application
 - Content status is derived by database triggers from linked task state, and important changes are written to the audit log.
 - External social publishing remains manual until a verified platform integration returns a real publish confirmation.
 
+## Campaign launch contract
+
+- `launches` is the strategic source of truth for the objective, audience, offer, CTA, schedule, and measurable targets.
+- A launch is created atomically through the JWT-protected `launch-commands` Edge Function; the database command is executable by `service_role` only.
+- Each launch produces eight normal tasks: strategy, offer, registration, delivery, promotion, tracking, Go / No-Go, and launch-day operation.
+- The shared task dependency engine unlocks gates only after every predecessor is done. Launch status is derived by database triggers from those tasks and cannot drift through a separate browser control.
+- Content association is many-to-many and tenant-safe through composite foreign keys. Attach and detach commands are reversible, leadership-only, and audited; neither operation deletes the launch or content item.
+- Targets are plan data. Actual performance stays unavailable until a verified ingestion or approved manual observation workflow is implemented.
+
 ## Initial domains
 
 1. Identity, organizations, memberships, and roles — foundation live; team onboarding pending.
 2. Tasks, transitions, ownership, deadlines, acceptance criteria, Realtime, and activity — foundation live.
 3. Content assets, briefs, dependency-based production stages, and manual publish confirmation — foundation live; external publishing and metrics pending.
-4. Campaigns, launches, milestones, assets, and readiness gates.
+4. Campaigns, launches, assets, readiness gates, and Go / No-Go — foundation live; external performance ingestion pending.
 5. People, leads, customers, sources, consent, and pipeline.
 6. Metric definitions, observations, targets, experiments, and decisions.

@@ -11,11 +11,13 @@ import {
   LockKeyhole,
   Plus,
   RefreshCw,
+  Route,
   Send,
   UserRoundCheck,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { contentStepConfig } from "../../lib/content";
+import { launchGateConfig } from "../../lib/launches";
 import {
   allowedTaskTransitions,
   canManageTasks,
@@ -402,6 +404,7 @@ export function TasksWorkspace() {
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} key={task.id}>
                       <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><small>v{task.version}</small></div>
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
+                      {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
                       <h3>{task.title}</h3>
                       {task.description ? <p>{task.description}</p> : null}
                       <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong>{task.acceptance_criteria}</span></div>

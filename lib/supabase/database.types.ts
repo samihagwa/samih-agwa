@@ -130,6 +130,143 @@ export type Database = {
           },
         ]
       }
+      launch_content_items: {
+        Row: {
+          content_item_id: string
+          created_at: string
+          created_by: string
+          launch_id: string
+          organization_id: string
+        }
+        Insert: {
+          content_item_id: string
+          created_at?: string
+          created_by?: string
+          launch_id: string
+          organization_id: string
+        }
+        Update: {
+          content_item_id?: string
+          created_at?: string
+          created_by?: string
+          launch_id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launch_content_items_content_item_id_organization_id_fkey"
+            columns: ["content_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "launch_content_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_content_items_launch_id_organization_id_fkey"
+            columns: ["launch_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      launches: {
+        Row: {
+          audience: string
+          created_at: string
+          created_by: string
+          currency: string
+          ends_at: string
+          id: string
+          lead_target: number | null
+          objective: string
+          offer: string
+          organization_id: string
+          owner_id: string
+          primary_cta: string
+          revenue_target: number | null
+          sales_target: number | null
+          starts_at: string
+          status: Database["public"]["Enums"]["launch_status"]
+          title: string
+          type: Database["public"]["Enums"]["launch_type"]
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          audience: string
+          created_at?: string
+          created_by?: string
+          currency?: string
+          ends_at: string
+          id?: string
+          lead_target?: number | null
+          objective: string
+          offer: string
+          organization_id: string
+          owner_id: string
+          primary_cta: string
+          revenue_target?: number | null
+          sales_target?: number | null
+          starts_at: string
+          status?: Database["public"]["Enums"]["launch_status"]
+          title: string
+          type: Database["public"]["Enums"]["launch_type"]
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          audience?: string
+          created_at?: string
+          created_by?: string
+          currency?: string
+          ends_at?: string
+          id?: string
+          lead_target?: number | null
+          objective?: string
+          offer?: string
+          organization_id?: string
+          owner_id?: string
+          primary_cta?: string
+          revenue_target?: number | null
+          sales_target?: number | null
+          starts_at?: string
+          status?: Database["public"]["Enums"]["launch_status"]
+          title?: string
+          type?: Database["public"]["Enums"]["launch_type"]
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launches_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -327,6 +464,8 @@ export type Database = {
           description: string | null
           due_at: string
           id: string
+          launch_gate: Database["public"]["Enums"]["launch_gate"] | null
+          launch_id: string | null
           organization_id: string
           owner_id: string
           priority: Database["public"]["Enums"]["task_priority"]
@@ -346,6 +485,8 @@ export type Database = {
           description?: string | null
           due_at: string
           id?: string
+          launch_gate?: Database["public"]["Enums"]["launch_gate"] | null
+          launch_id?: string | null
           organization_id: string
           owner_id: string
           priority?: Database["public"]["Enums"]["task_priority"]
@@ -365,6 +506,8 @@ export type Database = {
           description?: string | null
           due_at?: string
           id?: string
+          launch_gate?: Database["public"]["Enums"]["launch_gate"] | null
+          launch_id?: string | null
           organization_id?: string
           owner_id?: string
           priority?: Database["public"]["Enums"]["task_priority"]
@@ -390,6 +533,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tasks_launch_id_organization_id_fkey"
+            columns: ["launch_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
             foreignKeyName: "tasks_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
@@ -410,8 +560,43 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      attach_content_to_launch: {
+        Args: {
+          target_content_item_id: string
+          target_launch_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
       bootstrap_market_whales_organization: {
         Args: { target_user_id: string }
+        Returns: string
+      }
+      create_launch_workflow: {
+        Args: {
+          delivery_owner_id: string
+          go_no_go_owner_id: string
+          launch_audience: string
+          launch_cta: string
+          launch_currency: string
+          launch_day_owner_id: string
+          launch_ends_at: string
+          launch_kind: Database["public"]["Enums"]["launch_type"]
+          launch_lead_target: number
+          launch_objective: string
+          launch_offer: string
+          launch_revenue_target: number
+          launch_sales_target: number
+          launch_starts_at: string
+          launch_title: string
+          offer_owner_id: string
+          promotion_owner_id: string
+          registration_owner_id: string
+          strategy_owner_id: string
+          target_organization_id: string
+          target_user_id: string
+          tracking_owner_id: string
+        }
         Returns: string
       }
       create_reel_workflow: {
@@ -451,6 +636,14 @@ export type Database = {
         }
         Returns: string
       }
+      detach_content_from_launch: {
+        Args: {
+          target_content_item_id: string
+          target_launch_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "owner" | "admin" | "manager" | "member" | "viewer"
@@ -477,6 +670,24 @@ export type Database = {
         | "caption"
         | "approval"
         | "publishing"
+      launch_gate:
+        | "strategy"
+        | "offer"
+        | "registration"
+        | "delivery"
+        | "promotion"
+        | "tracking"
+        | "go_no_go"
+        | "launch_day"
+      launch_status:
+        | "planning"
+        | "production"
+        | "review"
+        | "ready"
+        | "live"
+        | "completed"
+        | "cancelled"
+      launch_type: "webinar" | "course" | "service" | "book" | "indicator"
       membership_status: "invited" | "active" | "suspended"
       task_priority: "low" | "normal" | "high" | "urgent"
       task_status:
@@ -641,6 +852,26 @@ export const Constants = {
         "approval",
         "publishing",
       ],
+      launch_gate: [
+        "strategy",
+        "offer",
+        "registration",
+        "delivery",
+        "promotion",
+        "tracking",
+        "go_no_go",
+        "launch_day",
+      ],
+      launch_status: [
+        "planning",
+        "production",
+        "review",
+        "ready",
+        "live",
+        "completed",
+        "cancelled",
+      ],
+      launch_type: ["webinar", "course", "service", "book", "indicator"],
       membership_status: ["invited", "active", "suspended"],
       task_priority: ["low", "normal", "high", "urgent"],
       task_status: [

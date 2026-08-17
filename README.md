@@ -31,7 +31,7 @@ This starter does not use `wrangler.jsonc`.
 
 ## Important status
 
-The identity, real task-management, and reel production foundations are live. The team has not been onboarded, no live tasks or content have been entered, and no production customer or social data is connected.
+The identity, task-management, reel-production, and campaign-launch foundations are live. The team has not been onboarded, no live tasks, content, or launches have been entered, and no production customer, sales, or social data is connected.
 
 ## First owner setup
 
@@ -49,3 +49,11 @@ The bootstrap endpoint is authenticated and can create only the first organizati
 3. Complete the brief and publish date. The owner account is assigned to all seven steps by default.
 4. Move linked tasks through the allowed states on `/tasks`. Completing a dependency unlocks the next eligible task automatically.
 5. The final publishing task is a manual confirmation until a verified Meta/platform integration is added.
+
+## Personal launch test
+
+1. Sign in with the owner account and open `/campaigns`.
+2. Create a launch with a real brief, future start/end, and at least one measurable target. The owner can remain assigned to all eight gates during personal testing.
+3. Move the active gate through the task board. Completing a gate unlocks only the next eligible gates; Go / No-Go remains locked until registration, delivery, promotion, and tracking are complete.
+4. Create content in `/content`, then attach it to the launch from the launch card. Removing the link never deletes either record.
+5. Target values are planning data. Actual registrations, revenue, and social results remain visibly unavailable until a verified source is connected.
