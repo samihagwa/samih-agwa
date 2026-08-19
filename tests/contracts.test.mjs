@@ -161,6 +161,10 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(compactMigration, /change_reel_approval_gate/);
   assert.match(taskWorkspace, /\.eq\("is_work_item", true\)/);
   assert.match(taskWorkspace, /content-workflow-group/);
+  assert.match(taskWorkspace, /contentWorkflowMatchesFilter/);
+  assert.match(taskWorkspace, /if \(isContentWorkflow\) return tasks\.every\(taskIsClosed\) \? "closed" : "work"/);
+  assert.match(taskWorkspace, /content-workflow-progress/);
+  assert.match(taskWorkspace, /مهمتك الآن/);
 });
 
 test("content production briefs, assets, and revision rounds share one secured workflow", async () => {
@@ -447,10 +451,11 @@ test("task and content workspaces default to focused current work with clear Ara
 });
 
 test("notifications, evidence-based team reports, and transparent coarse presence are tenant secured", async () => {
-  const [migration, hardening, selfRevisionFix, appShell, notificationCenter, presenceReporter, teamWorkspace, teamPage, types] = await Promise.all([
+  const [migration, hardening, selfRevisionFix, selfAssignmentFix, appShell, notificationCenter, presenceReporter, teamWorkspace, teamPage, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260819021613_team_operations_notifications_presence.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819022259_harden_user_state_commands.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819024032_notify_self_assigned_content_revisions.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819034452_notify_self_assigned_tasks.sql", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/auth/NotificationCenter.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/auth/PresenceReporter.tsx", import.meta.url), "utf8"),
@@ -472,6 +477,9 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
   assert.match(selfRevisionFix, /تم تسجيل طلب تعديل لك/);
   assert.match(selfRevisionFix, /on conflict \(dedupe_key\) do nothing/);
   assert.doesNotMatch(selfRevisionFix, /if new\.assigned_to is distinct from new\.requested_by/);
+  assert.match(selfAssignmentFix, /if new\.status = 'ready' then/);
+  assert.doesNotMatch(selfAssignmentFix, /new\.status = 'ready'\s+and new\.owner_id is distinct from actor/);
+  assert.match(selfAssignmentFix, /revoke all on function private\.notify_task_change\(\)/);
   assert.match(appShell, /NotificationCenter/);
   assert.match(appShell, /PresenceReporter/);
   assert.match(notificationCenter, /mark_notification_read/);

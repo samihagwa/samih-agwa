@@ -56,11 +56,11 @@ type Workspace = {
 type TaskFilter = "active" | "mine" | "overdue" | "completed" | "all";
 type BoardEntry = { id: string; contentItemId: string | null; tasks: Task[]; laneId: string };
 
-const boardLanes: Array<{ id: string; label: string; statuses: TaskStatus[] }> = [
-  { id: "work", label: "شغل مطلوب تنفيذه", statuses: ["backlog", "ready", "in_progress"] },
-  { id: "review", label: "مطلوب مراجعته", statuses: ["review"] },
-  { id: "blocked", label: "متوقف ويحتاج تدخل", statuses: ["blocked"] },
-  { id: "closed", label: "المكتمل والأرشيف", statuses: ["done", "cancelled"] },
+const boardLanes: Array<{ id: string; label: string }> = [
+  { id: "work", label: "شغل مطلوب تنفيذه" },
+  { id: "review", label: "مطلوب مراجعته" },
+  { id: "blocked", label: "متوقف ويحتاج تدخل" },
+  { id: "closed", label: "المكتمل والأرشيف" },
 ];
 
 function getErrorMessage(error: unknown) {
@@ -77,7 +77,7 @@ function formatDeadline(value: string) {
 }
 
 function isOverdue(task: Task, now: number) {
-  return !["done", "cancelled"].includes(task.status) && new Date(task.due_at).getTime() < now;
+  return !taskIsClosed(task) && new Date(task.due_at).getTime() < now;
 }
 
 function formatOverdueDuration(task: Task, now: number) {
@@ -91,11 +91,40 @@ function formatOverdueDuration(task: Task, now: number) {
   return `${Math.max(1, minutes)} دقيقة`;
 }
 
-function boardLaneForTasks(tasks: Task[]) {
+function taskIsClosed(task: Task) {
+  return ["done", "cancelled"].includes(task.status);
+}
+
+function boardLaneForTasks(tasks: Task[], isContentWorkflow: boolean) {
+  if (isContentWorkflow) return tasks.every(taskIsClosed) ? "closed" : "work";
   if (tasks.some((task) => task.status === "blocked")) return "blocked";
   if (tasks.some((task) => task.status === "review")) return "review";
   if (tasks.some((task) => ["backlog", "ready", "in_progress"].includes(task.status))) return "work";
   return "closed";
+}
+
+function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string, now: number) {
+  if (filter === "active") return !taskIsClosed(task);
+  if (filter === "mine") return task.owner_id === currentUserId && !taskIsClosed(task);
+  if (filter === "overdue") return isOverdue(task, now);
+  if (filter === "completed") return taskIsClosed(task);
+  return true;
+}
+
+function contentWorkflowMatchesFilter(tasks: Task[], filter: TaskFilter, currentUserId: string, now: number) {
+  if (filter === "active") return tasks.some((task) => !taskIsClosed(task));
+  if (filter === "mine") return tasks.some((task) => task.owner_id === currentUserId && !taskIsClosed(task));
+  if (filter === "overdue") return tasks.some((task) => isOverdue(task, now));
+  if (filter === "completed") return tasks.every(taskIsClosed);
+  return true;
+}
+
+function sortContentTasks(tasks: Task[]) {
+  return [...tasks].sort((left, right) => {
+    const leftOrder = left.content_step ? contentStepConfig[left.content_step].order : Number.MAX_SAFE_INTEGER;
+    const rightOrder = right.content_step ? contentStepConfig[right.content_step].order : Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder || new Date(left.due_at).getTime() - new Date(right.due_at).getTime();
+  });
 }
 
 function contentGroupTitle(task: Task) {
@@ -230,28 +259,31 @@ export function TasksWorkspace() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const filteredTasks = useMemo(() => {
-    if (!session) return [];
-    if (filter === "active") return tasks.filter((task) => !["done", "cancelled"].includes(task.status));
-    if (filter === "mine") return tasks.filter((task) => task.owner_id === session.user.id && !["done", "cancelled"].includes(task.status));
-    if (filter === "overdue") return tasks.filter((task) => isOverdue(task, renderNow));
-    if (filter === "completed") return tasks.filter((task) => ["done", "cancelled"].includes(task.status));
-    return tasks;
-  }, [filter, renderNow, session, tasks]);
-
   const boardEntries = useMemo(() => {
+    if (!session) return [];
     const grouped = new Map<string, Task[]>();
-    for (const task of filteredTasks) {
+    for (const task of tasks) {
       const key = task.content_item_id ? `content:${task.content_item_id}` : `task:${task.id}`;
       grouped.set(key, [...(grouped.get(key) ?? []), task]);
     }
-    return [...grouped.entries()].map(([id, entryTasks]): BoardEntry => ({
-      id,
-      contentItemId: entryTasks[0]?.content_item_id ?? null,
-      tasks: entryTasks,
-      laneId: boardLaneForTasks(entryTasks),
-    }));
-  }, [filteredTasks]);
+    return [...grouped.entries()].flatMap(([id, entryTasks]): BoardEntry[] => {
+      const contentItemId = entryTasks[0]?.content_item_id ?? null;
+      const isContentWorkflow = Boolean(contentItemId);
+      const orderedTasks = isContentWorkflow ? sortContentTasks(entryTasks) : entryTasks;
+      const primaryTask = orderedTasks[0];
+      if (!primaryTask) return [];
+      const matches = isContentWorkflow
+        ? contentWorkflowMatchesFilter(orderedTasks, filter, session.user.id, renderNow)
+        : taskMatchesFilter(primaryTask, filter, session.user.id, renderNow);
+      if (!matches) return [];
+      return [{
+        id,
+        contentItemId,
+        tasks: orderedTasks,
+        laneId: boardLaneForTasks(orderedTasks, isContentWorkflow),
+      }];
+    });
+  }, [filter, renderNow, session, tasks]);
 
   async function requestMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -445,22 +477,35 @@ export function TasksWorkspace() {
               <header><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info"}>{lane.label}</StatusBadge><strong id={`column-${lane.id}`}>{laneEntries.length}</strong></header>
               <div className="kanban-stack">
                 {laneEntries.map((entry) => {
-                  if (entry.contentItemId && entry.tasks.length > 1) {
+                  if (entry.contentItemId) {
                     const overdueTasks = entry.tasks.filter((task) => isOverdue(task, renderNow));
+                    const completedTasks = entry.tasks.filter(taskIsClosed).length;
+                    const progress = Math.round((completedTasks / entry.tasks.length) * 100);
                     return <article className={`task-card content-workflow-group ${overdueTasks.length ? "task-overdue" : ""}`} key={entry.id}>
                       <div className="task-card-top"><span className="workflow-task-label"><Film size={12} /> محتوى · {entry.tasks.length} خطوات تنفيذ</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info"}>{lane.label}</StatusBadge></div>
                       <h3>{contentGroupTitle(entry.tasks[0])}</h3>
                       <a className="task-production-link" href={`/content#content-${entry.contentItemId}`}><FileText size={12} /> فتح ملف المحتوى ونتائج التنفيذ</a>
+                      <div className="content-workflow-progress">
+                        <div><span>تقدم التنفيذ</span><strong>{progress}%</strong></div>
+                        <span className="content-workflow-progress-track" role="progressbar" aria-label="نسبة تقدم ملف المحتوى" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></span>
+                        <small>{completedTasks} من {entry.tasks.length} خطوات مكتملة</small>
+                      </div>
                       {overdueTasks.length ? <span className="overdue-label"><AlertTriangle size={14} /> {overdueTasks.length} خطوة متأخرة — الأقدم منذ {formatOverdueDuration(overdueTasks.sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0], renderNow)}</span> : null}
-                      <div className="content-workflow-subtasks">{entry.tasks.map((task) => {
+                      <div className="content-workflow-subtasks">{entry.tasks.map((task, index) => {
                         const owner = peopleById.get(task.owner_id);
                         const canMove = manager || task.owner_id === session.user.id;
+                        const completed = taskIsClosed(task);
+                        const isMine = task.owner_id === session.user.id && !completed;
                         const options = [task.status, ...allowedTaskTransitions[task.status]].filter((option) =>
                           !task.content_step || !["caption", "design", "scheduling", "publishing"].includes(task.content_step)
                             || option !== "review" || task.status === "review"
                         );
-                        return <section className={isOverdue(task, renderNow) ? "overdue" : ""} key={task.id}>
-                          <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}</small></div>
+                        const className = [isOverdue(task, renderNow) ? "overdue" : "", task.status === "blocked" ? "blocked" : "", completed ? "completed" : "", isMine ? "mine" : ""].filter(Boolean).join(" ");
+                        return <section className={className} key={task.id}>
+                          <div className="content-subtask-copy">
+                            <span className="content-subtask-marker" aria-label={completed ? "مكتملة" : `الخطوة ${index + 1}`}>{completed ? <CheckCircle2 size={16} /> : index + 1}</span>
+                            <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}{isMine ? <b> · مهمتك الآن</b> : null}</small></div>
+                          </div>
                           <label className="status-select compact"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark}</span><select aria-label={`نقل ${task.title}`} value={task.status} disabled={!canMove || working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}>{options.map((option) => <option key={option} value={option}>{taskStatusConfig[option].label}</option>)}</select></label>
                         </section>;
                       })}</div>

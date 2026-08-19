@@ -265,12 +265,27 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .content-workflow-group .workflow-task-label { margin-top: 0; }
 .content-workflow-group > h3 { margin-bottom: 0; }
 .content-workflow-group > .overdue-label { margin: 0; }
+.content-workflow-progress { padding: 10px 11px; display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 11px; background: var(--paper); }
+.content-workflow-progress > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-600); font-size: 11px; font-weight: 800; }
+.content-workflow-progress > div strong { color: var(--teal-700); font-size: 13px; }
+.content-workflow-progress > small { color: var(--ink-400); font-size: 10px; }
+.content-workflow-progress-track { height: 7px; display: block; overflow: hidden; border-radius: 999px; background: var(--teal-100); }
+.content-workflow-progress-track > span { height: 100%; display: block; border-radius: inherit; background: var(--teal-700); transition: width .2s ease; }
 .content-workflow-subtasks { display: grid; gap: 7px; }
 .content-workflow-subtasks > section { padding: 9px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, .8fr); align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
 .content-workflow-subtasks > section.overdue { border-color: #e7aaa7; background: var(--red-100); }
-.content-workflow-subtasks > section > div { min-width: 0; display: grid; gap: 3px; }
+.content-workflow-subtasks > section.blocked { border-color: #d6b35d; background: var(--amber-100); }
+.content-workflow-subtasks > section.mine { border-color: var(--teal-700); box-shadow: inset 3px 0 0 var(--teal-700); }
+.content-workflow-subtasks > section.completed { opacity: .72; background: var(--paper); }
+.content-workflow-subtasks > section.completed strong { text-decoration: line-through; text-decoration-thickness: 1px; text-decoration-color: var(--ink-400); }
+.content-workflow-subtasks > section > div { min-width: 0; }
+.content-subtask-copy { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: center; gap: 8px; }
+.content-subtask-copy > div { min-width: 0; display: grid; gap: 3px; }
+.content-subtask-marker { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--paper); color: var(--ink-400); font-size: 10px; font-weight: 900; }
+.completed .content-subtask-marker { border-color: #91c9b7; background: #e9f7f1; color: var(--teal-700); }
 .content-workflow-subtasks > section strong { color: var(--ink-900); font-size: 12px; }
 .content-workflow-subtasks > section small { overflow: hidden; color: var(--ink-500); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.content-workflow-subtasks > section small b { color: var(--teal-700); }
 .content-workflow-subtasks .status-select.compact { padding-top: 0; border-top: 0; }
 .content-workflow-subtasks .status-select.compact .priority { justify-self: center; padding: 3px 5px; }
 .content-workflow-subtasks .status-select.compact select { width: 100%; }
