@@ -43,6 +43,7 @@ import {
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Database, Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
+import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { canManageTasks, taskStatusConfig } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
@@ -87,7 +88,6 @@ function futureDateIso(value: string) {
 
 export function CrmWorkspace() {
   const configured = isSupabaseConfigured();
-  const [session, setSession] = useState<Session | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [identities, setIdentities] = useState<Identity[]>([]);
@@ -131,6 +131,13 @@ export function CrmWorkspace() {
     setActivityFormId(null);
     setIdentityFormId(null);
   }, []);
+
+  const clearWorkspace = useCallback(() => {
+    setWorkspace(null);
+    clearData();
+  }, [clearData]);
+
+  const clearTransientState = useCallback(() => setNotice(null), []);
 
   const refreshCrm = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
@@ -234,26 +241,13 @@ export function CrmWorkspace() {
     }
   }, [clearData]);
 
-  useEffect(() => {
-    if (!configured) return;
-    const supabase = getSupabaseBrowserClient();
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session) void loadWorkspace(data.session);
-      else setLoading(false);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setNotice(null);
-      if (nextSession) void loadWorkspace(nextSession);
-      else {
-        setWorkspace(null);
-        clearData();
-        setLoading(false);
-      }
-    });
-    return () => data.subscription.unsubscribe();
-  }, [clearData, configured, loadWorkspace]);
+  const session = useWorkspaceAuth({
+    configured,
+    loadWorkspace,
+    clearWorkspace,
+    setLoading,
+    clearTransientState,
+  });
 
   useEffect(() => {
     const clean = searchInput.trim();

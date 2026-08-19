@@ -50,6 +50,29 @@ test("Supabase client consumes generated database types", async () => {
   }
 });
 
+test("background auth events do not reload the active workspace", async () => {
+  const { workspaceIdentityChanged } = await import(new URL("../lib/supabase/auth-session.ts", import.meta.url));
+
+  assert.equal(workspaceIdentityChanged(undefined, "owner-1"), true);
+  assert.equal(workspaceIdentityChanged("owner-1", "owner-1"), false);
+  assert.equal(workspaceIdentityChanged("owner-1", null), true);
+  assert.equal(workspaceIdentityChanged("owner-1", "owner-2"), true);
+
+  const workspaces = await Promise.all([
+    "../components/tasks/TasksWorkspace.tsx",
+    "../components/content/ContentWorkspace.tsx",
+    "../components/brand/BrandWorkspace.tsx",
+    "../components/campaigns/CampaignsWorkspace.tsx",
+    "../components/crm/CrmWorkspace.tsx",
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")));
+
+  for (const workspace of workspaces) {
+    assert.match(workspace, /useWorkspaceAuth/);
+    assert.doesNotMatch(workspace, /auth\.getSession\(\)/);
+    assert.doesNotMatch(workspace, /auth\.onAuthStateChange/);
+  }
+});
+
 test("Telegram intake is an optional reviewed path with a secured execution timeline", async () => {
   const [migration, parser, quickForm, workspace, createCommand, contentCommands, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817025228_telegram_smart_content_intake.sql", import.meta.url), "utf8"),

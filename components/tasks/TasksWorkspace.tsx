@@ -33,6 +33,7 @@ import {
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
+import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 
@@ -73,7 +74,6 @@ function isOverdue(task: Task, now: number) {
 
 export function TasksWorkspace() {
   const configured = isSupabaseConfigured();
-  const [session, setSession] = useState<Session | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(configured);
@@ -84,6 +84,13 @@ export function TasksWorkspace() {
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [renderNow] = useState(() => Date.now());
   const [defaultDue] = useState(() => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
+
+  const clearWorkspace = useCallback(() => {
+    setWorkspace(null);
+    setTasks([]);
+  }, []);
+
+  const clearTransientState = useCallback(() => setNotice(null), []);
 
   const refreshTasks = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
@@ -156,29 +163,13 @@ export function TasksWorkspace() {
     }
   }, [refreshTasks]);
 
-  useEffect(() => {
-    if (!configured) return;
-
-    const supabase = getSupabaseBrowserClient();
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session) void loadWorkspace(data.session);
-      else setLoading(false);
-    });
-
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setNotice(null);
-      if (nextSession) void loadWorkspace(nextSession);
-      else {
-        setWorkspace(null);
-        setTasks([]);
-        setLoading(false);
-      }
-    });
-
-    return () => data.subscription.unsubscribe();
-  }, [configured, loadWorkspace]);
+  const session = useWorkspaceAuth({
+    configured,
+    loadWorkspace,
+    clearWorkspace,
+    setLoading,
+    clearTransientState,
+  });
 
   useEffect(() => {
     if (!workspace) return;

@@ -37,6 +37,7 @@ import {
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
+import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { canManageTasks, taskStatusConfig } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
@@ -103,7 +104,6 @@ function formatTarget(value: number, unit: string) {
 
 export function CampaignsWorkspace() {
   const configured = isSupabaseConfigured();
-  const [session, setSession] = useState<Session | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [launches, setLaunches] = useState<Launch[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -124,6 +124,19 @@ export function CampaignsWorkspace() {
   const [renderNow] = useState(() => Date.now());
   const [defaultStart] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)));
   const [defaultEnd] = useState(() => toLocalDateTimeInput(new Date(Date.now() + (30 * 24 + 2) * 60 * 60 * 1000)));
+
+  const clearWorkspace = useCallback(() => {
+    setWorkspace(null);
+    setLaunches([]);
+    setTasks([]);
+    setContentItems([]);
+    setContentLinks([]);
+    setDocuments([]);
+    setDeliverables([]);
+    setDeliverableDependencies([]);
+  }, []);
+
+  const clearTransientState = useCallback(() => setNotice(null), []);
 
   const refreshLaunches = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
@@ -239,35 +252,13 @@ export function CampaignsWorkspace() {
     }
   }, [refreshLaunches]);
 
-  useEffect(() => {
-    if (!configured) return;
-    const supabase = getSupabaseBrowserClient();
-
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session) void loadWorkspace(data.session);
-      else setLoading(false);
-    });
-
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setNotice(null);
-      if (nextSession) void loadWorkspace(nextSession);
-      else {
-        setWorkspace(null);
-        setLaunches([]);
-        setTasks([]);
-        setContentItems([]);
-        setContentLinks([]);
-        setDocuments([]);
-        setDeliverables([]);
-        setDeliverableDependencies([]);
-        setLoading(false);
-      }
-    });
-
-    return () => data.subscription.unsubscribe();
-  }, [configured, loadWorkspace]);
+  const session = useWorkspaceAuth({
+    configured,
+    loadWorkspace,
+    clearWorkspace,
+    setLoading,
+    clearTransientState,
+  });
 
   useEffect(() => {
     if (!workspace) return;

@@ -31,6 +31,7 @@ import {
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
+import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { canManageTasks } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
@@ -91,7 +92,6 @@ function ArticleFields({ article }: { article?: Article }) {
 
 export function BrandWorkspace() {
   const configured = isSupabaseConfigured();
-  const [session, setSession] = useState<Session | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(configured);
@@ -112,6 +112,13 @@ export function BrandWorkspace() {
     setRevisionId(null);
     setArchiveId(null);
   }, []);
+
+  const clearWorkspace = useCallback(() => {
+    setWorkspace(null);
+    clearData();
+  }, [clearData]);
+
+  const clearTransientState = useCallback(() => setNotice(null), []);
 
   const refreshBrand = useCallback(async (organizationId: string) => {
     const { data, error: articlesError } = await getSupabaseBrowserClient()
@@ -159,22 +166,13 @@ export function BrandWorkspace() {
     }
   }, [clearData, refreshBrand]);
 
-  useEffect(() => {
-    if (!configured) return;
-    const supabase = getSupabaseBrowserClient();
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session) void loadWorkspace(data.session);
-      else setLoading(false);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setNotice(null);
-      if (nextSession) void loadWorkspace(nextSession);
-      else { setWorkspace(null); clearData(); setLoading(false); }
-    });
-    return () => data.subscription.unsubscribe();
-  }, [clearData, configured, loadWorkspace]);
+  const session = useWorkspaceAuth({
+    configured,
+    loadWorkspace,
+    clearWorkspace,
+    setLoading,
+    clearTransientState,
+  });
 
   useEffect(() => {
     if (!workspace) return;

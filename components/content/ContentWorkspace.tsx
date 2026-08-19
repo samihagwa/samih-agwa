@@ -38,6 +38,7 @@ import { brandCategoryConfig } from "../../lib/brand";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
+import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { canManageTasks } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
@@ -87,7 +88,6 @@ function BrandReferenceSelector({ articles }: { articles: BrandArticle[] }) {
 
 export function ContentWorkspace() {
   const configured = isSupabaseConfigured();
-  const [session, setSession] = useState<Session | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [items, setItems] = useState<ContentItem[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -119,6 +119,13 @@ export function ContentWorkspace() {
     setAssetFormId(null);
     setRevisionFormId(null);
   }, []);
+
+  const clearWorkspace = useCallback(() => {
+    setWorkspace(null);
+    clearData();
+  }, [clearData]);
+
+  const clearTransientState = useCallback(() => setNotice(null), []);
 
   const refreshContent = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
@@ -191,26 +198,13 @@ export function ContentWorkspace() {
     }
   }, [clearData, refreshContent]);
 
-  useEffect(() => {
-    if (!configured) return;
-    const supabase = getSupabaseBrowserClient();
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session) void loadWorkspace(data.session);
-      else setLoading(false);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setNotice(null);
-      if (nextSession) void loadWorkspace(nextSession);
-      else {
-        setWorkspace(null);
-        clearData();
-        setLoading(false);
-      }
-    });
-    return () => data.subscription.unsubscribe();
-  }, [clearData, configured, loadWorkspace]);
+  const session = useWorkspaceAuth({
+    configured,
+    loadWorkspace,
+    clearWorkspace,
+    setLoading,
+    clearTransientState,
+  });
 
   useEffect(() => {
     if (!workspace) return;
