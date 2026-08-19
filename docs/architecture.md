@@ -48,6 +48,15 @@ Existing Market Whales application
 - Status transitions are validated by `private.enforce_task_rules`, not by the browser. The UI mirrors the same transition map for guidance only.
 - Every task change creates an immutable `task_events` record and a leadership-visible `audit_events` record.
 - The first organization is created atomically by an authenticated Edge Function. Its database command is `SECURITY INVOKER` and executable by `service_role` only.
+- The browser groups backlog, ready, and in-progress work into one human-facing lane named “شغل مطلوب تنفيذه”. The database keeps the exact states because dependency unlocking, timestamps, reviews, and audits still require them.
+- Current work is the default view. Completed and cancelled tasks are retained as history behind explicit filters instead of crowding the operational board.
+
+## Team operations contract
+
+- `notifications` contains recipient-scoped, deduplicated in-app events for assignment, dependency unlock, review, blocking, completion, and revision requests. Authenticated clients can read only their own rows and can change only their own read state.
+- `member_presence` stores only the current product section, session start, and a one-minute heartbeat. A write guard fixes identity and timestamps server-side. The system does not store clicks, keystrokes, document contents, or a covert page-by-page history.
+- Leadership can request a report for up to 366 days. Counts come from canonical tasks, task events, and revision records: requested, assigned, completed, on-time, late, overdue, review submissions, and revisions.
+- The report deliberately has no productivity score or employee ranking. Different roles are not reduced to a single misleading number, and the presence panel is not evidence of work quality.
 
 ## Content production contract
 

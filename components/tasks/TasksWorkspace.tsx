@@ -28,13 +28,13 @@ import {
   taskStatusConfig,
   type TaskPriority,
   type TaskStatus,
-  visibleBoardStatuses,
 } from "../../lib/tasks";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
+import { CollapsibleText } from "../ui/CollapsibleText";
 import { StatusBadge } from "../ui/StatusBadge";
 
 type Task = Tables<"tasks">;
@@ -53,7 +53,14 @@ type Workspace = {
   people: TeamPerson[];
 };
 
-type TaskFilter = "all" | "mine" | "overdue";
+type TaskFilter = "active" | "mine" | "overdue" | "completed" | "all";
+
+const boardLanes: Array<{ id: string; label: string; statuses: TaskStatus[] }> = [
+  { id: "work", label: "شغل مطلوب تنفيذه", statuses: ["backlog", "ready", "in_progress"] },
+  { id: "review", label: "مطلوب مراجعته", statuses: ["review"] },
+  { id: "blocked", label: "متوقف ويحتاج تدخل", statuses: ["blocked"] },
+  { id: "closed", label: "المكتمل والأرشيف", statuses: ["done", "cancelled"] },
+];
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -72,6 +79,17 @@ function isOverdue(task: Task, now: number) {
   return !["done", "cancelled"].includes(task.status) && new Date(task.due_at).getTime() < now;
 }
 
+function formatOverdueDuration(task: Task, now: number) {
+  const milliseconds = Math.max(0, now - new Date(task.due_at).getTime());
+  const totalMinutes = Math.floor(milliseconds / 60_000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days) return `${days} يوم${hours ? ` و${hours} ساعة` : ""}`;
+  if (hours) return `${hours} ساعة${minutes ? ` و${minutes} دقيقة` : ""}`;
+  return `${Math.max(1, minutes)} دقيقة`;
+}
+
 export function TasksWorkspace() {
   const configured = isSupabaseConfigured();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -81,8 +99,8 @@ export function TasksWorkspace() {
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [filter, setFilter] = useState<TaskFilter>("all");
-  const [renderNow] = useState(() => Date.now());
+  const [filter, setFilter] = useState<TaskFilter>("active");
+  const [renderNow, setRenderNow] = useState(() => Date.now());
   const [defaultDue] = useState(() => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
 
   const clearWorkspace = useCallback(() => {
@@ -193,10 +211,17 @@ export function TasksWorkspace() {
     };
   }, [refreshTasks, workspace]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setRenderNow(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const filteredTasks = useMemo(() => {
     if (!session) return [];
-    if (filter === "mine") return tasks.filter((task) => task.owner_id === session.user.id);
+    if (filter === "active") return tasks.filter((task) => !["done", "cancelled"].includes(task.status));
+    if (filter === "mine") return tasks.filter((task) => task.owner_id === session.user.id && !["done", "cancelled"].includes(task.status));
     if (filter === "overdue") return tasks.filter((task) => isOverdue(task, renderNow));
+    if (filter === "completed") return tasks.filter((task) => ["done", "cancelled"].includes(task.status));
     return tasks;
   }, [filter, renderNow, session, tasks]);
 
@@ -266,7 +291,7 @@ export function TasksWorkspace() {
       acceptance_criteria: String(form.get("acceptance_criteria") ?? "").trim(),
       owner_id: String(form.get("owner_id") ?? ""),
       priority: String(form.get("priority") ?? "normal") as TaskPriority,
-      status: "backlog",
+      status: "ready",
       due_at: dueDate.toISOString(),
     });
 
@@ -278,7 +303,7 @@ export function TasksWorkspace() {
 
     formElement.reset();
     setShowCreate(false);
-    setNotice("تم إنشاء المهمة وتسجيلها في سجل النشاط.");
+    setNotice("تم إنشاء المهمة داخل «شغل مطلوب تنفيذه» وتسجيلها في سجل النشاط.");
     await refreshTasks(workspace.organization.id);
   }
 
@@ -352,14 +377,14 @@ export function TasksWorkspace() {
 
   const manager = canManageTasks(workspace.membership.role);
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
-  const counts = Object.fromEntries(visibleBoardStatuses.map((status) => [status, filteredTasks.filter((task) => task.status === status).length]));
+  const visibleLanes = boardLanes.filter((lane) => lane.id !== "closed" || filter === "completed" || filter === "all");
   return (
     <section className="tasks-workspace">
       <div className="workspace-toolbar">
         <div><p className="overline">{workspace.organization.name}</p><h2>بورد التنفيذ</h2><p>{tasks.length ? `${tasks.length} مهمة حقيقية مسجلة` : "لا توجد مهام حقيقية بعد — ابدأ بأول مهمة عند الجاهزية."}</p></div>
         <div className="toolbar-actions">
           <div className="segmented-control" aria-label="تصفية المهام">
-            {(["all", "mine", "overdue"] as TaskFilter[]).map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "all" ? "الكل" : value === "mine" ? "مهامي" : "متأخرة"}</button>)}
+            {(["active", "mine", "overdue", "completed", "all"] as TaskFilter[]).map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "active" ? "الجاري" : value === "mine" ? "مهامي" : value === "overdue" ? "متأخرة" : value === "completed" ? "المكتمل" : "الكل"}</button>)}
           </div>
           <button className="icon-button" type="button" aria-label="تحديث المهام" onClick={() => void refreshTasks(workspace.organization.id)}><RefreshCw size={17} /></button>
           {manager ? <Button type="button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> مهمة جديدة</Button> : null}
@@ -380,16 +405,16 @@ export function TasksWorkspace() {
             <label className="full-field"><span>شرح مختصر</span><textarea name="description" maxLength={5000} rows={3} placeholder="السياق والملفات المطلوبة وأي ملاحظات مهمة" /></label>
             <label className="full-field"><span>معيار القبول — متى نقول إن المهمة تمت؟</span><textarea name="acceptance_criteria" minLength={5} maxLength={4000} rows={3} required placeholder="مثال: نسخة 1080×1920، بدون أخطاء لغوية، ومعتمدة من المسؤول" /></label>
           </div>
-          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <CheckCircle2 size={16} />} حفظ المهمة</Button><small>ستبدأ في قائمة الانتظار، ولن تتحرك إلا بانتقال مسموح ومسجّل.</small></div>
+          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <CheckCircle2 size={16} />} حفظ المهمة</Button><small>ستظهر مباشرة داخل «شغل مطلوب تنفيذه»، وكل تغيير بعدها مسموح ومسجّل.</small></div>
         </form>
       ) : null}
 
       <div className="kanban-board" aria-label="بورد مهام الفريق">
-        {visibleBoardStatuses.map((status) => {
-          const statusTasks = filteredTasks.filter((task) => task.status === status);
+        {visibleLanes.map((lane) => {
+          const statusTasks = filteredTasks.filter((task) => lane.statuses.includes(task.status));
           return (
-            <section className="kanban-column" key={status} aria-labelledby={`column-${status}`}>
-              <header><StatusBadge tone={taskStatusConfig[status].tone}>{taskStatusConfig[status].shortLabel}</StatusBadge><strong id={`column-${status}`}>{counts[status] ?? 0}</strong></header>
+            <section className="kanban-column" key={lane.id} aria-labelledby={`column-${lane.id}`}>
+              <header><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info"}>{lane.label}</StatusBadge><strong id={`column-${lane.id}`}>{statusTasks.length}</strong></header>
               <div className="kanban-stack">
                 {statusTasks.map((task) => {
                   const owner = peopleById.get(task.owner_id);
@@ -401,7 +426,7 @@ export function TasksWorkspace() {
                   );
                   return (
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} key={task.id}>
-                      <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><small>v{task.version}</small></div>
+                      <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusConfig[task.status].shortLabel}</StatusBadge><small>v{task.version}</small></div>
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
                       {task.content_item_id ? <a className="task-production-link" href={`/content#content-${task.content_item_id}`}><FileText size={12} /> فتح ملف المحتوى وتسليم النتيجة</a> : null}
                       {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
@@ -410,10 +435,10 @@ export function TasksWorkspace() {
                       {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> CRM · متابعة عميل</span> : null}
                       {task.crm_contact_id ? <a className="task-production-link" href={`/crm#lead-${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
                       <h3>{task.title}</h3>
-                      {task.description ? <p>{task.description}</p> : null}
-                      <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong>{task.acceptance_criteria}</span></div>
+                      {task.description ? <CollapsibleText text={task.description} maxCharacters={170} className="task-description" /> : null}
+                      <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong><CollapsibleText text={task.acceptance_criteria} maxCharacters={130} /></span></div>
                       <dl className="task-meta"><div><dt><CircleUserRound size={14} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div><div><dt><CalendarClock size={14} /> الموعد</dt><dd>{formatDeadline(task.due_at)}</dd></div></dl>
-                      {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة عن الموعد</span> : null}
+                      {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة منذ {formatOverdueDuration(task, renderNow)}</span> : null}
                       {task.crm_contact_id
                         ? <p className="crm-task-guard"><ShieldCheck size={13} /> تتحرك هذه المهمة تلقائيًا عند تسجيل النتيجة من CRM.</p>
                         : <label className="status-select"><span>نقل إلى</span><select value={task.status} disabled={!canMove || working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}>{options.map((option) => <option key={option} value={option}>{taskStatusConfig[option].label}</option>)}</select></label>}

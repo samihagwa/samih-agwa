@@ -7,9 +7,9 @@ export const taskStatusConfig: Record<
   TaskStatus,
   { label: string; shortLabel: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }
 > = {
-  backlog: { label: "قائمة الانتظار", shortLabel: "انتظار", tone: "neutral" },
-  ready: { label: "جاهزة للبدء", shortLabel: "جاهزة", tone: "info" },
-  in_progress: { label: "قيد التنفيذ", shortLabel: "تنفيذ", tone: "info" },
+  backlog: { label: "تنتظر خطوة سابقة", shortLabel: "تنتظر سابقًا", tone: "neutral" },
+  ready: { label: "مطلوب تنفيذها", shortLabel: "مطلوب", tone: "info" },
+  in_progress: { label: "جاري العمل عليها", shortLabel: "جاري", tone: "info" },
   review: { label: "قيد المراجعة", shortLabel: "مراجعة", tone: "warning" },
   blocked: { label: "متوقفة", shortLabel: "متوقفة", tone: "danger" },
   done: { label: "مكتملة", shortLabel: "تمت", tone: "success" },

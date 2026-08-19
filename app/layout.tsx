@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/noto-sans-arabic/wght.css";
 import { AppShell } from "../components/layout/AppShell";
 import "./globals.css";
 

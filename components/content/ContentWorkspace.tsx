@@ -5,6 +5,7 @@ import {
   CalendarClock,
   BookOpenCheck,
   CheckCircle2,
+  ChevronDown,
   CircleUserRound,
   ExternalLink,
   FileText,
@@ -60,6 +61,7 @@ type Organization = Tables<"organizations">;
 
 type TeamPerson = { id: string; name: string; role: Membership["role"] };
 type Workspace = { organization: Organization; membership: Membership; people: TeamPerson[] };
+type ContentFilter = "active" | "scheduled" | "published" | "all";
 
 const assetKinds = Object.keys(contentAssetKindConfig) as ContentAssetKind[];
 const resultSteps = ["caption", "design", "scheduling", "publishing"] as ContentStep[];
@@ -109,6 +111,8 @@ export function ContentWorkspace() {
   const [assetFormId, setAssetFormId] = useState<string | null>(null);
   const [revisionFormId, setRevisionFormId] = useState<string | null>(null);
   const [deliveryFormTaskId, setDeliveryFormTaskId] = useState<string | null>(null);
+  const [contentFilter, setContentFilter] = useState<ContentFilter>("active");
+  const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
   const [defaultPublish] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)));
@@ -126,6 +130,7 @@ export function ContentWorkspace() {
     setAssetFormId(null);
     setRevisionFormId(null);
     setDeliveryFormTaskId(null);
+    setExpandedContentIds(new Set());
   }, []);
 
   const clearWorkspace = useCallback(() => {
@@ -268,6 +273,12 @@ export function ContentWorkspace() {
 
   const brandArticlesById = useMemo(() => new Map(brandArticles.map((article) => [article.id, article])), [brandArticles]);
   const approvedBrandArticles = useMemo(() => brandArticles.filter((article) => article.status === "approved"), [brandArticles]);
+  const visibleItems = useMemo(() => {
+    if (contentFilter === "active") return items.filter((item) => !["published", "cancelled"].includes(item.status));
+    if (contentFilter === "scheduled") return items.filter((item) => item.status === "scheduled");
+    if (contentFilter === "published") return items.filter((item) => item.status === "published");
+    return items;
+  }, [contentFilter, items]);
 
   async function runCommand(body: Record<string, unknown>, successMessage: string) {
     if (!workspace) return false;
@@ -452,6 +463,7 @@ export function ContentWorkspace() {
       <div className="workspace-toolbar">
         <div><p className="overline">{workspace.organization.name}</p><h2>مصنع المحتوى</h2><p>{items.length ? `${items.length} أصل محتوى حقيقي` : "لا يوجد محتوى حقيقي بعد — أنشئ أول مسار عند الجاهزية."}</p></div>
         <div className="toolbar-actions">
+          <div className="segmented-control" aria-label="تصفية المحتوى">{(["active", "scheduled", "published", "all"] as ContentFilter[]).map((value) => <button type="button" key={value} className={contentFilter === value ? "active" : ""} onClick={() => setContentFilter(value)}>{value === "active" ? "الجاري" : value === "scheduled" ? "المجدول" : value === "published" ? "المنشور" : "الكل"}</button>)}</div>
           <button className="icon-button" type="button" aria-label="تحديث المحتوى" onClick={() => void refreshContent(workspace.organization.id)}><RefreshCw size={17} /></button>
           <Button href="/tasks" variant="secondary"><Route size={16} /> عرض كل المهام</Button>
           {manager ? <Button type="button" onClick={() => { setShowQuickIntake((value) => !value); setShowCreate(false); }}><MessageSquareText size={16} /> طلب كامل من Telegram</Button> : null}
@@ -505,7 +517,7 @@ export function ContentWorkspace() {
         </form>
       ) : null}
 
-      {items.length ? <div className="content-list">{items.map((item) => {
+      {visibleItems.length ? <div className="content-list">{visibleItems.map((item) => {
         const itemTasks = [...(tasksByContent.get(item.id) ?? [])].sort((a, b) => (a.content_step ? contentStepConfig[a.content_step].order : 99) - (b.content_step ? contentStepConfig[b.content_step].order : 99));
         const itemAssets = assetsByContent.get(item.id) ?? [];
         const itemRevisions = revisionsByContent.get(item.id) ?? [];
@@ -531,13 +543,15 @@ export function ContentWorkspace() {
           : Boolean(item.script_outline.trim() && item.editing_brief.trim() && item.thumbnail_brief.trim());
         const deliveryTasks = itemTasks.filter((task) => task.content_step && resultSteps.includes(task.content_step));
         const platformLabel = item.platforms.map((platform) => platform.charAt(0).toUpperCase() + platform.slice(1)).join(" + ");
+        const expanded = expandedContentIds.has(item.id);
 
         return <article className="panel content-card" id={`content-${item.id}`} key={item.id}>
           <header>
             <div className="content-card-title"><span className="icon-tile"><Film size={17} /></span><div><p className="overline">{isSocialPost ? "Social Post" : "Reel"} · {platformLabel} · v{item.version}</p><h3>{item.title}</h3></div></div>
-            <div className="content-card-badges"><StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>{openRevisions.length ? <StatusBadge tone="warning">{openRevisions.length} تعديل مفتوح</StatusBadge> : null}{openCueCount ? <StatusBadge tone="info">{openCueCount} تعليمة تنفيذ</StatusBadge> : null}</div>
+            <div className="content-card-actions"><div className="content-card-badges"><StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>{openRevisions.length ? <StatusBadge tone="warning">{openRevisions.length} تعديل مفتوح</StatusBadge> : null}{openCueCount ? <StatusBadge tone="info">{openCueCount} تعليمة تنفيذ</StatusBadge> : null}</div><button className="content-expand-button" type="button" aria-expanded={expanded} onClick={() => setExpandedContentIds((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}>{expanded ? "إخفاء التفاصيل" : "فتح التفاصيل"}<ChevronDown className={expanded ? "expanded" : ""} size={14} /></button></div>
           </header>
 
+          {expanded ? <>
           <div className="content-brief-grid"><div><small>الهدف</small><p>{item.goal}</p></div><div><small>الـHook</small><p>{item.hook}</p></div><div><small>الـCTA</small><p>{item.cta}</p></div></div>
           <section className="content-brand-references"><div><BookOpenCheck size={16} /><div><p className="overline">مرجع التنفيذ</p><h4>مراجع البراند المعتمدة</h4></div></div>{itemBrandArticles.length ? <div>{itemBrandArticles.map((article) => <a href={`/brand#article-${article.id}`} key={article.id}><strong>{article.title}</strong><small>{brandCategoryConfig[article.category].label} · v{article.version}{article.status === "archived" ? " · نسخة محفوظة" : ""}</small></a>)}</div> : <p>لم يُربط مرجع معتمد بهذا الطلب. استخدم الملاحظات الخاصة أدناه فقط عند وجود استثناء فعلي.</p>}</section>
           <div className="production-header"><div><FileText size={17} /><div><p className="overline">تعليمات التنفيذ</p><h4>{isSocialPost ? "Social Post Brief" : "Production Brief"}</h4></div></div>{manager ? <button className="text-button" type="button" onClick={() => setEditingBriefId(editingBriefId === item.id ? null : item.id)}><Pencil size={13} /> {briefComplete ? "تعديل التعليمات" : "استكمال التعليمات"}</button> : null}</div>
@@ -644,8 +658,9 @@ export function ContentWorkspace() {
             return <li className={`${task?.status === "done" ? "done" : ""} ${isActive ? "active" : ""}`} key={step}><span>{task?.status === "done" ? <CheckCircle2 size={14} /> : index + 1}</span><strong>{contentStepConfig[step].label}</strong><small>{task ? peopleById.get(task.owner_id)?.name ?? "عضو فريق" : "—"}</small></li>;
           })}</ol>
           <footer><div>{activeTasks.length ? <><CircleUserRound size={15} /><span>النشط الآن: <strong>{activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ")}</strong></span></> : <><CheckCircle2 size={15} /><span>لا توجد خطوة نشطة الآن.</span></>}</div><a className="text-link" href="/tasks">فتح بورد التنفيذ <Link2 size={13} /></a></footer>
+          </> : <div className="content-collapsed-summary"><div><strong>{progress}%</strong><span>اكتمل {doneCount} من {itemTasks.length}</span></div><div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div><div><span>الخطوة الحالية</span><strong>{activeTasks.length ? activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ") : item.status === "published" ? "منشور" : "لا توجد خطوة نشطة"}</strong></div><div><CalendarClock size={14} /><span>{formatDate(item.publish_at)}</span></div></div>}
         </article>;
-      })}</div> : <section className="panel empty-state"><span className="empty-visual"><Film size={20} /></span><div><h2>مصنع المحتوى جاهز بدون بيانات وهمية</h2><p>عندما تنشئ أول ريلز أو بند بوستات سيظهر هنا ومعه الـBrief والملفات والمهام والتعديلات.</p></div><span className="empty-proof"><CheckCircle2 size={15} /> متصل ببورد المهام</span></section>}
+      })}</div> : <section className="panel empty-state"><span className="empty-visual"><Film size={20} /></span><div><h2>{items.length ? "لا يوجد محتوى في هذا الفلتر" : "مصنع المحتوى جاهز بدون بيانات وهمية"}</h2><p>{items.length ? "غيّر الفلتر لعرض المحتوى الجاري أو المنشور أو كل الأرشيف." : "عندما تنشئ أول ريلز أو بند بوستات سيظهر هنا ومعه الـBrief والملفات والمهام والتعديلات."}</p></div><span className="empty-proof"><CheckCircle2 size={15} /> متصل ببورد المهام</span></section>}
 
       <aside className="automation-note"><LockKeyhole size={17} /><div><strong>النشر الخارجي لم يُفعّل بعد</strong><p>الجدولة والنشر موثّقان داخل المسار، لكن التنفيذ على Meta ما زال يدويًا. لن يعتبر السيستم المحتوى منشورًا قبل حفظ رابط المنشور الحقيقي.</p></div></aside>
     </section>

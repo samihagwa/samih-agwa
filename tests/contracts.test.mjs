@@ -409,3 +409,61 @@ test("launch workflow uses guarded gates, shared tasks, and reversible content l
   assert.match(taskWorkspace, /launchGateConfig/);
   assert.match(taskWorkspace, /فتح التفاصيل وتسليم النتيجة/);
 });
+
+test("task and content workspaces default to focused current work with clear Arabic typography and expandable detail", async () => {
+  const [layout, css, taskWorkspace, contentWorkspace, collapsibleText, taskContract, packageJson] = await Promise.all([
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/ui/CollapsibleText.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ]);
+  assert.match(packageJson, /@fontsource-variable\/noto-sans-arabic/);
+  assert.match(layout, /noto-sans-arabic\/wght\.css/);
+  assert.match(css, /Noto Sans Arabic Variable/);
+  assert.match(taskWorkspace, /شغل مطلوب تنفيذه/);
+  assert.match(taskWorkspace, /filter.*active/s);
+  assert.match(taskWorkspace, /متأخرة منذ/);
+  assert.match(taskWorkspace, /formatOverdueDuration/);
+  assert.match(taskWorkspace, /CollapsibleText/);
+  assert.match(collapsibleText, /إظهار المزيد/);
+  assert.match(taskContract, /تنتظر خطوة سابقة/);
+  assert.match(contentWorkspace, /contentFilter/);
+  assert.match(contentWorkspace, /فتح التفاصيل/);
+  assert.match(contentWorkspace, /published.*cancelled/s);
+});
+
+test("notifications, evidence-based team reports, and transparent coarse presence are tenant secured", async () => {
+  const [migration, hardening, appShell, notificationCenter, presenceReporter, teamWorkspace, teamPage, types] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260819021613_team_operations_notifications_presence.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819022259_harden_user_state_commands.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/NotificationCenter.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/PresenceReporter.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/team/TeamWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/team/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+  ]);
+  for (const table of ["notifications", "member_presence"]) {
+    assert.match(migration, new RegExp(`create table public\\.${table}`));
+    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(types, new RegExp(`${table}:`));
+  }
+  assert.doesNotMatch(migration, /grant (insert|update|delete) on table public\.notifications to authenticated/i);
+  assert.match(migration, /get_team_task_performance/);
+  assert.match(migration, /no productivity score or subjective employee ranking/i);
+  assert.match(migration, /No clicks, keystrokes, or hidden surveillance/i);
+  assert.match(hardening, /security invoker/g);
+  assert.match(hardening, /member_presence_enforce_write/);
+  assert.match(appShell, /NotificationCenter/);
+  assert.match(appShell, /PresenceReporter/);
+  assert.match(notificationCenter, /mark_notification_read/);
+  assert.match(presenceReporter, /60_000/);
+  assert.match(teamWorkspace, /أرقام واقعية بلا تقييم شخصي/);
+  assert.match(teamWorkspace, /آخر أسبوع/);
+  assert.match(teamWorkspace, /آخر 30 يوم/);
+  assert.match(teamWorkspace, /مدة محددة/);
+  assert.match(teamPage, /أداء واضح من غير مراقبة عشوائية/);
+});

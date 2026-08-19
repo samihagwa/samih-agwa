@@ -1280,6 +1280,108 @@ export type Database = {
           },
         ]
       }
+      member_presence: {
+        Row: {
+          current_section: string
+          last_seen_at: string
+          organization_id: string
+          session_started_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_section: string
+          last_seen_at?: string
+          organization_id: string
+          session_started_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_section?: string
+          last_seen_at?: string
+          organization_id?: string
+          session_started_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_presence_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_presence_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          dedupe_key: string
+          entity_id: string | null
+          entity_type: string
+          id: number
+          kind: string
+          organization_id: string
+          read_at: string | null
+          title: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          dedupe_key: string
+          entity_id?: string | null
+          entity_type: string
+          id?: never
+          kind: string
+          organization_id: string
+          read_at?: string | null
+          title: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          dedupe_key?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: never
+          kind?: string
+          organization_id?: string
+          read_at?: string | null
+          title?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -1549,6 +1651,38 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_team_task_performance: {
+        Args: {
+          range_ends_at: string
+          range_starts_at: string
+          target_organization_id: string
+        }
+        Returns: {
+          completed_late: number
+          completed_on_time: number
+          last_activity_at: string | null
+          overdue_open: number
+          review_submissions: number
+          revisions_received: number
+          revisions_requested: number
+          tasks_assigned: number
+          tasks_completed: number
+          tasks_requested: number
+          user_id: string
+        }[]
+      }
+      mark_all_notifications_read: {
+        Args: { target_organization_id: string }
+        Returns: number
+      }
+      mark_notification_read: {
+        Args: { target_notification_id: number }
+        Returns: boolean
+      }
+      record_member_presence: {
+        Args: { target_organization_id: string; target_section: string }
+        Returns: boolean
+      }
       add_content_asset: {
         Args: {
           asset_kind: Database["public"]["Enums"]["content_asset_kind"]
