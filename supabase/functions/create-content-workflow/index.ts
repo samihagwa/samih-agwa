@@ -10,7 +10,6 @@ const ownerFields = [
   "content_creator_id",
   "editing_owner_id",
   "thumbnail_owner_id",
-  "approval_owner_id",
   "publishing_owner_id",
 ] as const;
 
@@ -169,7 +168,9 @@ export default {
         content_creator_id: body.content_creator_id,
         editing_owner_id: body.editing_owner_id,
         thumbnail_owner_id: body.thumbnail_owner_id,
-        approval_owner_id: body.approval_owner_id,
+        // Kept only for the legacy atomic RPC signature. The database cancels
+        // this internal gate and never waits for it.
+        approval_owner_id: body.publishing_owner_id,
         publishing_owner_id: body.publishing_owner_id,
         ...(!isTelegramIntake ? {
           initial_raw_url: typeof body.initial_raw_url === "string" ? body.initial_raw_url.trim() : "",

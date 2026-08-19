@@ -36,11 +36,11 @@ export const contentSteps = (Object.keys(contentStepConfig) as ContentStep[]).so
 );
 
 export const reelContentSteps: ContentStep[] = [
-  "brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing",
+  "brief", "recording", "editing", "thumbnail", "caption", "publishing",
 ];
 
 export const socialPostContentSteps: ContentStep[] = [
-  "brief", "caption", "design", "approval", "scheduling", "publishing",
+  "brief", "caption", "design", "scheduling", "publishing",
 ];
 
 export function contentWorkflowSteps(format: ContentFormat) {
@@ -57,7 +57,6 @@ export const contentAssignmentFields: Array<{ step: ContentStep; name: string; l
   { step: "recording", name: "content_creator_id", label: "صانع المحتوى + الكابشن" },
   { step: "editing", name: "editing_owner_id", label: "المونتاج" },
   { step: "thumbnail", name: "thumbnail_owner_id", label: "تصميم الغلاف" },
-  { step: "approval", name: "approval_owner_id", label: "الاعتماد النهائي" },
   { step: "publishing", name: "publishing_owner_id", label: "النشر" },
 ];
 

@@ -192,7 +192,7 @@ export function QuickIntakeForm({ currentUserId, defaultPublish, people, approve
 
       {formError ? <p className="form-notice error" role="alert">{formError}</p> : null}
       <div className="intake-future-note"><strong>رفع الملفات المباشر: ضمن الخطة التالية</strong><p>النسخة الحالية تحفظ رابط رسالة المادة الخام على Telegram. لن ننسخ أو نرفع الملف إلى الموقع الآن.</p></div>
-      <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} اعتماد وإنشاء خط الإنتاج</Button><small>المادة الخام موجودة على Telegram؛ ستُنشأ 3 مهام تنفيذ فقط، والكابشن داخل ملف الريلز.</small></div>
+      <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} إنشاء خط الإنتاج</Button><small>المادة الخام موجودة على Telegram؛ ستُنشأ مهام التنفيذ فقط، والكابشن داخل ملف الريلز.</small></div>
     </form>
   );
 }

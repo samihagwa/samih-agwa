@@ -266,7 +266,7 @@ async function createDeliverable(
       : [];
     const workflowOwnerFields = [
       "brief_owner_id", "caption_owner_id", "design_owner_id",
-      "approval_owner_id", "scheduling_owner_id", "publishing_owner_id",
+      "scheduling_owner_id", "publishing_owner_id",
     ];
     const requestId = text(body.creation_request_id);
     if (Number.isNaN(Date.parse(firstPublishAt)) || Date.parse(firstPublishAt) > Date.parse(dueAt)
@@ -304,7 +304,8 @@ async function createDeliverable(
       brief_owner_id: body.brief_owner_id,
       caption_owner_id: body.caption_owner_id,
       design_owner_id: body.design_owner_id,
-      approval_owner_id: body.approval_owner_id,
+      // Legacy RPC parameter only; the database removes this blocking gate.
+      approval_owner_id: body.scheduling_owner_id,
       scheduling_owner_id: body.scheduling_owner_id,
       publishing_owner_id: body.publishing_owner_id,
       target_creation_request_id: requestId,

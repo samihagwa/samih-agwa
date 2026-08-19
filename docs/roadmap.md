@@ -34,14 +34,14 @@ Direct file upload is intentionally planned for a later phase so it can be intro
 - Google Drive synchronization can attach verified file records while preserving ownership and source URLs.
 - Meta publishing and analytics ingestion require restricted credentials, retryable workers, idempotency, and real platform confirmations before the UI reports a post as published.
 
-## Deferred scheduled Telegram publishing
+## Telegram scheduled publishing foundation — implemented
 
-Scheduled channel publishing is planned after the operating foundations and brand rules are stable. Its first release must be a test-only path, never a direct production switch.
+The private control room now stores posts, verified allowlisted channels, Cairo schedules, frozen snapshots, occurrences, and per-channel publication logs. The default policy sends a preview but does not stop the team when the owner is unavailable; strict approval remains an explicit option for sensitive posts.
 
-1. Store a post draft, target channel, Cairo timezone schedule, author, approver, and immutable content revision.
-2. Default every channel connection to `test_mode`; a dry run renders the exact message and media without sending it to a real channel.
-3. Require an explicit approval gate after the preview and before a post enters the delivery queue.
-4. Use an idempotency key per approved revision and schedule so retries cannot duplicate a post.
-5. Run delivery through a trusted worker with bounded retries, rate limits, an audit trail, and a dead-letter state for manual review.
-6. Mark a post as published only after Telegram returns a real channel message ID; store the confirmation and error history.
-7. Keep real publishing disabled until the owner deliberately enables one verified channel after personal end-to-end testing.
+1. A unique database claim is created before every Telegram network call, keyed by occurrence and channel.
+2. A generation fence and organization kill switch stop claimed work before a new network call can start.
+3. Content is frozen at preview/claim time; a hash mismatch holds the occurrence instead of publishing changed content.
+4. A timeout or exception after the network call begins becomes `unknown` and is never retried automatically.
+5. A real Telegram message ID and URL are required before an occurrence becomes published or its linked content task closes.
+6. Preview controls are signed by a one-time callback token and limited to a connected leadership Telegram account.
+7. The first rollout remains limited to the owner's verified test channel; Meta publishing is still a later integration.

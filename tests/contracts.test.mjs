@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("shared navigation covers every primary route", async () => {
   const source = await readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8");
-  for (const route of ["/tasks", "/content", "/brand", "/campaigns", "/crm", "/analytics", "/team", "/settings"]) {
+  for (const route of ["/tasks", "/content", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/team", "/settings"]) {
     assert.match(source, new RegExp(`href(?::|=)\\s*["']${route}`));
   }
 });
@@ -45,7 +45,7 @@ test("Supabase client consumes generated database types", async () => {
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(client, /createClient<Database>/);
-  for (const table of ["audit_events", "brand_articles", "content_assets", "content_brand_references", "content_items", "content_revision_requests", "content_timeline_cues", "crm_activities", "crm_contacts", "crm_conversation_links", "crm_identities", "launch_content_items", "launches", "memberships", "organizations", "profiles", "task_dependencies", "tasks", "task_events"]) {
+  for (const table of ["audit_events", "brand_articles", "content_assets", "content_brand_references", "content_items", "content_revision_requests", "content_timeline_cues", "crm_activities", "crm_contacts", "crm_conversation_links", "crm_identities", "launch_content_items", "launches", "memberships", "organizations", "profiles", "publishing_channels", "publishing_occurrences", "publishing_publication_logs", "publishing_schedules", "task_dependencies", "tasks", "task_events"]) {
     assert.match(types, new RegExp(`${table}:`));
   }
 });
@@ -61,6 +61,7 @@ test("background auth events do not reload the active workspace", async () => {
   const workspaces = await Promise.all([
     "../components/tasks/TasksWorkspace.tsx",
     "../components/content/ContentWorkspace.tsx",
+    "../components/publishing/PublishingWorkspace.tsx",
     "../components/brand/BrandWorkspace.tsx",
     "../components/campaigns/CampaignsWorkspace.tsx",
     "../components/crm/CrmWorkspace.tsx",
@@ -127,11 +128,12 @@ test("task workflow is shared between UI types and database enforcement", async 
 });
 
 test("content workflow creates one guarded dependency graph shared with tasks", async () => {
-  const [contentContract, migration, securityMigration, compactMigration, edgeFunction, workspace, taskWorkspace] = await Promise.all([
+  const [contentContract, migration, securityMigration, compactMigration, nonBlockingMigration, edgeFunction, workspace, taskWorkspace] = await Promise.all([
     readFile(new URL("../lib/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260816235000_content_production_pipeline.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817000500_secure_content_workflow_command.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819033000_compact_reel_workflow.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819165954_remove_blocking_content_approval.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
@@ -154,7 +156,12 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(workspace, /functions\.invoke\("create-content-workflow"/);
   assert.match(workspace, /3 مهام إذا كانت المادة الخام جاهزة، و4 فقط/);
   assert.match(workspace, /الكابشن النهائي/);
-  assert.match(workspace, /الاعتماد النهائي الموحد/);
+  assert.match(workspace, /النتيجة تغلق المهمة وتفتح التالية تلقائيًا/);
+  assert.doesNotMatch(contentContract, /"brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing"/);
+  assert.match(nonBlockingMigration, /task_record\.content_step = 'publishing'/);
+  assert.match(nonBlockingMigration, /update public\.tasks set status = 'done'/);
+  assert.match(nonBlockingMigration, /task\.content_step = 'approval'[\s\S]*status = 'cancelled'/);
+  assert.match(nonBlockingMigration, /'task_done'/);
   assert.match(compactMigration, /add column is_work_item boolean not null default true/);
   assert.match(compactMigration, /caption_owned_by_content_creator/);
   assert.match(compactMigration, /create_reel_production_workflow_v3/);
@@ -168,9 +175,10 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
 });
 
 test("content production briefs, assets, and revision rounds share one secured workflow", async () => {
-  const [migration, completionMigration, commands, createCommand, workspace, taskWorkspace, contentContract, taskContract, types] = await Promise.all([
+  const [migration, completionMigration, nonBlockingMigration, commands, createCommand, workspace, taskWorkspace, contentContract, taskContract, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817014819_content_production_briefs_and_revisions.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819040034_simplify_content_task_completion.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819165954_remove_blocking_content_approval.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
@@ -203,13 +211,15 @@ test("content production briefs, assets, and revision rounds share one secured w
   assert.match(workspace, /مركز الأصول/);
   assert.match(workspace, /جولات التعديل/);
   assert.match(workspace, /functions\.invoke\("content-commands"/);
-  assert.match(workspace, /المنفّذ يسلّم مرة واحدة، والإدارة هي التي تعتمد/);
+  assert.match(workspace, /حفظ التسليم وإغلاق المهمة/);
   assert.match(workspace, /تأكيد أنه تم النشر/);
   assert.match(taskWorkspace, /فتح وتسليم المهمة/);
   assert.doesNotMatch(taskWorkspace, /status-select compact/);
   assert.match(commands, /recording.*editing.*thumbnail.*caption.*design.*scheduling.*publishing/);
   assert.match(completionMigration, /confirm_content_publishing_task_id/);
   assert.match(completionMigration, /Only organization leadership can approve a submitted content task/);
+  assert.doesNotMatch(nonBlockingMigration, /Only organization leadership can approve a submitted content task/);
+  assert.match(nonBlockingMigration, /completed_by_single_submission/);
   assert.match(completionMigration, /task_record\.content_step = 'publishing'/);
   assert.match(taskContract, /done: "تم النشر"/);
   assert.match(contentContract, /contentAssetKindConfig/);
@@ -217,10 +227,11 @@ test("content production briefs, assets, and revision rounds share one secured w
 });
 
 test("social post deliverables expand into parallel copy and design workflows without double-counting the campaign output", async () => {
-  const [enumMigration, engineMigration, completionMigration, launchCommand, contentCommand, campaignWorkspace, contentWorkspace, taskWorkspace, contract, types] = await Promise.all([
+  const [enumMigration, engineMigration, completionMigration, nonBlockingMigration, launchCommand, contentCommand, campaignWorkspace, contentWorkspace, taskWorkspace, contract, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260819015223_social_post_workflow_template.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819015240_social_post_workflow_engine.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819040034_simplify_content_task_completion.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819165954_remove_blocking_content_approval.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/launch-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
@@ -254,14 +265,52 @@ test("social post deliverables expand into parallel copy and design workflows wi
   assert.match(contentCommand, /update_social_post_brief/);
   assert.match(campaignWorkspace, /إنشاء البند ومصنع البوستات/);
   assert.match(campaignWorkspace, /الكابشن والتصميم بالتوازي/);
-  assert.match(contentWorkspace, /المنفّذ يسلّم مرة واحدة، والإدارة هي التي تعتمد/);
+  assert.match(contentWorkspace, /النتيجة تغلق المهمة وتفتح التالية تلقائيًا/);
   assert.match(contentWorkspace, /Social Post Brief/);
   assert.match(taskWorkspace, /فتح للمراجعة والاعتماد/);
   assert.match(completionMigration, /content_step_deliveries_step_allowed/);
+  assert.match(nonBlockingMigration, /prerequisite\.content_step in \('caption', 'design'\)/);
   assert.match(contract, /socialPostContentSteps/);
   for (const field of ["content_step_deliveries", "copy_brief", "design_brief", "launch_deliverable_id", "workflow_template"]) {
     assert.match(types, new RegExp(`${field}:`));
   }
+});
+
+test("Telegram auto-publishing is durable, allowlisted, fenced, and visible in one control room", async () => {
+  const [schema, workerMigration, invariantTest, worker, webhook, commands, workspace, publishingContract, navigation, types] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260819165956_telegram_auto_publishing.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819170000_telegram_auto_publishing_worker.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/tests/telegram_publishing_invariants.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/telegram-publisher/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/telegram-webhook/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/telegram-publishing-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/publishing/PublishingWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/publishing.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+  ]);
+  for (const table of ["publishing_channels", "publishing_posts", "publishing_schedules", "publishing_occurrences", "publishing_publication_logs"]) {
+    assert.match(schema, new RegExp(`create table public\\.${table}`));
+    assert.match(schema, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(types, new RegExp(`${table}:`));
+  }
+  assert.match(schema, /allowlisted boolean not null default false/);
+  assert.match(schema, /unique \(occurrence_id, channel_id\)/);
+  assert.match(workerMigration, /for update of occurrence skip locked/);
+  assert.match(workerMigration, /network_started_at is not null[\s\S]*status = 'unknown'/);
+  assert.match(workerMigration, /snapshot_hash_mismatch/);
+  assert.match(workerMigration, /kill_switch_generation_changed/);
+  assert.match(invariantTest, /Duplicate publication claim was created/);
+  assert.match(invariantTest, /Expired network call was retried/);
+  assert.match(worker, /mark_publication_network_started/);
+  assert.match(worker, /target_terminal_status: "unknown"/);
+  assert.match(webhook, /x-telegram-bot-api-secret-token/);
+  assert.match(commands, /getChatMember/);
+  assert.match(commands, /verified_can_post/);
+  assert.match(publishingContract, /معاينة ثم نشر تلقائي/);
+  assert.match(workspace, /previewPolicyConfig/);
+  assert.match(workspace, /إيقاف طوارئ/);
+  assert.match(navigation, /href: "\/publishing"/);
 });
 
 test("brand knowledge is versioned, owner-approved, and linked to content by an exact secured reference", async () => {
@@ -360,9 +409,9 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(taskWorkspace, /فتح ملف العميل وتسجيل النتيجة/);
   assert.doesNotMatch(migration, /'متابعة عميل محتمل[^']*'\s*,\s*contact_full_name/);
   assert.match(contract, /allowedCrmTransitions/);
-  assert.match(roadmap, /Deferred scheduled Telegram publishing/);
-  assert.match(roadmap, /test_mode/);
-  assert.match(roadmap, /idempotency key/);
+  assert.match(roadmap, /Telegram scheduled publishing foundation — implemented/);
+  assert.match(roadmap, /unique database claim/);
+  assert.match(roadmap, /never retried automatically/);
 });
 
 test("Edge Function errors expose safe server messages through one shared parser", async () => {

@@ -1,12 +1,13 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { BarChart3, BookOpenCheck, Clapperboard, LayoutDashboard, Rocket, Settings, SquareKanban, UsersRound } from "lucide-react";
+import { BarChart3, BookOpenCheck, Clapperboard, LayoutDashboard, Rocket, Send, Settings, SquareKanban, UsersRound } from "lucide-react";
 
 const items = [
   { href: "/", label: "مركز القيادة", icon: LayoutDashboard },
   { href: "/tasks", label: "مهام الفريق", icon: SquareKanban },
   { href: "/content", label: "مصنع المحتوى", icon: Clapperboard },
+  { href: "/publishing", label: "النشر التلقائي", icon: Send },
   { href: "/brand", label: "مركز معرفة البراند", icon: BookOpenCheck },
   { href: "/campaigns", label: "الحملات والإطلاقات", icon: Rocket },
   { href: "/crm", label: "العملاء والـCRM", icon: UsersRound },

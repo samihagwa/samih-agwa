@@ -412,7 +412,6 @@ export function CampaignsWorkspace() {
         brief_owner_id: String(form.get("brief_owner_id") ?? ""),
         caption_owner_id: String(form.get("caption_owner_id") ?? ""),
         design_owner_id: String(form.get("design_owner_id") ?? ""),
-        approval_owner_id: String(form.get("approval_owner_id") ?? ""),
         scheduling_owner_id: String(form.get("scheduling_owner_id") ?? ""),
         publishing_owner_id: String(form.get("publishing_owner_id") ?? ""),
         creation_request_id: crypto.randomUUID(),
@@ -727,7 +726,7 @@ export function CampaignsWorkspace() {
                     <label><span>يعتمد على — اختياري</span><select name="depends_on_deliverable_id"><option value="">لا يعتمد على بند سابق</option>{launchDeliverables.map((deliverable) => <option value={deliverable.id} key={deliverable.id}>{deliverable.title}</option>)}</select></label>
                     <label className="wide"><span>التفاصيل ومعيار التسليم</span><textarea name="brief" minLength={5} maxLength={5000} rows={4} required placeholder="الفكرة، الرسالة، المطلوب، المقاسات، المراجع، ما الذي يعتبر تسليمًا مقبولًا…" /></label>
                     {selectedDeliverableKind === "social_post" ? <>
-                      <div className="wide social-workflow-note"><Sparkles size={16} /><div><strong>السيستم هيفك البند تلقائيًا</strong><p>لكل بوست: Brief ← الكابشن والتصميم بالتوازي ← المراجعة ← الجدولة ← النشر والتوثيق.</p></div></div>
+                      <div className="wide social-workflow-note"><Sparkles size={16} /><div><strong>السيستم هيفك البند تلقائيًا</strong><p>لكل بوست: Brief ← الكابشن والتصميم بالتوازي ← الجدولة ← النشر والتوثيق. كل تسليم يفتح ما يليه بدون انتظار المدير.</p></div></div>
                       <label className="wide"><span>هدف البوستات</span><textarea name="goal" minLength={5} maxLength={1000} rows={2} required placeholder="ما النتيجة التي نريدها من هذه الدفعة؟" /></label>
                       <label><span>الـHook الأساسي</span><textarea name="hook" minLength={3} maxLength={1000} rows={2} required placeholder="الجملة التي توقف العميل" /></label>
                       <label><span>الـCTA</span><textarea name="cta" minLength={2} maxLength={500} rows={2} required placeholder="الإجراء المطلوب من العميل" /></label>
@@ -739,8 +738,8 @@ export function CampaignsWorkspace() {
                       ].map(([value, label]) => <label key={value}><input type="checkbox" name="platforms" value={value} defaultChecked={value === "instagram" || value === "facebook"} /><span>{label}</span></label>)}</fieldset>
                       <div className="wide assignment-block"><div><p className="overline">توزيع التنفيذ</p><h5>مسؤول كل مرحلة</h5></div><div className="assignment-grid">
                         {[
-                          ["brief_owner_id", "اعتماد الـBrief"], ["caption_owner_id", "كتابة الكابشن"],
-                          ["design_owner_id", "التصميم"], ["approval_owner_id", "المراجعة"],
+                          ["brief_owner_id", "تجهيز الـBrief"], ["caption_owner_id", "كتابة الكابشن"],
+                          ["design_owner_id", "التصميم"],
                           ["scheduling_owner_id", "الجدولة"], ["publishing_owner_id", "النشر"],
                         ].map(([name, label]) => <label key={name}><span>{label}</span><select name={name} defaultValue={session.user.id} required>{workingPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>)}
                       </div></div>

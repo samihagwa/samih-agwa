@@ -416,35 +416,11 @@ export function ContentWorkspace() {
       result_note: formText(form, "result_note"),
       result_url: formText(form, "result_url"),
     }, task.content_step === "caption" && !task.is_work_item
-      ? "تم حفظ الكابشن داخل الريلز وإغلاق خطوة الكتابة. سيُراجع مع الفيديو والغلاف في الاعتماد النهائي."
+      ? "تم حفظ الكابشن داخل الريلز وإغلاق خطوة الكتابة وفتح ما يليها تلقائيًا."
       : task.content_step === "publishing"
         ? "تم تأكيد النشر وحفظ الرابط الحقيقي ونقل المحتوى إلى «منشور»."
-        : "تم تسليم النتيجة للمراجعة. لا تحتاج لتغيير أي حالة أخرى بنفسك.");
+        : "تم حفظ التسليم وإغلاق المهمة وفتح الخطوة التالية تلقائيًا.");
     if (submitted) setDeliveryFormTaskId(null);
-  }
-
-  async function approveContentTask(task: Task) {
-    if (!workspace || task.status !== "review") return;
-    setWorking(true);
-    setError(null);
-    setNotice(null);
-    const { data, error: approvalError } = await getSupabaseBrowserClient()
-      .from("tasks")
-      .update({ status: "done" })
-      .eq("id", task.id)
-      .eq("version", task.version)
-      .select("id")
-      .maybeSingle();
-    setWorking(false);
-    if (approvalError) {
-      setError(approvalError.message);
-    } else if (!data) {
-      setError("تغيّرت المهمة عند عضو آخر. تم تحديث ملف المحتوى قبل إعادة المحاولة.");
-    } else {
-      setNotice(`تم اعتماد تسليم «${task.content_step ? contentStepConfig[task.content_step].label : task.title}» وفتح الخطوة التالية تلقائيًا.`);
-    }
-    setReviewFormTaskId(null);
-    await refreshContent(workspace.organization.id);
   }
 
   async function requestTaskRevision(event: FormEvent<HTMLFormElement>, task: Task) {
@@ -458,16 +434,6 @@ export function ContentWorkspace() {
       revision_instructions: formText(form, "revision_instructions"),
     }, `تم طلب تعديل «${contentStepConfig[task.content_step].label}» وإعادته تلقائيًا لصاحب المهمة.`);
     if (requested) setReviewFormTaskId(null);
-  }
-
-  async function changeReelApproval(task: Task, gateAction: "start" | "approve") {
-    await runCommand({
-      action: "change_reel_approval",
-      task_id: task.id,
-      gate_action: gateAction,
-    }, gateAction === "start"
-      ? "بدأت المراجعة النهائية للريلز والغلاف والكابشن."
-      : "تم اعتماد الريلز بالكامل وفتح مهمة النشر.");
   }
 
   async function addAsset(event: FormEvent<HTMLFormElement>, contentId: string) {
@@ -574,7 +540,7 @@ export function ContentWorkspace() {
             </div>
           </div>
           <div className="assignment-block">
-            <div><p className="overline">المساءلة</p><h3>5 مسؤوليات واضحة بدون تضخيم</h3><p>صانع المحتوى يسجل عند الحاجة ويكتب الكابشن داخل الريلز. الـBrief والاعتماد بوابات داخل الملف وليسا مهمتين في البورد.</p></div>
+            <div><p className="overline">المساءلة</p><h3>مسؤول واضح لكل نتيجة</h3><p>صانع المحتوى يسجل عند الحاجة ويكتب الكابشن داخل الريلز. التسليم يغلق المهمة مباشرة، والنظام لا ينتظر اعتمادك ليدور.</p></div>
             <div className="assignment-grid">{contentAssignmentFields.map(({ step, name, label }) => (
               <label key={step}><span>{label}</span><select name={name} defaultValue={session.user.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
             ))}</div>
@@ -594,13 +560,12 @@ export function ContentWorkspace() {
         const activeTasks = itemTasks.filter((task) => ["ready", "in_progress", "review", "blocked"].includes(task.status));
         const progress = workTasks.length ? Math.round((doneCount / workTasks.length) * 100) : 0;
         const openRevisions = itemRevisions.filter((revision) => ["requested", "in_progress"].includes(revision.status));
-        const approvalTask = itemTasks.find((task) => task.content_step === "approval");
         const editingTask = itemTasks.find((task) => task.content_step === "editing");
         const captionTask = itemTasks.find((task) => task.content_step === "caption");
         const captionDelivery = captionTask ? deliveriesByTask.get(captionTask.id) : undefined;
         const workflowOwner = itemTasks.some((task) => task.owner_id === session.user.id);
         const canAddAsset = manager || workflowOwner;
-        const canRequestRevision = manager || approvalTask?.owner_id === session.user.id;
+        const canRequestRevision = manager || workflowOwner;
         const canChangeTimeline = manager || editingTask?.owner_id === session.user.id;
         const completedCueCount = itemTimeline.filter((cue) => cue.completed_at).length;
         const openCueCount = itemTimeline.length - completedCueCount;
@@ -663,20 +628,9 @@ export function ContentWorkspace() {
               {captionDelivery && deliveryFormTaskId !== captionTask.id ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(captionTask.id)}><Pencil size={12} /> تعديل الكابشن</button> : null}
               {(!captionDelivery || deliveryFormTaskId === captionTask.id) ? <form className="reel-caption-form" onSubmit={(event) => void submitStepDelivery(event, captionTask)}>
                 <label><span>نص الكابشن والهاشتاجات</span><textarea name="result_note" minLength={3} maxLength={10000} rows={6} required defaultValue={captionDelivery?.result_note ?? ""} placeholder={`اكتب الكابشن النهائي، ثم CTA واضح مثل: ${item.cta}\nوأضف الهاشتاجات المناسبة في النهاية.`} /></label>
-                <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ الكابشن داخل الريلز</Button>{captionDelivery ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button> : null}<small>الحفظ يغلق خطوة الكتابة مباشرة؛ الاعتماد النهائي هو المراجعة الوحيدة.</small></div>
+                <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ الكابشن وإغلاق الخطوة</Button>{captionDelivery ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button> : null}<small>الحفظ يغلق خطوة الكتابة ويفتح ما يليها تلقائيًا.</small></div>
               </form> : null}
             </> : captionTask.status === "backlog" ? <p className="reel-caption-locked"><LockKeyhole size={13} /> سيفتح الكابشن تلقائيًا عند جاهزية الملف.</p> : null}
-          </section> : null}
-
-          {!isSocialPost && approvalTask ? <section className={`reel-approval-panel status-${approvalTask.status}`}>
-            <div><CheckCircle2 size={18} /><div><p className="overline">بوابة وليست مهمة إضافية</p><h4>الاعتماد النهائي الموحد</h4><p>مراجعة واحدة للفيديو والغلاف والكابشن قبل فتح النشر.</p></div></div>
-            <div className="reel-approval-state">
-              <span>{approvalTask.status === "backlog" ? "في انتظار اكتمال الإنتاج" : approvalTask.status === "ready" ? "جاهز للمراجعة" : approvalTask.status === "done" ? "معتمد نهائيًا" : "المراجعة جارية"}</span>
-              <small>المراجع: {peopleById.get(approvalTask.owner_id)?.name ?? "مسؤول الاعتماد"}</small>
-              {(manager || approvalTask.owner_id === session.user.id) && approvalTask.status === "ready" ? <Button type="button" variant="secondary" disabled={working} onClick={() => void changeReelApproval(approvalTask, "start")}>بدء المراجعة النهائية</Button> : null}
-              {(manager || approvalTask.owner_id === session.user.id) && ["in_progress", "review"].includes(approvalTask.status) ? <Button type="button" disabled={working || Boolean(openRevisions.length || openCueCount)} onClick={() => void changeReelApproval(approvalTask, "approve")}>اعتماد وفتح النشر</Button> : null}
-              {openRevisions.length || openCueCount ? <small className="approval-guard">أغلق {openRevisions.length ? `${openRevisions.length} تعديل` : ""}{openRevisions.length && openCueCount ? " و" : ""}{openCueCount ? `${openCueCount} تعليمة Timeline` : ""} قبل الاعتماد.</small> : null}
-            </div>
           </section> : null}
 
           {item.intake_request && item.intake_source_url ? <details className="telegram-intake-source">
@@ -692,7 +646,7 @@ export function ContentWorkspace() {
                 <div className="timeline-cue-body"><span>{contentCueKindConfig[cue.kind].label}</span><p>{cue.action}</p>{cue.source_url ? <a href={cue.source_url} target="_blank" rel="noreferrer">فتح المصدر <ExternalLink size={11} /></a> : null}</div>
                 {canChangeTimeline ? <button className="timeline-toggle" type="button" disabled={working} onClick={() => void runCommand({ action: "change_timeline_cue", cue_id: cue.id, completed: !cue.completed_at }, cue.completed_at ? "أُعيد فتح تعليمة الـTimeline." : "تم تعليم سطر الـTimeline كمنفذ.")}>{cue.completed_at ? "إعادة فتح" : "تم التنفيذ"}</button> : null}
               </li>)}</ol>
-              {openCueCount ? <p className="timeline-guard-note">لا يمكن إغلاق الاعتماد النهائي قبل تنفيذ كل تعليمات الـTimeline.</p> : <p className="timeline-guard-note complete"><CheckCircle2 size={13} /> كل تعليمات المونتاج منفذة.</p>}
+              {openCueCount ? <p className="timeline-guard-note">ما زال هناك {openCueCount} تعليمات يجب تنفيذها داخل تسليم المونتاج.</p> : <p className="timeline-guard-note complete"><CheckCircle2 size={13} /> كل تعليمات المونتاج منفذة.</p>}
             </section> : null}
             <section className="production-tool-panel">
               <div className="production-tool-heading"><div><Paperclip size={16} /><div><p className="overline">ملفات ومراجع</p><h4>مركز الأصول</h4></div></div>{canAddAsset ? <button className="text-button" type="button" onClick={() => setAssetFormId(assetFormId === item.id ? null : item.id)}><Plus size={13} /> إضافة رابط</button> : null}</div>
@@ -731,25 +685,25 @@ export function ContentWorkspace() {
           </div>
 
           {deliveryTasks.length ? <section className="content-delivery-section">
-            <div className="production-tool-heading"><div><CheckCircle2 size={16} /><div><p className="overline">تسليم ثم مراجعة</p><h4>المنفّذ يسلّم مرة واحدة، والإدارة هي التي تعتمد</h4></div></div></div>
+            <div className="production-tool-heading"><div><CheckCircle2 size={16} /><div><p className="overline">تسليم واحد</p><h4>النتيجة تغلق المهمة وتفتح التالية تلقائيًا</h4></div></div></div>
             <div className="content-delivery-grid">{deliveryTasks.map((task) => {
               const delivery = deliveriesByTask.get(task.id);
               const canSubmitResult = manager || task.owner_id === session.user.id;
               const isPublishing = task.content_step === "publishing";
-              const canEditResult = canSubmitResult && (["ready", "in_progress"].includes(task.status) || (!delivery && task.status === "review") || (isPublishing && task.status === "done"));
+              const canEditResult = canSubmitResult && (["ready", "in_progress", "review", "done"].includes(task.status));
               const needsUrl = Boolean(task.content_step && ["recording", "editing", "thumbnail", "design", "publishing"].includes(task.content_step));
               const canReviseTask = Boolean(task.content_step && revisionOptions.includes(task.content_step));
               const resultUrlLabel = isPublishing ? "رابط المنشور" : "رابط التسليم";
               return <article key={task.id} className={`${delivery ? "has-delivery" : ""} ${task.status === "done" ? "approved-delivery" : ""} ${isPublishing ? "publishing-delivery" : ""}`}>
                 <header><div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{peopleById.get(task.owner_id)?.name ?? "عضو فريق"}</small></div><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge></header>
                 {delivery ? <div className="saved-step-result"><span>{isPublishing && task.status === "done" ? "تم النشر" : `إصدار ${delivery.version}`} · {formatDate(delivery.submitted_at)}</span>{delivery.result_note ? <p>{delivery.result_note}</p> : null}{delivery.result_url ? <a href={delivery.result_url} target="_blank" rel="noreferrer">{isPublishing ? "فتح المنشور" : "فتح التسليم"} <ExternalLink size={11} /></a> : null}</div> : <p>{isPublishing ? "لم يتم تأكيد النشر بعد. أضف رابط المنشور الحقيقي عند النشر." : task.status === "backlog" ? "تنتظر هذه المهمة اكتمال الخطوة السابقة." : "لم يسلّم صاحب المهمة النتيجة بعد."}</p>}
-                {canEditResult ? <button className="text-button delivery-primary-action" type="button" onClick={() => setDeliveryFormTaskId(deliveryFormTaskId === task.id ? null : task.id)}><Upload size={12} /> {isPublishing ? delivery ? "تحديث بيانات النشر" : "تأكيد تم النشر" : delivery ? "تحديث التسليم" : "تسليم للمراجعة"}</button> : null}
-                {task.status === "review" ? <div className="delivery-review-actions">{manager ? <><Button type="button" disabled={working || !delivery} onClick={() => void approveContentTask(task)}><CheckCircle2 size={13} /> اعتماد التسليم</Button>{canReviseTask ? <button className="text-button" type="button" onClick={() => setReviewFormTaskId(reviewFormTaskId === task.id ? null : task.id)}>طلب تعديل</button> : null}{!delivery ? <small>أضف رابط أو نتيجة التسليم أولًا؛ لا يمكن الاعتماد بدون دليل.</small> : null}</> : <small>{delivery ? "تم التسليم، وفي انتظار اعتماد الإدارة. لا تحتاج لتغيير أي حالة أخرى." : "أكمل تسليم الرابط مرة واحدة؛ بعدها تنتقل المراجعة للإدارة."}</small>}</div> : null}
+                {canEditResult ? <button className="text-button delivery-primary-action" type="button" onClick={() => setDeliveryFormTaskId(deliveryFormTaskId === task.id ? null : task.id)}><Upload size={12} /> {isPublishing ? delivery ? "تحديث بيانات النشر" : "تأكيد تم النشر" : delivery ? "تحديث التسليم" : "تسليم وإغلاق المهمة"}</button> : null}
+                {manager && delivery && canReviseTask && task.status === "done" ? <div className="delivery-review-actions"><button className="text-button" type="button" onClick={() => setReviewFormTaskId(reviewFormTaskId === task.id ? null : task.id)}>طلب تعديل وإعادة فتح المهمة</button></div> : null}
                 {reviewFormTaskId === task.id && manager && canReviseTask ? <form className="compact-command-form" onSubmit={(event) => void requestTaskRevision(event, task)}><label><span>التعديل المطلوب</span><textarea name="revision_instructions" minLength={5} maxLength={5000} rows={3} required placeholder="اكتب المشكلة والنتيجة المطلوبة بوضوح." /></label><div className="form-actions"><Button type="submit" disabled={working}>إرسال التعديل لصاحب المهمة</Button><button className="text-button" type="button" onClick={() => setReviewFormTaskId(null)}>إلغاء</button></div></form> : null}
                 {deliveryFormTaskId === task.id && canEditResult ? <form className="compact-command-form" onSubmit={(event) => void submitStepDelivery(event, task)}>
                   <label><span>{task.content_step === "caption" ? "الكابشن النهائي" : isPublishing ? "ملاحظة النشر — اختياري" : "ملاحظة التسليم"}</span><textarea name="result_note" minLength={3} maxLength={10000} rows={4} defaultValue={delivery?.result_note ?? ""} placeholder={task.content_step === "scheduling" ? "المنصات وموعد الجدولة والتأكيد" : isPublishing ? "مثال: نُشر على Instagram وFacebook" : "اكتب ما تم تسليمه وما يحتاجه المراجع"} /></label>
                   <label><span>{resultUrlLabel}{needsUrl ? " — مطلوب" : " — اختياري"}</span><input name="result_url" type="url" dir="ltr" required={needsUrl} defaultValue={delivery?.result_url ?? ""} placeholder={isPublishing ? "https://instagram.com/p/..." : "https://drive.google.com/..."} /></label>
-                  <div className="form-actions"><Button type="submit" disabled={working}>{isPublishing ? "تأكيد أنه تم النشر" : "تسليم مرة واحدة للمراجعة"}</Button><button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button>{!isPublishing ? <small>بعد التسليم تتحول المهمة للمراجع تلقائيًا؛ المنفّذ لا يعتمد عمله بنفسه.</small> : null}</div>
+                  <div className="form-actions"><Button type="submit" disabled={working}>{isPublishing ? "تأكيد أنه تم النشر" : "حفظ التسليم وإغلاق المهمة"}</Button><button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button>{!isPublishing ? <small>بعد الحفظ يفتح النظام الخطوة التالية تلقائيًا ويبلغ الإدارة بالإنجاز.</small> : null}</div>
                 </form> : null}
               </article>;
             })}</div>

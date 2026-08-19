@@ -375,77 +375,6 @@ export type Database = {
           },
         ]
       }
-      content_step_deliveries: {
-        Row: {
-          content_item_id: string
-          id: string
-          organization_id: string
-          result_note: string | null
-          result_url: string | null
-          step: Database["public"]["Enums"]["content_step"]
-          submitted_at: string
-          submitted_by: string
-          task_id: string
-          updated_at: string
-          version: number
-        }
-        Insert: {
-          content_item_id: string
-          id?: string
-          organization_id: string
-          result_note?: string | null
-          result_url?: string | null
-          step: Database["public"]["Enums"]["content_step"]
-          submitted_at?: string
-          submitted_by: string
-          task_id: string
-          updated_at?: string
-          version?: number
-        }
-        Update: {
-          content_item_id?: string
-          id?: string
-          organization_id?: string
-          result_note?: string | null
-          result_url?: string | null
-          step?: Database["public"]["Enums"]["content_step"]
-          submitted_at?: string
-          submitted_by?: string
-          task_id?: string
-          updated_at?: string
-          version?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "content_step_deliveries_content_org_fkey"
-            columns: ["content_item_id", "organization_id"]
-            isOneToOne: false
-            referencedRelation: "content_items"
-            referencedColumns: ["id", "organization_id"]
-          },
-          {
-            foreignKeyName: "content_step_deliveries_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "content_step_deliveries_submitted_by_fkey"
-            columns: ["submitted_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "content_step_deliveries_task_identity_fkey"
-            columns: ["task_id", "organization_id", "content_item_id", "step"]
-            isOneToOne: false
-            referencedRelation: "tasks"
-            referencedColumns: ["id", "organization_id", "content_item_id", "content_step"]
-          },
-        ]
-      }
       content_revision_requests: {
         Row: {
           assigned_to: string
@@ -537,6 +466,82 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tasks"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_step_deliveries: {
+        Row: {
+          content_item_id: string
+          id: string
+          organization_id: string
+          result_note: string | null
+          result_url: string | null
+          step: Database["public"]["Enums"]["content_step"]
+          submitted_at: string
+          submitted_by: string
+          task_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          content_item_id: string
+          id?: string
+          organization_id: string
+          result_note?: string | null
+          result_url?: string | null
+          step: Database["public"]["Enums"]["content_step"]
+          submitted_at?: string
+          submitted_by: string
+          task_id: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          content_item_id?: string
+          id?: string
+          organization_id?: string
+          result_note?: string | null
+          result_url?: string | null
+          step?: Database["public"]["Enums"]["content_step"]
+          submitted_at?: string
+          submitted_by?: string
+          task_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_step_deliveries_content_org_fkey"
+            columns: ["content_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_step_deliveries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_step_deliveries_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_step_deliveries_task_identity_fkey"
+            columns: ["task_id", "organization_id", "content_item_id", "step"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: [
+              "id",
+              "organization_id",
+              "content_item_id",
+              "content_step",
+            ]
           },
         ]
       }
@@ -912,13 +917,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "launch_content_items_deliverable_org_fkey"
-            columns: ["launch_deliverable_id", "launch_id", "organization_id"]
-            isOneToOne: false
-            referencedRelation: "launch_deliverables"
-            referencedColumns: ["id", "launch_id", "organization_id"]
-          },
-          {
             foreignKeyName: "launch_content_items_content_item_id_organization_id_fkey"
             columns: ["content_item_id", "organization_id"]
             isOneToOne: false
@@ -931,6 +929,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "launch_content_items_deliverable_org_fkey"
+            columns: ["launch_deliverable_id", "launch_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "launch_deliverables"
+            referencedColumns: ["id", "launch_id", "organization_id"]
           },
           {
             foreignKeyName: "launch_content_items_launch_id_organization_id_fkey"
@@ -1236,6 +1241,48 @@ export type Database = {
           },
         ]
       }
+      member_presence: {
+        Row: {
+          current_section: string
+          last_seen_at: string
+          organization_id: string
+          session_started_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_section: string
+          last_seen_at?: string
+          organization_id: string
+          session_started_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_section?: string
+          last_seen_at?: string
+          organization_id?: string
+          session_started_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_presence_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_presence_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -1276,48 +1323,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      member_presence: {
-        Row: {
-          current_section: string
-          last_seen_at: string
-          organization_id: string
-          session_started_at: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          current_section: string
-          last_seen_at?: string
-          organization_id: string
-          session_started_at?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          current_section?: string
-          last_seen_at?: string
-          organization_id?: string
-          session_started_at?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "member_presence_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "member_presence_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1432,6 +1437,561 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      publishing_admin_connections: {
+        Row: {
+          connected_at: string | null
+          link_code_hash: string | null
+          link_expires_at: string | null
+          notifications_enabled: boolean
+          organization_id: string
+          telegram_chat_id: number | null
+          telegram_user_id: number | null
+          telegram_username: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connected_at?: string | null
+          link_code_hash?: string | null
+          link_expires_at?: string | null
+          notifications_enabled?: boolean
+          organization_id: string
+          telegram_chat_id?: number | null
+          telegram_user_id?: number | null
+          telegram_username?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connected_at?: string | null
+          link_code_hash?: string | null
+          link_expires_at?: string | null
+          notifications_enabled?: boolean
+          organization_id?: string
+          telegram_chat_id?: number | null
+          telegram_user_id?: number | null
+          telegram_username?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_admin_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_admin_connections_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishing_channels: {
+        Row: {
+          allowlisted: boolean
+          bot_can_post: boolean
+          bot_user_id: number | null
+          bot_username: string | null
+          created_at: string
+          created_by: string
+          id: string
+          last_error: string | null
+          organization_id: string
+          platform: string
+          telegram_chat_id: number
+          telegram_username: string | null
+          title: string
+          updated_at: string
+          verification_status: string
+          verified_at: string | null
+        }
+        Insert: {
+          allowlisted?: boolean
+          bot_can_post?: boolean
+          bot_user_id?: number | null
+          bot_username?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          last_error?: string | null
+          organization_id: string
+          platform?: string
+          telegram_chat_id: number
+          telegram_username?: string | null
+          title: string
+          updated_at?: string
+          verification_status?: string
+          verified_at?: string | null
+        }
+        Update: {
+          allowlisted?: boolean
+          bot_can_post?: boolean
+          bot_user_id?: number | null
+          bot_username?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          last_error?: string | null
+          organization_id?: string
+          platform?: string
+          telegram_chat_id?: number
+          telegram_username?: string | null
+          title?: string
+          updated_at?: string
+          verification_status?: string
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_channels_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_channels_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishing_controls: {
+        Row: {
+          generation: number
+          kill_switch: boolean
+          organization_id: string
+          reason: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          generation?: number
+          kill_switch?: boolean
+          organization_id: string
+          reason?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          generation?: number
+          kill_switch?: boolean
+          organization_id?: string
+          reason?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_controls_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_controls_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishing_occurrences: {
+        Row: {
+          approved_snapshot_hash: string | null
+          automation_generation: number | null
+          callback_consumed_at: string | null
+          callback_token: string
+          created_at: string
+          error: string | null
+          hold_reason: string | null
+          id: string
+          organization_id: string
+          post_id: string
+          preview_chat_id: number | null
+          preview_claim_token: string | null
+          preview_claimed_at: string | null
+          preview_message_id: number | null
+          preview_sent_at: string | null
+          schedule_id: string
+          scheduled_at: string
+          snapshot_hash: string | null
+          snapshot_payload: Json | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_snapshot_hash?: string | null
+          automation_generation?: number | null
+          callback_consumed_at?: string | null
+          callback_token?: string
+          created_at?: string
+          error?: string | null
+          hold_reason?: string | null
+          id?: string
+          organization_id: string
+          post_id: string
+          preview_chat_id?: number | null
+          preview_claim_token?: string | null
+          preview_claimed_at?: string | null
+          preview_message_id?: number | null
+          preview_sent_at?: string | null
+          schedule_id: string
+          scheduled_at: string
+          snapshot_hash?: string | null
+          snapshot_payload?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_snapshot_hash?: string | null
+          automation_generation?: number | null
+          callback_consumed_at?: string | null
+          callback_token?: string
+          created_at?: string
+          error?: string | null
+          hold_reason?: string | null
+          id?: string
+          organization_id?: string
+          post_id?: string
+          preview_chat_id?: number | null
+          preview_claim_token?: string | null
+          preview_claimed_at?: string | null
+          preview_message_id?: number | null
+          preview_sent_at?: string | null
+          schedule_id?: string
+          scheduled_at?: string
+          snapshot_hash?: string | null
+          snapshot_payload?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_occurrences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_occurrences_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "publishing_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_occurrences_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "publishing_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishing_posts: {
+        Row: {
+          content_item_id: string | null
+          created_at: string
+          created_by: string
+          disable_link_preview: boolean
+          id: string
+          link_url: string | null
+          media_kind: string
+          media_source: string | null
+          name: string
+          organization_id: string
+          post_text: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          content_item_id?: string | null
+          created_at?: string
+          created_by: string
+          disable_link_preview?: boolean
+          id?: string
+          link_url?: string | null
+          media_kind?: string
+          media_source?: string | null
+          name: string
+          organization_id: string
+          post_text?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          content_item_id?: string | null
+          created_at?: string
+          created_by?: string
+          disable_link_preview?: boolean
+          id?: string
+          link_url?: string | null
+          media_kind?: string
+          media_source?: string | null
+          name?: string
+          organization_id?: string
+          post_text?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_posts_content_item_id_fkey"
+            columns: ["content_item_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_posts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_posts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishing_publication_logs: {
+        Row: {
+          attempt_count: number
+          channel_id: string
+          claim_expires_at: string
+          claim_generation: number
+          claim_token: string
+          created_at: string
+          error: string | null
+          id: string
+          message_id: number | null
+          message_url: string | null
+          network_started_at: string | null
+          occurrence_id: string
+          organization_id: string
+          post_id: string
+          published_at: string | null
+          status: string
+          telegram_error_code: number | null
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          channel_id: string
+          claim_expires_at: string
+          claim_generation: number
+          claim_token: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          message_id?: number | null
+          message_url?: string | null
+          network_started_at?: string | null
+          occurrence_id: string
+          organization_id: string
+          post_id: string
+          published_at?: string | null
+          status: string
+          telegram_error_code?: number | null
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          channel_id?: string
+          claim_expires_at?: string
+          claim_generation?: number
+          claim_token?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          message_id?: number | null
+          message_url?: string | null
+          network_started_at?: string | null
+          occurrence_id?: string
+          organization_id?: string
+          post_id?: string
+          published_at?: string | null
+          status?: string
+          telegram_error_code?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_publication_logs_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "publishing_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_publication_logs_occurrence_id_fkey"
+            columns: ["occurrence_id"]
+            isOneToOne: false
+            referencedRelation: "publishing_occurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_publication_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_publication_logs_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "publishing_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishing_schedule_channels: {
+        Row: {
+          channel_id: string
+          created_at: string
+          organization_id: string
+          schedule_id: string
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          organization_id: string
+          schedule_id: string
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          organization_id?: string
+          schedule_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_schedule_channels_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "publishing_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_schedule_channels_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_schedule_channels_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "publishing_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishing_schedules: {
+        Row: {
+          created_at: string
+          created_by: string
+          deleted_at: string | null
+          ends_on: string | null
+          id: string
+          missed_grace_minutes: number
+          occurrence_limit: number | null
+          once_at: string | null
+          organization_id: string
+          paused: boolean
+          post_id: string
+          preview_lead_minutes: number
+          preview_policy: string
+          schedule_type: string
+          starts_on: string | null
+          time_local: string | null
+          timezone_name: string
+          updated_at: string
+          weekdays: number[] | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          deleted_at?: string | null
+          ends_on?: string | null
+          id?: string
+          missed_grace_minutes?: number
+          occurrence_limit?: number | null
+          once_at?: string | null
+          organization_id: string
+          paused?: boolean
+          post_id: string
+          preview_lead_minutes?: number
+          preview_policy?: string
+          schedule_type: string
+          starts_on?: string | null
+          time_local?: string | null
+          timezone_name?: string
+          updated_at?: string
+          weekdays?: number[] | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          deleted_at?: string | null
+          ends_on?: string | null
+          id?: string
+          missed_grace_minutes?: number
+          occurrence_limit?: number | null
+          once_at?: string | null
+          organization_id?: string
+          paused?: boolean
+          post_id?: string
+          preview_lead_minutes?: number
+          preview_policy?: string
+          schedule_type?: string
+          starts_on?: string | null
+          time_local?: string | null
+          timezone_name?: string
+          updated_at?: string
+          weekdays?: number[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_schedules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_schedules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_schedules_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "publishing_posts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_dependencies: {
         Row: {
@@ -1654,38 +2214,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_team_task_performance: {
-        Args: {
-          range_ends_at: string
-          range_starts_at: string
-          target_organization_id: string
-        }
-        Returns: {
-          completed_late: number
-          completed_on_time: number
-          last_activity_at: string | null
-          overdue_open: number
-          review_submissions: number
-          revisions_received: number
-          revisions_requested: number
-          tasks_assigned: number
-          tasks_completed: number
-          tasks_requested: number
-          user_id: string
-        }[]
-      }
-      mark_all_notifications_read: {
-        Args: { target_organization_id: string }
-        Returns: number
-      }
-      mark_notification_read: {
-        Args: { target_notification_id: number }
-        Returns: boolean
-      }
-      record_member_presence: {
-        Args: { target_organization_id: string; target_section: string }
-        Returns: boolean
-      }
       add_content_asset: {
         Args: {
           asset_kind: Database["public"]["Enums"]["content_asset_kind"]
@@ -1728,6 +2256,10 @@ export type Database = {
         Args: { target_user_id: string }
         Returns: string
       }
+      cancel_publishing_occurrence: {
+        Args: { target_occurrence_id: string }
+        Returns: boolean
+      }
       change_content_revision: {
         Args: {
           target_action: string
@@ -1751,6 +2283,84 @@ export type Database = {
           target_user_id: string
         }
         Returns: boolean
+      }
+      claim_publication_batch: {
+        Args: { target_batch_size?: number }
+        Returns: {
+          channel_id: string
+          claim_generation: number
+          claim_token: string
+          content_item_id: string
+          disable_link_preview: boolean
+          link_url: string
+          log_id: string
+          media_kind: string
+          media_source: string
+          occurrence_id: string
+          organization_id: string
+          post_created_by: string
+          post_id: string
+          post_name: string
+          post_text: string
+          scheduled_at: string
+          telegram_chat_id: number
+          telegram_username: string
+        }[]
+      }
+      claim_publishing_preview_batch: {
+        Args: { target_batch_size?: number }
+        Returns: {
+          admin_chat_id: number
+          callback_token: string
+          claim_token: string
+          occurrence_id: string
+          organization_id: string
+          preview_policy: string
+          scheduled_at: string
+          snapshot_hash: string
+          snapshot_payload: Json
+        }[]
+      }
+      complete_publication_failure: {
+        Args: {
+          target_claim_token: string
+          target_error: string
+          target_log_id: string
+          target_telegram_error_code: number
+          target_terminal_status: string
+        }
+        Returns: boolean
+      }
+      complete_publication_success: {
+        Args: {
+          target_claim_token: string
+          target_log_id: string
+          target_message_id: number
+          target_message_url: string
+        }
+        Returns: boolean
+      }
+      complete_publishing_admin_link: {
+        Args: {
+          raw_link_code: string
+          target_telegram_chat_id: number
+          target_telegram_user_id: number
+          target_telegram_username: string
+        }
+        Returns: {
+          organization_id: string
+          user_id: string
+        }[]
+      }
+      complete_publishing_preview: {
+        Args: {
+          target_claim_token: string
+          target_error: string
+          target_occurrence_id: string
+          target_preview_chat_id: number
+          target_preview_message_id: number
+        }
+        Returns: string
       }
       create_brand_article_draft: {
         Args: {
@@ -1870,6 +2480,10 @@ export type Database = {
           target_user_id: string
           tracking_owner_id: string
         }
+        Returns: string
+      }
+      create_publishing_admin_link: {
+        Args: { target_organization_id: string }
         Returns: string
       }
       create_reel_from_intake: {
@@ -2068,6 +2682,61 @@ export type Database = {
         }
         Returns: string
       }
+      create_social_post_deliverable: {
+        Args: {
+          approval_owner_id: string
+          brief_owner_id: string
+          caption_owner_id: string
+          content_copy_brief: string
+          content_cta: string
+          content_design_brief: string
+          content_goal: string
+          content_hook: string
+          content_platforms: string[]
+          deliverable_brief: string
+          deliverable_budget_amount: number
+          deliverable_budget_category: Database["public"]["Enums"]["launch_budget_category"]
+          deliverable_currency: string
+          deliverable_destination: string
+          deliverable_due_at: string
+          deliverable_owner_id: string
+          deliverable_quantity: number
+          deliverable_title: string
+          depends_on_deliverable_id: string
+          design_owner_id: string
+          first_publish_at: string
+          publishing_owner_id: string
+          scheduling_owner_id: string
+          target_creation_request_id: string
+          target_launch_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
+      create_telegram_publication: {
+        Args: {
+          post_disable_link_preview: boolean
+          post_link_url: string
+          post_media_kind: string
+          post_media_source: string
+          post_name: string
+          post_text: string
+          target_channel_ids: string[]
+          target_content_item_id: string
+          target_ends_on: string
+          target_missed_grace_minutes: number
+          target_occurrence_limit: number
+          target_once_at: string
+          target_organization_id: string
+          target_preview_lead_minutes: number
+          target_preview_policy: string
+          target_schedule_type: string
+          target_starts_on: string
+          target_time_local: string
+          target_weekdays: number[]
+        }
+        Returns: string
+      }
       detach_content_from_launch: {
         Args: {
           target_content_item_id: string
@@ -2093,6 +2762,55 @@ export type Database = {
           won_in_period: number
         }[]
       }
+      get_team_task_performance: {
+        Args: {
+          range_ends_at: string
+          range_starts_at: string
+          target_organization_id: string
+        }
+        Returns: {
+          completed_late: number
+          completed_on_time: number
+          last_activity_at: string
+          overdue_open: number
+          review_submissions: number
+          revisions_received: number
+          revisions_requested: number
+          tasks_assigned: number
+          tasks_completed: number
+          tasks_requested: number
+          user_id: string
+        }[]
+      }
+      handle_publishing_callback: {
+        Args: {
+          target_action: string
+          target_callback_token: string
+          target_telegram_user_id: number
+        }
+        Returns: {
+          occurrence_id: string
+          occurrence_scheduled_at: string
+          occurrence_status: string
+          organization_id: string
+        }[]
+      }
+      mark_all_notifications_read: {
+        Args: { target_organization_id: string }
+        Returns: number
+      }
+      mark_notification_read: {
+        Args: { target_notification_id: number }
+        Returns: boolean
+      }
+      mark_publication_network_started: {
+        Args: {
+          target_claim_generation: number
+          target_claim_token: string
+          target_log_id: string
+        }
+        Returns: boolean
+      }
       record_crm_activity: {
         Args: {
           activity_kind: Database["public"]["Enums"]["crm_activity_kind"]
@@ -2102,6 +2820,10 @@ export type Database = {
           target_next_follow_up_at: string
           target_user_id: string
         }
+        Returns: boolean
+      }
+      record_member_presence: {
+        Args: { target_organization_id: string; target_section: string }
         Returns: boolean
       }
       remove_content_asset: {
@@ -2152,6 +2874,27 @@ export type Database = {
           total_count: number
         }[]
       }
+      set_publishing_kill_switch: {
+        Args: {
+          target_enabled: boolean
+          target_organization_id: string
+          target_reason: string
+        }
+        Returns: number
+      }
+      set_publishing_schedule_paused: {
+        Args: { target_paused: boolean; target_schedule_id: string }
+        Returns: boolean
+      }
+      submit_content_step_delivery: {
+        Args: {
+          delivery_result_note: string
+          delivery_result_url: string
+          target_task_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       submit_launch_deliverable: {
         Args: {
           deliverable_result_note: string
@@ -2189,6 +2932,33 @@ export type Database = {
           target_user_id: string
         }
         Returns: boolean
+      }
+      update_social_post_brief: {
+        Args: {
+          content_copy_brief: string
+          content_cta: string
+          content_design_brief: string
+          content_goal: string
+          content_hook: string
+          content_title: string
+          target_content_item_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
+      upsert_verified_publishing_channel: {
+        Args: {
+          target_chat_id: number
+          target_organization_id: string
+          target_title: string
+          target_user_id: string
+          target_username: string
+          verification_error: string
+          verified_bot_user_id: number
+          verified_bot_username: string
+          verified_can_post: boolean
+        }
+        Returns: string
       }
     }
     Enums: {
