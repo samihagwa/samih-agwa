@@ -74,6 +74,13 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus);
 .notification-popover li p { margin: 4px 0; color: var(--ink-600); font-size: 12px; line-height: 1.6; }
 .notification-popover li small { color: var(--ink-400); font-size: 10px; }
 .notification-empty { margin: 0; padding: 28px 14px; color: var(--ink-500); font-size: 12px; text-align: center; }
+.notification-toast { width: min(390px, calc(100vw - 24px)); padding: 10px; position: fixed; z-index: 70; inset-inline-end: 22px; top: 86px; display: flex; align-items: flex-start; gap: 7px; border: 1px solid #b3dbd5; border-radius: 14px; background: var(--paper); box-shadow: 0 20px 50px rgba(16,36,49,.18); }
+.notification-toast-main { min-width: 0; flex: 1; padding: 2px; display: flex; align-items: flex-start; gap: 9px; border: 0; background: transparent; color: var(--ink-950); text-align: start; cursor: pointer; }
+.notification-toast-main > svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal-700); }
+.notification-toast-main span, .notification-toast-main strong, .notification-toast-main small { min-width: 0; display: block; }
+.notification-toast-main strong { font-size: 12px; }
+.notification-toast-main small { margin-top: 3px; overflow: hidden; color: var(--ink-600); font-size: 11px; line-height: 1.6; text-overflow: ellipsis; white-space: nowrap; }
+.notification-toast-close { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; border: 0; border-radius: 8px; background: var(--canvas); color: var(--ink-600); cursor: pointer; }
 .user-chip { display: flex; align-items: center; gap: 9px; padding-right: 5px; }
 .user-chip > span { width: 37px; height: 37px; display: grid; place-items: center; background: var(--ink-950); color: white; border-radius: 12px; font-weight: 800; }
 .user-chip strong, .user-chip small { display: block; }
@@ -819,6 +826,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
   .content-card > header, .content-card > footer { align-items: flex-start; flex-direction: column; }
   .content-card-actions { width: 100%; justify-items: start; }
   .content-collapsed-summary { grid-template-columns: 1fr; }
+  .notification-toast { inset-inline: 12px; top: 183px; width: auto; }
   .content-card-badges, .production-header, .production-tool-heading { align-items: flex-start; justify-content: flex-start; flex-direction: column; }
   .inline-production-form { grid-template-columns: 1fr; }
   .inline-production-form .form-actions { grid-column: auto; }

@@ -436,9 +436,10 @@ test("task and content workspaces default to focused current work with clear Ara
 });
 
 test("notifications, evidence-based team reports, and transparent coarse presence are tenant secured", async () => {
-  const [migration, hardening, appShell, notificationCenter, presenceReporter, teamWorkspace, teamPage, types] = await Promise.all([
+  const [migration, hardening, selfRevisionFix, appShell, notificationCenter, presenceReporter, teamWorkspace, teamPage, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260819021613_team_operations_notifications_presence.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819022259_harden_user_state_commands.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819024032_notify_self_assigned_content_revisions.sql", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/auth/NotificationCenter.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/auth/PresenceReporter.tsx", import.meta.url), "utf8"),
@@ -457,9 +458,15 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
   assert.match(migration, /No clicks, keystrokes, or hidden surveillance/i);
   assert.match(hardening, /security invoker/g);
   assert.match(hardening, /member_presence_enforce_write/);
+  assert.match(selfRevisionFix, /تم تسجيل طلب تعديل لك/);
+  assert.match(selfRevisionFix, /on conflict \(dedupe_key\) do nothing/);
+  assert.doesNotMatch(selfRevisionFix, /if new\.assigned_to is distinct from new\.requested_by/);
   assert.match(appShell, /NotificationCenter/);
   assert.match(appShell, /PresenceReporter/);
   assert.match(notificationCenter, /mark_notification_read/);
+  assert.match(notificationCenter, /30_000/);
+  assert.match(notificationCenter, /visibilitychange/);
+  assert.match(notificationCenter, /notification-toast/);
   assert.match(presenceReporter, /60_000/);
   assert.match(teamWorkspace, /أرقام واقعية بلا تقييم شخصي/);
   assert.match(teamWorkspace, /آخر أسبوع/);
