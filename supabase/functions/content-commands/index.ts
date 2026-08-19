@@ -4,7 +4,8 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const contentSteps = new Set(["brief", "recording", "editing", "thumbnail", "caption", "design", "approval", "scheduling", "publishing"]);
 const revisionSteps = new Set(["recording", "editing", "thumbnail", "caption", "design"]);
-const resultSteps = new Set(["caption", "design", "scheduling", "publishing"]);
+const resultSteps = new Set(["recording", "editing", "thumbnail", "caption", "design", "scheduling", "publishing"]);
+const resultUrlSteps = new Set(["recording", "editing", "thumbnail", "design", "publishing"]);
 const assetKinds = new Set([
   "raw_video", "source", "b_roll", "image", "audio", "reference",
   "draft_video", "thumbnail", "caption", "final_export",
@@ -87,8 +88,8 @@ async function submitStepDelivery(body: Record<string, unknown>, context: Contex
   const url = text(body.result_url);
   if (!taskId || !resultSteps.has(step) || (!note && !url)
     || note.length > 10000 || url.length > 2000 || (url && !isHttpUrl(url))
-    || ((step === "design" || step === "publishing") && !url)) {
-    return jsonResponse({ message: "أضف نتيجة المرحلة بشكل صحيح؛ التصميم والنشر يحتاجان رابطًا." }, 400);
+    || (resultUrlSteps.has(step) && !url)) {
+    return jsonResponse({ message: "أضف نتيجة المرحلة بشكل صحيح؛ التسجيل والمونتاج والغلاف والتصميم والنشر تحتاج رابطًا." }, 400);
   }
   const { data, error } = await context!.supabaseAdmin.rpc("submit_content_step_delivery", {
     target_user_id: context!.userClaims!.id,

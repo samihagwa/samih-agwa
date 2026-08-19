@@ -168,13 +168,15 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
 });
 
 test("content production briefs, assets, and revision rounds share one secured workflow", async () => {
-  const [migration, commands, createCommand, workspace, taskWorkspace, contentContract, types] = await Promise.all([
+  const [migration, completionMigration, commands, createCommand, workspace, taskWorkspace, contentContract, taskContract, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817014819_content_production_briefs_and_revisions.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819040034_simplify_content_task_completion.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/content.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
 
@@ -201,15 +203,24 @@ test("content production briefs, assets, and revision rounds share one secured w
   assert.match(workspace, /مركز الأصول/);
   assert.match(workspace, /جولات التعديل/);
   assert.match(workspace, /functions\.invoke\("content-commands"/);
-  assert.match(taskWorkspace, /فتح ملف المحتوى وتسليم النتيجة/);
+  assert.match(workspace, /المنفّذ يسلّم مرة واحدة، والإدارة هي التي تعتمد/);
+  assert.match(workspace, /تأكيد أنه تم النشر/);
+  assert.match(taskWorkspace, /فتح وتسليم المهمة/);
+  assert.doesNotMatch(taskWorkspace, /status-select compact/);
+  assert.match(commands, /recording.*editing.*thumbnail.*caption.*design.*scheduling.*publishing/);
+  assert.match(completionMigration, /confirm_content_publishing_task_id/);
+  assert.match(completionMigration, /Only organization leadership can approve a submitted content task/);
+  assert.match(completionMigration, /task_record\.content_step = 'publishing'/);
+  assert.match(taskContract, /done: "تم النشر"/);
   assert.match(contentContract, /contentAssetKindConfig/);
   assert.match(contentContract, /contentRevisionStatusConfig/);
 });
 
 test("social post deliverables expand into parallel copy and design workflows without double-counting the campaign output", async () => {
-  const [enumMigration, engineMigration, launchCommand, contentCommand, campaignWorkspace, contentWorkspace, taskWorkspace, contract, types] = await Promise.all([
+  const [enumMigration, engineMigration, completionMigration, launchCommand, contentCommand, campaignWorkspace, contentWorkspace, taskWorkspace, contract, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260819015223_social_post_workflow_template.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819015240_social_post_workflow_engine.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819040034_simplify_content_task_completion.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/launch-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
@@ -243,9 +254,10 @@ test("social post deliverables expand into parallel copy and design workflows wi
   assert.match(contentCommand, /update_social_post_brief/);
   assert.match(campaignWorkspace, /إنشاء البند ومصنع البوستات/);
   assert.match(campaignWorkspace, /الكابشن والتصميم بالتوازي/);
-  assert.match(contentWorkspace, /كل مرحلة تسلّم نتيجتها داخل الكارت/);
+  assert.match(contentWorkspace, /المنفّذ يسلّم مرة واحدة، والإدارة هي التي تعتمد/);
   assert.match(contentWorkspace, /Social Post Brief/);
-  assert.match(taskWorkspace, /\["caption", "design", "scheduling", "publishing"\]/);
+  assert.match(taskWorkspace, /فتح للمراجعة والاعتماد/);
+  assert.match(completionMigration, /content_step_deliveries_step_allowed/);
   assert.match(contract, /socialPostContentSteps/);
   for (const field of ["content_step_deliveries", "copy_brief", "design_brief", "launch_deliverable_id", "workflow_template"]) {
     assert.match(types, new RegExp(`${field}:`));

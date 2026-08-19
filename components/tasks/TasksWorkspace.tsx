@@ -26,6 +26,7 @@ import {
   canManageTasks,
   taskPriorityConfig,
   taskStatusConfig,
+  taskStatusLabel,
   type TaskPriority,
   type TaskStatus,
 } from "../../lib/tasks";
@@ -389,7 +390,7 @@ export function TasksWorkspace() {
     if (!data) {
       setError("المهمة تغيّرت عند عضو آخر. تم تحديث البورد قبل إعادة المحاولة.");
     } else {
-      setNotice(`انتقلت المهمة إلى «${taskStatusConfig[nextStatus].label}».`);
+      setNotice(`انتقلت المهمة إلى «${taskStatusLabel(nextStatus, task.content_step)}».`);
     }
     await refreshTasks(workspace.organization.id);
   }
@@ -493,20 +494,26 @@ export function TasksWorkspace() {
                       {overdueTasks.length ? <span className="overdue-label"><AlertTriangle size={14} /> {overdueTasks.length} خطوة متأخرة — الأقدم منذ {formatOverdueDuration(overdueTasks.sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0], renderNow)}</span> : null}
                       <div className="content-workflow-subtasks">{entry.tasks.map((task, index) => {
                         const owner = peopleById.get(task.owner_id);
-                        const canMove = manager || task.owner_id === session.user.id;
                         const completed = taskIsClosed(task);
                         const isMine = task.owner_id === session.user.id && !completed;
-                        const options = [task.status, ...allowedTaskTransitions[task.status]].filter((option) =>
-                          !task.content_step || !["caption", "design", "scheduling", "publishing"].includes(task.content_step)
-                            || option !== "review" || task.status === "review"
-                        );
+                        const canOpenAction = manager || task.owner_id === session.user.id;
+                        const actionLabel = task.status === "review"
+                          ? manager ? "فتح للمراجعة والاعتماد" : "بانتظار اعتماد الإدارة"
+                          : task.content_step === "publishing"
+                            ? "فتح وتأكيد النشر"
+                            : "فتح وتسليم المهمة";
                         const className = [isOverdue(task, renderNow) ? "overdue" : "", task.status === "blocked" ? "blocked" : "", completed ? "completed" : "", isMine ? "mine" : ""].filter(Boolean).join(" ");
                         return <section className={className} key={task.id}>
                           <div className="content-subtask-copy">
                             <span className="content-subtask-marker" aria-label={completed ? "مكتملة" : `الخطوة ${index + 1}`}>{completed ? <CheckCircle2 size={16} /> : index + 1}</span>
                             <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}{isMine ? <b> · مهمتك الآن</b> : null}</small></div>
                           </div>
-                          <label className="status-select compact"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark}</span><select aria-label={`نقل ${task.title}`} value={task.status} disabled={!canMove || working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}>{options.map((option) => <option key={option} value={option}>{taskStatusConfig[option].label}</option>)}</select></label>
+                          <div className="content-subtask-action">
+                            <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
+                            {!completed && task.status !== "backlog" && canOpenAction && !(task.status === "review" && !manager)
+                              ? <a href={`/content#content-${entry.contentItemId}`}><FileText size={12} /> {actionLabel}</a>
+                              : !completed ? <small>{task.status === "backlog" ? "تفتح تلقائيًا بعد الخطوة السابقة" : actionLabel}</small> : null}
+                          </div>
                         </section>;
                       })}</div>
                     </article>;
@@ -521,7 +528,7 @@ export function TasksWorkspace() {
                   );
                   return (
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} key={task.id}>
-                      <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusConfig[task.status].shortLabel}</StatusBadge><small>v{task.version}</small></div>
+                      <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small>v{task.version}</small></div>
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
                       {task.content_item_id ? <a className="task-production-link" href={`/content#content-${task.content_item_id}`}><FileText size={12} /> فتح ملف المحتوى وتسليم النتيجة</a> : null}
                       {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
@@ -536,7 +543,7 @@ export function TasksWorkspace() {
                       {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة منذ {formatOverdueDuration(task, renderNow)}</span> : null}
                       {task.crm_contact_id
                         ? <p className="crm-task-guard"><ShieldCheck size={13} /> تتحرك هذه المهمة تلقائيًا عند تسجيل النتيجة من CRM.</p>
-                        : <label className="status-select"><span>نقل إلى</span><select value={task.status} disabled={!canMove || working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}>{options.map((option) => <option key={option} value={option}>{taskStatusConfig[option].label}</option>)}</select></label>}
+                        : <label className="status-select"><span>نقل إلى</span><select value={task.status} disabled={!canMove || working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}>{options.map((option) => <option key={option} value={option}>{taskStatusLabel(option, task.content_step)}</option>)}</select></label>}
                     </article>
                   );
                 })}

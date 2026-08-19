@@ -24,7 +24,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   contentAssetKindConfig,
   contentAssignmentFields,
@@ -43,7 +43,7 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supaba
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
-import { canManageTasks } from "../../lib/tasks";
+import { canManageTasks, taskStatusConfig, taskStatusLabel } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 import { QuickIntakeForm, type QuickIntakePayload } from "./QuickIntakeForm";
@@ -64,7 +64,7 @@ type Workspace = { organization: Organization; membership: Membership; people: T
 type ContentFilter = "active" | "scheduled" | "published" | "all";
 
 const assetKinds = Object.keys(contentAssetKindConfig) as ContentAssetKind[];
-const resultSteps = ["caption", "design", "scheduling", "publishing"] as ContentStep[];
+const resultSteps = ["recording", "editing", "thumbnail", "caption", "design", "scheduling", "publishing"] as ContentStep[];
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -110,11 +110,13 @@ export function ContentWorkspace() {
   const [editingBriefId, setEditingBriefId] = useState<string | null>(null);
   const [assetFormId, setAssetFormId] = useState<string | null>(null);
   const [revisionFormId, setRevisionFormId] = useState<string | null>(null);
+  const [reviewFormTaskId, setReviewFormTaskId] = useState<string | null>(null);
   const [deliveryFormTaskId, setDeliveryFormTaskId] = useState<string | null>(null);
   const [contentFilter, setContentFilter] = useState<ContentFilter>("active");
   const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
+  const openedContentHash = useRef<string | null>(null);
   const [defaultPublish] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)));
 
   const clearData = useCallback(() => {
@@ -129,6 +131,7 @@ export function ContentWorkspace() {
     setEditingBriefId(null);
     setAssetFormId(null);
     setRevisionFormId(null);
+    setReviewFormTaskId(null);
     setDeliveryFormTaskId(null);
     setExpandedContentIds(new Set());
   }, []);
@@ -280,6 +283,15 @@ export function ContentWorkspace() {
     return items;
   }, [contentFilter, items]);
 
+  useEffect(() => {
+    if (!items.length) return;
+    const contentId = window.location.hash.match(/^#content-([0-9a-f-]+)$/i)?.[1];
+    if (!contentId || openedContentHash.current === contentId || !items.some((item) => item.id === contentId)) return;
+    openedContentHash.current = contentId;
+    setExpandedContentIds((current) => new Set(current).add(contentId));
+    window.requestAnimationFrame(() => document.getElementById(`content-${contentId}`)?.scrollIntoView({ block: "start" }));
+  }, [items]);
+
   async function runCommand(body: Record<string, unknown>, successMessage: string) {
     if (!workspace) return false;
     setWorking(true);
@@ -405,8 +417,47 @@ export function ContentWorkspace() {
       result_url: formText(form, "result_url"),
     }, task.content_step === "caption" && !task.is_work_item
       ? "تم حفظ الكابشن داخل الريلز وإغلاق خطوة الكتابة. سيُراجع مع الفيديو والغلاف في الاعتماد النهائي."
-      : "تم حفظ نتيجة المرحلة وإرسالها للمراجعة.");
+      : task.content_step === "publishing"
+        ? "تم تأكيد النشر وحفظ الرابط الحقيقي ونقل المحتوى إلى «منشور»."
+        : "تم تسليم النتيجة للمراجعة. لا تحتاج لتغيير أي حالة أخرى بنفسك.");
     if (submitted) setDeliveryFormTaskId(null);
+  }
+
+  async function approveContentTask(task: Task) {
+    if (!workspace || task.status !== "review") return;
+    setWorking(true);
+    setError(null);
+    setNotice(null);
+    const { data, error: approvalError } = await getSupabaseBrowserClient()
+      .from("tasks")
+      .update({ status: "done" })
+      .eq("id", task.id)
+      .eq("version", task.version)
+      .select("id")
+      .maybeSingle();
+    setWorking(false);
+    if (approvalError) {
+      setError(approvalError.message);
+    } else if (!data) {
+      setError("تغيّرت المهمة عند عضو آخر. تم تحديث ملف المحتوى قبل إعادة المحاولة.");
+    } else {
+      setNotice(`تم اعتماد تسليم «${task.content_step ? contentStepConfig[task.content_step].label : task.title}» وفتح الخطوة التالية تلقائيًا.`);
+    }
+    setReviewFormTaskId(null);
+    await refreshContent(workspace.organization.id);
+  }
+
+  async function requestTaskRevision(event: FormEvent<HTMLFormElement>, task: Task) {
+    event.preventDefault();
+    if (!task.content_item_id || !task.content_step) return;
+    const form = new FormData(event.currentTarget);
+    const requested = await runCommand({
+      action: "request_revision",
+      content_item_id: task.content_item_id,
+      target_stage: task.content_step,
+      revision_instructions: formText(form, "revision_instructions"),
+    }, `تم طلب تعديل «${contentStepConfig[task.content_step].label}» وإعادته تلقائيًا لصاحب المهمة.`);
+    if (requested) setReviewFormTaskId(null);
   }
 
   async function changeReelApproval(task: Task, gateAction: "start" | "approve") {
@@ -680,33 +731,38 @@ export function ContentWorkspace() {
           </div>
 
           {deliveryTasks.length ? <section className="content-delivery-section">
-            <div className="production-tool-heading"><div><CheckCircle2 size={16} /><div><p className="overline">نتائج التنفيذ</p><h4>كل مرحلة تسلّم نتيجتها داخل الكارت</h4></div></div></div>
+            <div className="production-tool-heading"><div><CheckCircle2 size={16} /><div><p className="overline">تسليم ثم مراجعة</p><h4>المنفّذ يسلّم مرة واحدة، والإدارة هي التي تعتمد</h4></div></div></div>
             <div className="content-delivery-grid">{deliveryTasks.map((task) => {
               const delivery = deliveriesByTask.get(task.id);
               const canSubmitResult = manager || task.owner_id === session.user.id;
-              const isAvailable = ["ready", "in_progress", "review", "done"].includes(task.status);
-              const needsUrl = task.content_step === "design" || task.content_step === "publishing";
-              return <article key={task.id} className={delivery ? "has-delivery" : ""}>
-                <header><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{peopleById.get(task.owner_id)?.name ?? "عضو فريق"}</small></header>
-                {delivery ? <div className="saved-step-result"><span>إصدار {delivery.version} · {formatDate(delivery.submitted_at)}</span>{delivery.result_note ? <p>{delivery.result_note}</p> : null}{delivery.result_url ? <a href={delivery.result_url} target="_blank" rel="noreferrer">فتح النتيجة <ExternalLink size={11} /></a> : null}</div> : <p>لم تُسلّم نتيجة هذه المرحلة بعد.</p>}
-                {canSubmitResult && isAvailable ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(deliveryFormTaskId === task.id ? null : task.id)}><Upload size={12} /> {delivery ? "تحديث النتيجة" : "تسليم النتيجة"}</button> : null}
-                {deliveryFormTaskId === task.id && canSubmitResult && isAvailable ? <form className="compact-command-form" onSubmit={(event) => void submitStepDelivery(event, task)}>
-                  <label><span>{task.content_step === "caption" ? "الكابشن النهائي" : "ملاحظة النتيجة"}</span><textarea name="result_note" minLength={3} maxLength={10000} rows={4} defaultValue={delivery?.result_note ?? ""} placeholder={task.content_step === "scheduling" ? "المنصات وموعد الجدولة والتأكيد" : "اكتب ما تم تسليمه وما يحتاجه المراجع"} /></label>
-                  <label><span>رابط النتيجة{needsUrl ? " — مطلوب" : " — اختياري"}</span><input name="result_url" type="url" dir="ltr" required={needsUrl} defaultValue={delivery?.result_url ?? ""} placeholder={task.content_step === "publishing" ? "https://instagram.com/p/..." : "https://drive.google.com/..."} /></label>
-                  <div className="form-actions"><Button type="submit" disabled={working}>حفظ وإرسال للمراجعة</Button><button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button></div>
+              const isPublishing = task.content_step === "publishing";
+              const canEditResult = canSubmitResult && (["ready", "in_progress"].includes(task.status) || (!delivery && task.status === "review") || (isPublishing && task.status === "done"));
+              const needsUrl = Boolean(task.content_step && ["recording", "editing", "thumbnail", "design", "publishing"].includes(task.content_step));
+              const canReviseTask = Boolean(task.content_step && revisionOptions.includes(task.content_step));
+              const resultUrlLabel = isPublishing ? "رابط المنشور" : "رابط التسليم";
+              return <article key={task.id} className={`${delivery ? "has-delivery" : ""} ${task.status === "done" ? "approved-delivery" : ""} ${isPublishing ? "publishing-delivery" : ""}`}>
+                <header><div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{peopleById.get(task.owner_id)?.name ?? "عضو فريق"}</small></div><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge></header>
+                {delivery ? <div className="saved-step-result"><span>{isPublishing && task.status === "done" ? "تم النشر" : `إصدار ${delivery.version}`} · {formatDate(delivery.submitted_at)}</span>{delivery.result_note ? <p>{delivery.result_note}</p> : null}{delivery.result_url ? <a href={delivery.result_url} target="_blank" rel="noreferrer">{isPublishing ? "فتح المنشور" : "فتح التسليم"} <ExternalLink size={11} /></a> : null}</div> : <p>{isPublishing ? "لم يتم تأكيد النشر بعد. أضف رابط المنشور الحقيقي عند النشر." : task.status === "backlog" ? "تنتظر هذه المهمة اكتمال الخطوة السابقة." : "لم يسلّم صاحب المهمة النتيجة بعد."}</p>}
+                {canEditResult ? <button className="text-button delivery-primary-action" type="button" onClick={() => setDeliveryFormTaskId(deliveryFormTaskId === task.id ? null : task.id)}><Upload size={12} /> {isPublishing ? delivery ? "تحديث بيانات النشر" : "تأكيد تم النشر" : delivery ? "تحديث التسليم" : "تسليم للمراجعة"}</button> : null}
+                {task.status === "review" ? <div className="delivery-review-actions">{manager ? <><Button type="button" disabled={working || !delivery} onClick={() => void approveContentTask(task)}><CheckCircle2 size={13} /> اعتماد التسليم</Button>{canReviseTask ? <button className="text-button" type="button" onClick={() => setReviewFormTaskId(reviewFormTaskId === task.id ? null : task.id)}>طلب تعديل</button> : null}{!delivery ? <small>أضف رابط أو نتيجة التسليم أولًا؛ لا يمكن الاعتماد بدون دليل.</small> : null}</> : <small>{delivery ? "تم التسليم، وفي انتظار اعتماد الإدارة. لا تحتاج لتغيير أي حالة أخرى." : "أكمل تسليم الرابط مرة واحدة؛ بعدها تنتقل المراجعة للإدارة."}</small>}</div> : null}
+                {reviewFormTaskId === task.id && manager && canReviseTask ? <form className="compact-command-form" onSubmit={(event) => void requestTaskRevision(event, task)}><label><span>التعديل المطلوب</span><textarea name="revision_instructions" minLength={5} maxLength={5000} rows={3} required placeholder="اكتب المشكلة والنتيجة المطلوبة بوضوح." /></label><div className="form-actions"><Button type="submit" disabled={working}>إرسال التعديل لصاحب المهمة</Button><button className="text-button" type="button" onClick={() => setReviewFormTaskId(null)}>إلغاء</button></div></form> : null}
+                {deliveryFormTaskId === task.id && canEditResult ? <form className="compact-command-form" onSubmit={(event) => void submitStepDelivery(event, task)}>
+                  <label><span>{task.content_step === "caption" ? "الكابشن النهائي" : isPublishing ? "ملاحظة النشر — اختياري" : "ملاحظة التسليم"}</span><textarea name="result_note" minLength={3} maxLength={10000} rows={4} defaultValue={delivery?.result_note ?? ""} placeholder={task.content_step === "scheduling" ? "المنصات وموعد الجدولة والتأكيد" : isPublishing ? "مثال: نُشر على Instagram وFacebook" : "اكتب ما تم تسليمه وما يحتاجه المراجع"} /></label>
+                  <label><span>{resultUrlLabel}{needsUrl ? " — مطلوب" : " — اختياري"}</span><input name="result_url" type="url" dir="ltr" required={needsUrl} defaultValue={delivery?.result_url ?? ""} placeholder={isPublishing ? "https://instagram.com/p/..." : "https://drive.google.com/..."} /></label>
+                  <div className="form-actions"><Button type="submit" disabled={working}>{isPublishing ? "تأكيد أنه تم النشر" : "تسليم مرة واحدة للمراجعة"}</Button><button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button>{!isPublishing ? <small>بعد التسليم تتحول المهمة للمراجع تلقائيًا؛ المنفّذ لا يعتمد عمله بنفسه.</small> : null}</div>
                 </form> : null}
               </article>;
             })}</div>
           </section> : null}
 
-          <div className="content-progress-row"><div><strong>{progress}%</strong><span>اكتمل {doneCount} من {workTasks.length} مهام تنفيذ</span></div><div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div><div><CalendarClock size={14} /><span>النشر {formatDate(item.publish_at)}</span></div></div>
+          <div className="content-progress-row"><div><strong>{progress}%</strong><span>اكتمل {doneCount} من {workTasks.length} مهام تنفيذ</span></div><div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div><div><CalendarClock size={14} /><span>{item.status === "published" && item.published_at ? `تم النشر ${formatDate(item.published_at)}` : `موعد النشر ${formatDate(item.publish_at)}`}</span></div></div>
           <ol className="content-steps" aria-label="خطوات إنتاج المحتوى">{workflowSteps.map((step, index) => {
             const task = itemTasks.find((candidate) => candidate.content_step === step);
             const isActive = activeTasks.some((activeTask) => activeTask.id === task?.id);
             const supplied = task?.status === "cancelled" && !task.is_work_item && step === "recording";
-            return <li className={`${task?.status === "done" || supplied ? "done" : ""} ${isActive ? "active" : ""}`} key={step}><span>{task?.status === "done" || supplied ? <CheckCircle2 size={14} /> : index + 1}</span><strong>{contentStepConfig[step].label}</strong><small>{supplied ? "المادة جاهزة" : task ? peopleById.get(task.owner_id)?.name ?? "عضو فريق" : "—"}</small></li>;
+            return <li className={`${task?.status === "done" || supplied ? "done" : ""} ${isActive ? "active" : ""}`} key={step}><span>{task?.status === "done" || supplied ? <CheckCircle2 size={14} /> : index + 1}</span><strong>{step === "publishing" && task?.status === "done" ? "تم النشر" : contentStepConfig[step].label}</strong><small>{supplied ? "المادة جاهزة" : task ? peopleById.get(task.owner_id)?.name ?? "عضو فريق" : "—"}</small></li>;
           })}</ol>
-          <footer><div>{activeTasks.length ? <><CircleUserRound size={15} /><span>النشط الآن: <strong>{activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ")}</strong></span></> : <><CheckCircle2 size={15} /><span>لا توجد خطوة نشطة الآن.</span></>}</div><a className="text-link" href="/tasks">فتح بورد التنفيذ <Link2 size={13} /></a></footer>
+          <footer><div>{activeTasks.length ? <><CircleUserRound size={15} /><span>النشط الآن: <strong>{activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ")}</strong></span></> : <><CheckCircle2 size={15} /><span>{item.status === "published" ? "تم النشر وإغلاق خط التنفيذ." : "لا توجد خطوة نشطة الآن."}</span></>}</div><a className="text-link" href="/tasks">فتح بورد التنفيذ <Link2 size={13} /></a></footer>
           </> : <div className="content-collapsed-summary"><div><strong>{progress}%</strong><span>اكتمل {doneCount} من {workTasks.length} مهام تنفيذ</span></div><div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div><div><span>الخطوة الحالية</span><strong>{activeTasks.length ? activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ") : item.status === "published" ? "منشور" : "لا توجد خطوة نشطة"}</strong></div><div><CalendarClock size={14} /><span>{formatDate(item.publish_at)}</span></div></div>}
         </article>;
       })}</div> : <section className="panel empty-state"><span className="empty-visual"><Film size={20} /></span><div><h2>{items.length ? "لا يوجد محتوى في هذا الفلتر" : "مصنع المحتوى جاهز بدون بيانات وهمية"}</h2><p>{items.length ? "غيّر الفلتر لعرض المحتوى الجاري أو المنشور أو كل الأرشيف." : "عندما تنشئ أول ريلز أو بند بوستات سيظهر هنا ومعه الـBrief والملفات والمهام والتعديلات."}</p></div><span className="empty-proof"><CheckCircle2 size={15} /> متصل ببورد المهام</span></section>}

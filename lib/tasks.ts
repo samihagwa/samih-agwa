@@ -2,6 +2,7 @@ import type { Database } from "./supabase/database.types";
 
 export type TaskStatus = Database["public"]["Enums"]["task_status"];
 export type TaskPriority = Database["public"]["Enums"]["task_priority"];
+type ContentStep = Database["public"]["Enums"]["content_step"];
 
 export const taskStatusConfig: Record<
   TaskStatus,
@@ -22,6 +23,20 @@ export const taskPriorityConfig: Record<TaskPriority, { label: string; mark: str
   high: { label: "مرتفعة", mark: "↑" },
   urgent: { label: "عاجلة", mark: "!!" },
 };
+
+const publishingStatusLabels: Record<TaskStatus, string> = {
+  backlog: "ينتظر الاعتماد النهائي",
+  ready: "جاهز للنشر",
+  in_progress: "جاري النشر",
+  review: "بانتظار تأكيد النشر",
+  blocked: "النشر متوقف",
+  done: "تم النشر",
+  cancelled: "النشر ملغي",
+};
+
+export function taskStatusLabel(status: TaskStatus, contentStep?: ContentStep | null) {
+  return contentStep === "publishing" ? publishingStatusLabels[status] : taskStatusConfig[status].label;
+}
 
 export const allowedTaskTransitions: Record<TaskStatus, TaskStatus[]> = {
   backlog: ["ready", "cancelled"],
