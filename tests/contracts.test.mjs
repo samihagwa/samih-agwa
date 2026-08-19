@@ -127,12 +127,14 @@ test("task workflow is shared between UI types and database enforcement", async 
 });
 
 test("content workflow creates one guarded dependency graph shared with tasks", async () => {
-  const [contentContract, migration, securityMigration, edgeFunction, workspace] = await Promise.all([
+  const [contentContract, migration, securityMigration, compactMigration, edgeFunction, workspace, taskWorkspace] = await Promise.all([
     readFile(new URL("../lib/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260816235000_content_production_pipeline.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817000500_secure_content_workflow_command.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819033000_compact_reel_workflow.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
   ]);
 
   for (const step of ["brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing"]) {
@@ -148,8 +150,17 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(securityMigration, /from public, anon, authenticated/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
+  assert.match(edgeFunction, /create_reel_production_workflow_v3/);
   assert.match(workspace, /functions\.invoke\("create-content-workflow"/);
-  assert.match(workspace, /7 مهام مترابطة/);
+  assert.match(workspace, /3 مهام إذا كانت المادة الخام جاهزة، و4 فقط/);
+  assert.match(workspace, /الكابشن النهائي/);
+  assert.match(workspace, /الاعتماد النهائي الموحد/);
+  assert.match(compactMigration, /add column is_work_item boolean not null default true/);
+  assert.match(compactMigration, /caption_owned_by_content_creator/);
+  assert.match(compactMigration, /create_reel_production_workflow_v3/);
+  assert.match(compactMigration, /change_reel_approval_gate/);
+  assert.match(taskWorkspace, /\.eq\("is_work_item", true\)/);
+  assert.match(taskWorkspace, /content-workflow-group/);
 });
 
 test("content production briefs, assets, and revision rounds share one secured workflow", async () => {
@@ -268,8 +279,8 @@ test("brand knowledge is versioned, owner-approved, and linked to content by an 
   assert.match(brandWorkspace, /المسودة لا تؤثر على الشغل الحالي/);
   assert.match(contentWorkspace, /brand_article_ids/);
   assert.match(contentWorkspace, /مراجع البراند المعتمدة/);
-  assert.match(createWorkflow, /create_reel_production_workflow_v2/);
-  assert.match(createWorkflow, /create_reel_from_intake_v2/);
+  assert.match(createWorkflow, /create_reel_production_workflow_v3/);
+  assert.match(createWorkflow, /create_reel_from_intake_v3/);
   assert.match(architecture, /approved body is immutable/i);
 });
 

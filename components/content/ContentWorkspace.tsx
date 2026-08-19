@@ -301,6 +301,7 @@ export function ContentWorkspace() {
     if (!workspace) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const rawMaterialReady = Boolean(formText(form, "initial_raw_url"));
     const publishValue = formText(form, "publish_at");
     const publishDate = new Date(publishValue);
     if (!publishValue || Number.isNaN(publishDate.getTime()) || publishDate.getTime() <= Date.now() + 60 * 60 * 1000) {
@@ -337,7 +338,9 @@ export function ContentWorkspace() {
     }
     formElement.reset();
     setShowCreate(false);
-    setNotice("تم إنشاء Production Brief و7 مهام مترابطة. أول مهمة فقط جاهزة الآن.");
+    setNotice(rawMaterialReady
+      ? "تم إنشاء ملف الريلز و3 مهام تنفيذ: المونتاج، الغلاف، والنشر. الكابشن داخل الملف والمادة الخام جاهزة."
+      : "تم إنشاء ملف الريلز و4 مهام تنفيذ: تجهيز المادة الخام، المونتاج، الغلاف، والنشر. الكابشن داخل الملف.");
     await refreshContent(workspace.organization.id);
   }
 
@@ -355,7 +358,7 @@ export function ContentWorkspace() {
       return false;
     }
     setShowQuickIntake(false);
-    setNotice("تم تحويل طلب Telegram إلى Brief وTimeline و7 مهام مترابطة بعد مراجعتك.");
+    setNotice("تم تحويل طلب Telegram إلى ملف إنتاج و3 مهام تنفيذ فقط. المادة الخام مرتبطة، والكابشن داخل ملف الريلز.");
     await refreshContent(workspace.organization.id);
     return true;
   }
@@ -400,8 +403,20 @@ export function ContentWorkspace() {
       step: task.content_step,
       result_note: formText(form, "result_note"),
       result_url: formText(form, "result_url"),
-    }, "تم حفظ نتيجة المرحلة وإرسالها للمراجعة.");
+    }, task.content_step === "caption" && !task.is_work_item
+      ? "تم حفظ الكابشن داخل الريلز وإغلاق خطوة الكتابة. سيُراجع مع الفيديو والغلاف في الاعتماد النهائي."
+      : "تم حفظ نتيجة المرحلة وإرسالها للمراجعة.");
     if (submitted) setDeliveryFormTaskId(null);
+  }
+
+  async function changeReelApproval(task: Task, gateAction: "start" | "approve") {
+    await runCommand({
+      action: "change_reel_approval",
+      task_id: task.id,
+      gate_action: gateAction,
+    }, gateAction === "start"
+      ? "بدأت المراجعة النهائية للريلز والغلاف والكابشن."
+      : "تم اعتماد الريلز بالكامل وفتح مهمة النشر.");
   }
 
   async function addAsset(event: FormEvent<HTMLFormElement>, contentId: string) {
@@ -502,18 +517,18 @@ export function ContentWorkspace() {
           <div className="asset-seed-block">
             <div><p className="overline">ملفات البداية</p><h3>أضف المتاح الآن واترك الباقي للفريق</h3><p>أي رابط Google Drive أو مصدر خارجي سيظل مرتبطًا بالريلز ومرحلة استخدامه.</p></div>
             <div className="form-grid">
-              <label><span>رابط المادة الخام — اختياري</span><input name="initial_raw_url" type="url" dir="ltr" placeholder="https://drive.google.com/..." /></label>
+              <label><span>رابط المادة الخام — إن كانت جاهزة</span><input name="initial_raw_url" type="url" dir="ltr" placeholder="https://drive.google.com/..." /><small>لو أضفت الرابط لن ينشئ النظام مهمة تسجيل. لو تركته فارغًا سيصل لصانع المحتوى تكليف تجهيز المادة الخام.</small></label>
               <label><span>رابط المصدر الأساسي — اختياري</span><input name="initial_source_url" type="url" dir="ltr" placeholder="https://..." /></label>
               <label className="full-field"><span>مرجع بصري أو فيديو مشابه — اختياري</span><input name="initial_reference_url" type="url" dir="ltr" placeholder="https://..." /></label>
             </div>
           </div>
           <div className="assignment-block">
-            <div><p className="overline">المساءلة</p><h3>مسؤول واحد لكل خطوة</h3><p>كل خطوة تصل لصاحبها بموعد واعتمادية واضحة.</p></div>
-            <div className="assignment-grid">{contentAssignmentFields.map(({ step, name }) => (
-              <label key={step}><span>{contentStepConfig[step].label}</span><select name={name} defaultValue={session.user.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+            <div><p className="overline">المساءلة</p><h3>5 مسؤوليات واضحة بدون تضخيم</h3><p>صانع المحتوى يسجل عند الحاجة ويكتب الكابشن داخل الريلز. الـBrief والاعتماد بوابات داخل الملف وليسا مهمتين في البورد.</p></div>
+            <div className="assignment-grid">{contentAssignmentFields.map(({ step, name, label }) => (
+              <label key={step}><span>{label}</span><select name={name} defaultValue={session.user.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
             ))}</div>
           </div>
-          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} إنشاء خط الإنتاج</Button><small>إما يُنشأ الـBrief و7 المهام والروابط معًا، أو لا يُحفظ شيء.</small></div>
+          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} إنشاء خط الإنتاج</Button><small>3 مهام إذا كانت المادة الخام جاهزة، و4 فقط إذا كان مطلوبًا تجهيزها. الحفظ كله ذري.</small></div>
         </form>
       ) : null}
 
@@ -523,12 +538,15 @@ export function ContentWorkspace() {
         const itemRevisions = revisionsByContent.get(item.id) ?? [];
         const itemTimeline = [...(timelineByContent.get(item.id) ?? [])].sort((a, b) => a.sort_order - b.sort_order);
         const itemBrandArticles = (brandReferencesByContent.get(item.id) ?? []).map((reference) => brandArticlesById.get(reference.brand_article_id)).filter((article): article is BrandArticle => Boolean(article));
-        const doneCount = itemTasks.filter((task) => task.status === "done").length;
+        const workTasks = itemTasks.filter((task) => task.is_work_item);
+        const doneCount = workTasks.filter((task) => task.status === "done").length;
         const activeTasks = itemTasks.filter((task) => ["ready", "in_progress", "review", "blocked"].includes(task.status));
-        const progress = itemTasks.length ? Math.round((doneCount / itemTasks.length) * 100) : 0;
+        const progress = workTasks.length ? Math.round((doneCount / workTasks.length) * 100) : 0;
         const openRevisions = itemRevisions.filter((revision) => ["requested", "in_progress"].includes(revision.status));
         const approvalTask = itemTasks.find((task) => task.content_step === "approval");
         const editingTask = itemTasks.find((task) => task.content_step === "editing");
+        const captionTask = itemTasks.find((task) => task.content_step === "caption");
+        const captionDelivery = captionTask ? deliveriesByTask.get(captionTask.id) : undefined;
         const workflowOwner = itemTasks.some((task) => task.owner_id === session.user.id);
         const canAddAsset = manager || workflowOwner;
         const canRequestRevision = manager || approvalTask?.owner_id === session.user.id;
@@ -537,11 +555,15 @@ export function ContentWorkspace() {
         const openCueCount = itemTimeline.length - completedCueCount;
         const isSocialPost = item.format === "post";
         const workflowSteps = contentWorkflowSteps(item.format);
-        const revisionOptions = contentRevisionSteps(item.format);
+        const revisionOptions = contentRevisionSteps(item.format).filter((step) =>
+          itemTasks.some((task) => task.content_step === step && task.status !== "cancelled")
+        );
         const briefComplete = isSocialPost
           ? Boolean(item.copy_brief.trim() && item.design_brief.trim())
           : Boolean(item.script_outline.trim() && item.editing_brief.trim() && item.thumbnail_brief.trim());
-        const deliveryTasks = itemTasks.filter((task) => task.content_step && resultSteps.includes(task.content_step));
+        const deliveryTasks = itemTasks.filter((task) => task.content_step
+          && resultSteps.includes(task.content_step)
+          && (isSocialPost || task.content_step !== "caption"));
         const platformLabel = item.platforms.map((platform) => platform.charAt(0).toUpperCase() + platform.slice(1)).join(" + ");
         const expanded = expandedContentIds.has(item.id);
 
@@ -579,6 +601,32 @@ export function ContentWorkspace() {
             <div><small>تعليمات الغلاف</small><p>{item.thumbnail_brief || "لم تُضف تعليمات الغلاف بعد."}</p></div>
             {item.brand_notes ? <div><small>استثناءات أو ملاحظات خاصة</small><p>{item.brand_notes}</p></div> : null}
           </div>}
+
+          {!isSocialPost && captionTask ? <section className="reel-caption-panel">
+            <div className="reel-caption-heading">
+              <div><MessageSquareText size={17} /><div><p className="overline">داخل ملف الريلز</p><h4>الكابشن النهائي</h4></div></div>
+              <div><small>المسؤول</small><strong>{peopleById.get(captionTask.owner_id)?.name ?? "صانع المحتوى"}</strong></div>
+            </div>
+            {captionDelivery ? <div className="saved-reel-caption"><span>آخر حفظ: إصدار {captionDelivery.version} · {formatDate(captionDelivery.submitted_at)}</span><p>{captionDelivery.result_note}</p></div> : <p className="reel-caption-empty">صانع المحتوى يكتب الكابشن هنا بعد تثبيت الفكرة. لا تُنشأ له مهمة ثانية في البورد، وسيُراجع الكابشن مع الفيديو والغلاف مرة واحدة.</p>}
+            {(manager || captionTask.owner_id === session.user.id) && ["ready", "in_progress", "review", "done"].includes(captionTask.status) ? <>
+              {captionDelivery && deliveryFormTaskId !== captionTask.id ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(captionTask.id)}><Pencil size={12} /> تعديل الكابشن</button> : null}
+              {(!captionDelivery || deliveryFormTaskId === captionTask.id) ? <form className="reel-caption-form" onSubmit={(event) => void submitStepDelivery(event, captionTask)}>
+                <label><span>نص الكابشن والهاشتاجات</span><textarea name="result_note" minLength={3} maxLength={10000} rows={6} required defaultValue={captionDelivery?.result_note ?? ""} placeholder={`اكتب الكابشن النهائي، ثم CTA واضح مثل: ${item.cta}\nوأضف الهاشتاجات المناسبة في النهاية.`} /></label>
+                <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ الكابشن داخل الريلز</Button>{captionDelivery ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button> : null}<small>الحفظ يغلق خطوة الكتابة مباشرة؛ الاعتماد النهائي هو المراجعة الوحيدة.</small></div>
+              </form> : null}
+            </> : captionTask.status === "backlog" ? <p className="reel-caption-locked"><LockKeyhole size={13} /> سيفتح الكابشن تلقائيًا عند جاهزية الملف.</p> : null}
+          </section> : null}
+
+          {!isSocialPost && approvalTask ? <section className={`reel-approval-panel status-${approvalTask.status}`}>
+            <div><CheckCircle2 size={18} /><div><p className="overline">بوابة وليست مهمة إضافية</p><h4>الاعتماد النهائي الموحد</h4><p>مراجعة واحدة للفيديو والغلاف والكابشن قبل فتح النشر.</p></div></div>
+            <div className="reel-approval-state">
+              <span>{approvalTask.status === "backlog" ? "في انتظار اكتمال الإنتاج" : approvalTask.status === "ready" ? "جاهز للمراجعة" : approvalTask.status === "done" ? "معتمد نهائيًا" : "المراجعة جارية"}</span>
+              <small>المراجع: {peopleById.get(approvalTask.owner_id)?.name ?? "مسؤول الاعتماد"}</small>
+              {(manager || approvalTask.owner_id === session.user.id) && approvalTask.status === "ready" ? <Button type="button" variant="secondary" disabled={working} onClick={() => void changeReelApproval(approvalTask, "start")}>بدء المراجعة النهائية</Button> : null}
+              {(manager || approvalTask.owner_id === session.user.id) && ["in_progress", "review"].includes(approvalTask.status) ? <Button type="button" disabled={working || Boolean(openRevisions.length || openCueCount)} onClick={() => void changeReelApproval(approvalTask, "approve")}>اعتماد وفتح النشر</Button> : null}
+              {openRevisions.length || openCueCount ? <small className="approval-guard">أغلق {openRevisions.length ? `${openRevisions.length} تعديل` : ""}{openRevisions.length && openCueCount ? " و" : ""}{openCueCount ? `${openCueCount} تعليمة Timeline` : ""} قبل الاعتماد.</small> : null}
+            </div>
+          </section> : null}
 
           {item.intake_request && item.intake_source_url ? <details className="telegram-intake-source">
             <summary><MessageSquareText size={15} /> الطلب الأصلي من Telegram</summary>
@@ -651,14 +699,15 @@ export function ContentWorkspace() {
             })}</div>
           </section> : null}
 
-          <div className="content-progress-row"><div><strong>{progress}%</strong><span>اكتمل {doneCount} من {itemTasks.length}</span></div><div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div><div><CalendarClock size={14} /><span>النشر {formatDate(item.publish_at)}</span></div></div>
+          <div className="content-progress-row"><div><strong>{progress}%</strong><span>اكتمل {doneCount} من {workTasks.length} مهام تنفيذ</span></div><div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div><div><CalendarClock size={14} /><span>النشر {formatDate(item.publish_at)}</span></div></div>
           <ol className="content-steps" aria-label="خطوات إنتاج المحتوى">{workflowSteps.map((step, index) => {
             const task = itemTasks.find((candidate) => candidate.content_step === step);
             const isActive = activeTasks.some((activeTask) => activeTask.id === task?.id);
-            return <li className={`${task?.status === "done" ? "done" : ""} ${isActive ? "active" : ""}`} key={step}><span>{task?.status === "done" ? <CheckCircle2 size={14} /> : index + 1}</span><strong>{contentStepConfig[step].label}</strong><small>{task ? peopleById.get(task.owner_id)?.name ?? "عضو فريق" : "—"}</small></li>;
+            const supplied = task?.status === "cancelled" && !task.is_work_item && step === "recording";
+            return <li className={`${task?.status === "done" || supplied ? "done" : ""} ${isActive ? "active" : ""}`} key={step}><span>{task?.status === "done" || supplied ? <CheckCircle2 size={14} /> : index + 1}</span><strong>{contentStepConfig[step].label}</strong><small>{supplied ? "المادة جاهزة" : task ? peopleById.get(task.owner_id)?.name ?? "عضو فريق" : "—"}</small></li>;
           })}</ol>
           <footer><div>{activeTasks.length ? <><CircleUserRound size={15} /><span>النشط الآن: <strong>{activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ")}</strong></span></> : <><CheckCircle2 size={15} /><span>لا توجد خطوة نشطة الآن.</span></>}</div><a className="text-link" href="/tasks">فتح بورد التنفيذ <Link2 size={13} /></a></footer>
-          </> : <div className="content-collapsed-summary"><div><strong>{progress}%</strong><span>اكتمل {doneCount} من {itemTasks.length}</span></div><div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div><div><span>الخطوة الحالية</span><strong>{activeTasks.length ? activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ") : item.status === "published" ? "منشور" : "لا توجد خطوة نشطة"}</strong></div><div><CalendarClock size={14} /><span>{formatDate(item.publish_at)}</span></div></div>}
+          </> : <div className="content-collapsed-summary"><div><strong>{progress}%</strong><span>اكتمل {doneCount} من {workTasks.length} مهام تنفيذ</span></div><div className="content-progress-track" aria-label={`نسبة الإنجاز ${progress}%`}><span style={{ width: `${progress}%` }} /></div><div><span>الخطوة الحالية</span><strong>{activeTasks.length ? activeTasks.map((task) => task.content_step ? contentStepConfig[task.content_step].label : task.title).join(" + ") : item.status === "published" ? "منشور" : "لا توجد خطوة نشطة"}</strong></div><div><CalendarClock size={14} /><span>{formatDate(item.publish_at)}</span></div></div>}
         </article>;
       })}</div> : <section className="panel empty-state"><span className="empty-visual"><Film size={20} /></span><div><h2>{items.length ? "لا يوجد محتوى في هذا الفلتر" : "مصنع المحتوى جاهز بدون بيانات وهمية"}</h2><p>{items.length ? "غيّر الفلتر لعرض المحتوى الجاري أو المنشور أو كل الأرشيف." : "عندما تنشئ أول ريلز أو بند بوستات سيظهر هنا ومعه الـBrief والملفات والمهام والتعديلات."}</p></div><span className="empty-proof"><CheckCircle2 size={15} /> متصل ببورد المهام</span></section>}
 

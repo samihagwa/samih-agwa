@@ -5,7 +5,6 @@ import { type FormEvent, useState } from "react";
 import {
   contentAssignmentFields,
   contentCueKindConfig,
-  contentStepConfig,
   type ContentCueKind,
 } from "../../lib/content";
 import {
@@ -188,12 +187,12 @@ export function QuickIntakeForm({ currentUserId, defaultPublish, people, approve
 
       <div className="assignment-block intake-assignment-block">
         <div><p className="overline">التوزيع</p><h3>راجع المسؤول عن كل خطوة</h3><p>الأسماء المذكورة في Telegram تظهر كتلميح فقط؛ التوزيع الفعلي يظل من أعضاء النظام.</p></div>
-        <div className="assignment-grid">{contentAssignmentFields.map(({ step, name }) => <label key={step}><span>{contentStepConfig[step].label}</span><select name={name} defaultValue={currentUserId} required>{people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>)}</div>
+        <div className="assignment-grid">{contentAssignmentFields.map(({ step, name, label }) => <label key={step}><span>{label}</span><select name={name} defaultValue={currentUserId} required>{people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>)}</div>
       </div>
 
       {formError ? <p className="form-notice error" role="alert">{formError}</p> : null}
       <div className="intake-future-note"><strong>رفع الملفات المباشر: ضمن الخطة التالية</strong><p>النسخة الحالية تحفظ رابط رسالة المادة الخام على Telegram. لن ننسخ أو نرفع الملف إلى الموقع الآن.</p></div>
-      <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} اعتماد وإنشاء خط الإنتاج</Button><small>بعد الاعتماد فقط تُنشأ المهام والـTimeline والروابط معًا.</small></div>
+      <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} اعتماد وإنشاء خط الإنتاج</Button><small>المادة الخام موجودة على Telegram؛ ستُنشأ 3 مهام تنفيذ فقط، والكابشن داخل ملف الريلز.</small></div>
     </form>
   );
 }

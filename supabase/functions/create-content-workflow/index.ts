@@ -7,11 +7,9 @@ const responseHeaders = {
 };
 
 const ownerFields = [
-  "brief_owner_id",
-  "recording_owner_id",
+  "content_creator_id",
   "editing_owner_id",
   "thumbnail_owner_id",
-  "caption_owner_id",
   "approval_owner_id",
   "publishing_owner_id",
 ] as const;
@@ -148,7 +146,7 @@ export default {
     }
 
     const { data: contentId, error } = await context.supabaseAdmin.rpc(
-      isTelegramIntake ? "create_reel_from_intake_v2" : "create_reel_production_workflow_v2",
+      isTelegramIntake ? "create_reel_from_intake_v3" : "create_reel_production_workflow_v3",
       {
         target_user_id: context.userClaims.id,
         target_organization_id: body.target_organization_id,
@@ -168,11 +166,9 @@ export default {
           parsed_assets: extractedAssets,
         } : {}),
         target_publish_at: body.target_publish_at,
-        brief_owner_id: body.brief_owner_id,
-        recording_owner_id: body.recording_owner_id,
+        content_creator_id: body.content_creator_id,
         editing_owner_id: body.editing_owner_id,
         thumbnail_owner_id: body.thumbnail_owner_id,
-        caption_owner_id: body.caption_owner_id,
         approval_owner_id: body.approval_owner_id,
         publishing_owner_id: body.publishing_owner_id,
         ...(!isTelegramIntake ? {

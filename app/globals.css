@@ -260,6 +260,20 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .column-empty p { margin: 0; font-size: 12px; }
 .workflow-task-label { width: fit-content; margin-top: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 8px; background: var(--teal-100); color: var(--teal-700); font-size: 12px; font-weight: 900; }
 .task-production-link { width: fit-content; margin-top: 7px; display: flex; align-items: center; gap: 5px; color: var(--teal-700); font-size: 12px; font-weight: 900; text-decoration: underline; text-underline-offset: 3px; }
+.content-workflow-group { display: grid; gap: 11px; }
+.content-workflow-group .task-card-top { align-items: center; }
+.content-workflow-group .workflow-task-label { margin-top: 0; }
+.content-workflow-group > h3 { margin-bottom: 0; }
+.content-workflow-group > .overdue-label { margin: 0; }
+.content-workflow-subtasks { display: grid; gap: 7px; }
+.content-workflow-subtasks > section { padding: 9px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, .8fr); align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+.content-workflow-subtasks > section.overdue { border-color: #e7aaa7; background: var(--red-100); }
+.content-workflow-subtasks > section > div { min-width: 0; display: grid; gap: 3px; }
+.content-workflow-subtasks > section strong { color: var(--ink-900); font-size: 12px; }
+.content-workflow-subtasks > section small { overflow: hidden; color: var(--ink-500); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.content-workflow-subtasks .status-select.compact { padding-top: 0; border-top: 0; }
+.content-workflow-subtasks .status-select.compact .priority { justify-self: center; padding: 3px 5px; }
+.content-workflow-subtasks .status-select.compact select { width: 100%; }
 
 .content-workspace { display: grid; gap: 18px; min-width: 0; }
 .content-create-form { padding: 24px; }
@@ -331,6 +345,35 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .production-brief-grid p { margin: 6px 0 0; color: var(--ink-700); font-size: 10px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
 .production-brief-grid.incomplete > div { border-style: dashed; }
 .production-brief-grid.incomplete p { color: var(--ink-400); }
+.reel-caption-panel { margin-top: 14px; padding: 16px; border: 1px solid #9ac9bd; border-radius: 14px; background: #f3faf7; }
+.reel-caption-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.reel-caption-heading > div:first-child { display: flex; align-items: center; gap: 8px; color: var(--teal-700); }
+.reel-caption-heading h4 { margin: 3px 0 0; color: var(--ink-950); font-size: 14px; }
+.reel-caption-heading > div:last-child { display: grid; justify-items: end; gap: 2px; }
+.reel-caption-heading small, .saved-reel-caption span { color: var(--teal-700); font-size: 11px; font-weight: 800; }
+.reel-caption-heading strong { color: var(--ink-800); font-size: 12px; }
+.reel-caption-empty, .reel-caption-locked { margin: 11px 0 0; color: var(--ink-600); font-size: 12px; line-height: 1.75; }
+.reel-caption-locked { display: flex; align-items: center; gap: 5px; }
+.saved-reel-caption { margin-top: 11px; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.saved-reel-caption p { margin: 6px 0 0; color: var(--ink-800); font-size: 12px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.reel-caption-panel > .text-button { margin-top: 9px; display: inline-flex; align-items: center; gap: 5px; }
+.reel-caption-form { margin-top: 12px; display: grid; gap: 10px; }
+.reel-caption-form label { display: grid; gap: 6px; }
+.reel-caption-form label > span { color: var(--ink-800); font-size: 12px; font-weight: 900; }
+.reel-caption-form textarea { min-height: 130px; background: var(--paper); }
+.reel-caption-form .form-actions { margin-top: 0; }
+.reel-approval-panel { margin-top: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas); }
+.reel-approval-panel > div:first-child { display: flex; align-items: flex-start; gap: 9px; }
+.reel-approval-panel > div:first-child > svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal-700); }
+.reel-approval-panel h4 { margin: 3px 0; font-size: 13px; }
+.reel-approval-panel p:not(.overline) { margin: 0; color: var(--ink-600); font-size: 11px; line-height: 1.65; }
+.reel-approval-panel.status-ready, .reel-approval-panel.status-in_progress, .reel-approval-panel.status-review { border-color: #d7b65b; background: #fff9e9; }
+.reel-approval-panel.status-done { border-color: #9ac9bd; background: #f3faf7; }
+.reel-approval-state { min-width: 190px; display: grid; justify-items: end; gap: 5px; text-align: left; }
+.reel-approval-state > span { color: var(--ink-900); font-size: 12px; font-weight: 900; }
+.reel-approval-state > small { color: var(--ink-600); font-size: 11px; }
+.reel-approval-state .button { min-height: 34px; padding: 7px 10px; font-size: 11px; }
+.reel-approval-state .approval-guard { color: var(--red-700); font-weight: 800; }
 .inline-production-form { margin-top: 12px; padding: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas); }
 .inline-production-form label, .compact-command-form label { display: grid; gap: 6px; }
 .inline-production-form label > span, .compact-command-form label > span { color: var(--ink-800); font-size: 10px; font-weight: 800; }
@@ -821,11 +864,14 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
   .full-field { grid-column: auto; }
   .workspace-onboarding .button { margin-right: 0; width: 100%; }
   .kanban-board { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
+  .content-workflow-subtasks > section { grid-template-columns: 1fr; }
   .assignment-grid { grid-template-columns: 1fr; }
   .content-card { padding: 17px; }
   .content-card > header, .content-card > footer { align-items: flex-start; flex-direction: column; }
   .content-card-actions { width: 100%; justify-items: start; }
   .content-collapsed-summary { grid-template-columns: 1fr; }
+  .reel-caption-heading, .reel-approval-panel { align-items: flex-start; flex-direction: column; }
+  .reel-caption-heading > div:last-child, .reel-approval-state { width: 100%; justify-items: start; text-align: right; }
   .notification-toast { inset-inline: 12px; top: 183px; width: auto; }
   .content-card-badges, .production-header, .production-tool-heading { align-items: flex-start; justify-content: flex-start; flex-direction: column; }
   .inline-production-form { grid-template-columns: 1fr; }

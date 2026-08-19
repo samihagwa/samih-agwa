@@ -171,6 +171,20 @@ async function changeTimelineCue(body: Record<string, unknown>, context: Context
   return commandError(error, "تعذّر تحديث تعليمة الـTimeline.") ?? jsonResponse({ changed: data });
 }
 
+async function changeReelApproval(body: Record<string, unknown>, context: Context) {
+  const taskId = text(body.task_id);
+  const gateAction = text(body.gate_action);
+  if (!taskId || !["start", "approve"].includes(gateAction)) {
+    return jsonResponse({ message: "إجراء الاعتماد النهائي غير صالح." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("change_reel_approval_gate", {
+    target_user_id: context!.userClaims!.id,
+    target_task_id: taskId,
+    target_action: gateAction,
+  });
+  return commandError(error, "تعذّر تحديث الاعتماد النهائي.") ?? jsonResponse({ changed: data });
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -196,6 +210,7 @@ export default {
     if (body.action === "resolve_revision") return changeRevision(body, context, "resolve");
     if (body.action === "cancel_revision") return changeRevision(body, context, "cancel");
     if (body.action === "change_timeline_cue") return changeTimelineCue(body, context);
+    if (body.action === "change_reel_approval") return changeReelApproval(body, context);
     return jsonResponse({ message: "أمر المحتوى غير معروف." }, 400);
   },
 };

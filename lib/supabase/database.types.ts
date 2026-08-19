@@ -1536,6 +1536,7 @@ export type Database = {
           description: string | null
           due_at: string
           id: string
+          is_work_item: boolean
           launch_deliverable_id: string | null
           launch_gate: Database["public"]["Enums"]["launch_gate"] | null
           launch_id: string | null
@@ -1559,6 +1560,7 @@ export type Database = {
           description?: string | null
           due_at: string
           id?: string
+          is_work_item?: boolean
           launch_deliverable_id?: string | null
           launch_gate?: Database["public"]["Enums"]["launch_gate"] | null
           launch_id?: string | null
@@ -1582,6 +1584,7 @@ export type Database = {
           description?: string | null
           due_at?: string
           id?: string
+          is_work_item?: boolean
           launch_deliverable_id?: string | null
           launch_gate?: Database["public"]["Enums"]["launch_gate"] | null
           launch_id?: string | null
@@ -1729,6 +1732,14 @@ export type Database = {
         Args: {
           target_action: string
           target_revision_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
+      change_reel_approval_gate: {
+        Args: {
+          target_action: string
+          target_task_id: string
           target_user_id: string
         }
         Returns: boolean
@@ -1916,6 +1927,32 @@ export type Database = {
         }
         Returns: string
       }
+      create_reel_from_intake_v3: {
+        Args: {
+          approval_owner_id: string
+          content_brand_notes: string
+          content_creator_id: string
+          content_cta: string
+          content_editing_brief: string
+          content_goal: string
+          content_hook: string
+          content_script_outline: string
+          content_thumbnail_brief: string
+          content_title: string
+          editing_owner_id: string
+          intake_request_text: string
+          parsed_assets: Json
+          parsed_timeline: Json
+          publishing_owner_id: string
+          target_brand_article_ids: string[]
+          target_organization_id: string
+          target_publish_at: string
+          target_user_id: string
+          telegram_source_url: string
+          thumbnail_owner_id: string
+        }
+        Returns: string
+      }
       create_reel_production_workflow: {
         Args: {
           approval_owner_id: string
@@ -1961,6 +1998,31 @@ export type Database = {
           initial_source_url: string
           publishing_owner_id: string
           recording_owner_id: string
+          target_brand_article_ids: string[]
+          target_organization_id: string
+          target_publish_at: string
+          target_user_id: string
+          thumbnail_owner_id: string
+        }
+        Returns: string
+      }
+      create_reel_production_workflow_v3: {
+        Args: {
+          approval_owner_id: string
+          content_brand_notes: string
+          content_creator_id: string
+          content_cta: string
+          content_editing_brief: string
+          content_goal: string
+          content_hook: string
+          content_script_outline: string
+          content_thumbnail_brief: string
+          content_title: string
+          editing_owner_id: string
+          initial_raw_url: string
+          initial_reference_url: string
+          initial_source_url: string
+          publishing_owner_id: string
           target_brand_article_ids: string[]
           target_organization_id: string
           target_publish_at: string

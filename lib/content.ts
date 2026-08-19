@@ -53,14 +53,12 @@ export function contentRevisionSteps(format: ContentFormat) {
     : (["recording", "editing", "thumbnail", "caption"] as ContentStep[]);
 }
 
-export const contentAssignmentFields: Array<{ step: ContentStep; name: string }> = [
-  { step: "brief", name: "brief_owner_id" },
-  { step: "recording", name: "recording_owner_id" },
-  { step: "editing", name: "editing_owner_id" },
-  { step: "thumbnail", name: "thumbnail_owner_id" },
-  { step: "caption", name: "caption_owner_id" },
-  { step: "approval", name: "approval_owner_id" },
-  { step: "publishing", name: "publishing_owner_id" },
+export const contentAssignmentFields: Array<{ step: ContentStep; name: string; label: string }> = [
+  { step: "recording", name: "content_creator_id", label: "صانع المحتوى + الكابشن" },
+  { step: "editing", name: "editing_owner_id", label: "المونتاج" },
+  { step: "thumbnail", name: "thumbnail_owner_id", label: "تصميم الغلاف" },
+  { step: "approval", name: "approval_owner_id", label: "الاعتماد النهائي" },
+  { step: "publishing", name: "publishing_owner_id", label: "النشر" },
 ];
 
 export const contentAssetKindConfig: Record<ContentAssetKind, { label: string }> = {
