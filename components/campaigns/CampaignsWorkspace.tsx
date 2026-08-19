@@ -118,6 +118,7 @@ export function CampaignsWorkspace() {
   const [showCreate, setShowCreate] = useState(false);
   const [documentFormId, setDocumentFormId] = useState<string | null>(null);
   const [deliverableFormId, setDeliverableFormId] = useState<string | null>(null);
+  const [deliverableKindsByLaunch, setDeliverableKindsByLaunch] = useState<Record<string, LaunchDeliverableKind>>({});
   const [submissionFormId, setSubmissionFormId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
@@ -373,14 +374,22 @@ export function CampaignsWorkspace() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const dueAt = new Date(String(form.get("due_at") ?? ""));
+    const kind = String(form.get("kind") ?? "other") as LaunchDeliverableKind;
     if (Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
       setError("حدد موعد تسليم صحيحًا في المستقبل.");
+      return;
+    }
+    const firstPublishAt = kind === "social_post"
+      ? new Date(String(form.get("first_publish_at") ?? ""))
+      : null;
+    if (firstPublishAt && (Number.isNaN(firstPublishAt.getTime()) || firstPublishAt.getTime() > dueAt.getTime())) {
+      setError("أول موعد نشر يجب أن يكون صحيحًا ويسبق الموعد النهائي للدفعة.");
       return;
     }
     const created = await invokeLaunch({
       action: "create_deliverable",
       launch_id: launch.id,
-      kind: String(form.get("kind") ?? "other") as LaunchDeliverableKind,
+      kind,
       title: String(form.get("title") ?? "").trim(),
       brief: String(form.get("brief") ?? "").trim(),
       channel: String(form.get("channel") ?? "").trim(),
@@ -392,7 +401,25 @@ export function CampaignsWorkspace() {
       budget_amount: Number(form.get("budget_amount") ?? 0),
       currency: String(form.get("currency") ?? launch.currency).trim().toUpperCase(),
       depends_on_deliverable_id: String(form.get("depends_on_deliverable_id") ?? ""),
-    }, "تم إنشاء مخرج الإطلاق ومهمته واعتماديته معًا.");
+      ...(kind === "social_post" ? {
+        first_publish_at: firstPublishAt!.toISOString(),
+        goal: String(form.get("goal") ?? "").trim(),
+        hook: String(form.get("hook") ?? "").trim(),
+        cta: String(form.get("cta") ?? "").trim(),
+        copy_brief: String(form.get("copy_brief") ?? "").trim(),
+        design_brief: String(form.get("design_brief") ?? "").trim(),
+        platforms: form.getAll("platforms").map(String),
+        brief_owner_id: String(form.get("brief_owner_id") ?? ""),
+        caption_owner_id: String(form.get("caption_owner_id") ?? ""),
+        design_owner_id: String(form.get("design_owner_id") ?? ""),
+        approval_owner_id: String(form.get("approval_owner_id") ?? ""),
+        scheduling_owner_id: String(form.get("scheduling_owner_id") ?? ""),
+        publishing_owner_id: String(form.get("publishing_owner_id") ?? ""),
+        creation_request_id: crypto.randomUUID(),
+      } : {}),
+    }, kind === "social_post"
+      ? "تم إنشاء بند البوستات وكروت المحتوى ومراحل التنفيذ تلقائيًا."
+      : "تم إنشاء مخرج الإطلاق ومهمته واعتماديته معًا.");
     if (created) {
       formElement.reset();
       setDeliverableFormId(null);
@@ -629,6 +656,9 @@ export function CampaignsWorkspace() {
             const launchEndTime = new Date(launch.ends_at).getTime();
             const canPlanMore = manager && launchEndTime > renderNow;
             const suggestedDue = toLocalDateTimeInput(new Date(Math.min(renderNow + 7 * 24 * 60 * 60 * 1000, launchEndTime - 60 * 60 * 1000)));
+            const suggestedFirstPublish = toLocalDateTimeInput(new Date(Math.min(renderNow + 24 * 60 * 60 * 1000, new Date(suggestedDue).getTime())));
+            const selectedDeliverableKind = deliverableKindsByLaunch[launch.id] ?? "reel";
+            const workingPeople = workspace.people.filter((person) => person.role !== "viewer");
 
             return (
               <article className="panel launch-card" key={launch.id}>
@@ -683,26 +713,51 @@ export function CampaignsWorkspace() {
                   <div className="launch-execution-heading"><div><p className="overline">الخطة التنفيذية</p><h4>الكميات والمواعيد والميزانية والاعتماديات</h4><p>{launchDeliverables.length ? `اكتمل ${executionDone} من ${launchDeliverables.length} بنود تنفيذية.` : "حوّل الاستراتيجية إلى مخرجات قابلة للتسليم؛ كل بند ينشئ مهمة تلقائيًا."}</p></div>{canPlanMore ? <Button type="button" onClick={() => setDeliverableFormId(deliverableFormId === launch.id ? null : launch.id)}><Plus size={14} /> إضافة بند تنفيذي</Button> : null}</div>
                   {quantitySummary.length || budgetSummary.length ? <div className="launch-execution-kpis"><div><ListChecks size={16} /><span>{quantitySummary.map(([kind, quantity]) => `${quantity} ${launchDeliverableKindConfig[kind as LaunchDeliverableKind].label}`).join(" · ")}</span></div><div><Banknote size={16} /><span>{budgetSummary.map(([currency, amount]) => formatTarget(amount, currency)).join(" · ") || "لا توجد ميزانية مرصودة"}</span></div></div> : null}
                   {deliverableFormId === launch.id && canPlanMore ? <form className="launch-inline-form launch-deliverable-form" onSubmit={(event) => void createDeliverable(event, launch)}>
-                    <label><span>نوع المخرج</span><select name="kind" defaultValue="reel">{(Object.keys(launchDeliverableKindConfig) as LaunchDeliverableKind[]).map((kind) => <option value={kind} key={kind}>{launchDeliverableKindConfig[kind].label}</option>)}</select></label>
-                    <label><span>الكمية المطلوبة</span><input name="planned_quantity" type="number" min="1" max="500" step="1" defaultValue="1" required /></label>
+                    <label><span>نوع المخرج</span><select name="kind" value={selectedDeliverableKind} onChange={(event) => setDeliverableKindsByLaunch((current) => ({ ...current, [launch.id]: event.target.value as LaunchDeliverableKind }))}>{(Object.keys(launchDeliverableKindConfig) as LaunchDeliverableKind[]).map((kind) => <option value={kind} key={kind}>{launchDeliverableKindConfig[kind].label}</option>)}</select></label>
+                    <label><span>الكمية المطلوبة</span><input name="planned_quantity" type="number" min="1" max={selectedDeliverableKind === "social_post" ? 60 : 500} step="1" defaultValue="1" required /></label>
                     <label className="wide"><span>عنوان البند</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: ريلز التسجيل المبكر للكورس" /></label>
-                    <label><span>القناة</span><input name="channel" minLength={2} maxLength={120} placeholder="Instagram / Telegram / Meta" /></label>
+                    {selectedDeliverableKind !== "social_post" ? <label><span>القناة</span><input name="channel" minLength={2} maxLength={120} placeholder="Instagram / Telegram / Meta" /></label> : null}
                     <label><span>مكان النشر أو التسليم</span><input name="destination" minLength={2} maxLength={500} placeholder="حساب Instagram أو فولدر Drive" /></label>
-                    <label><span>المسؤول</span><select name="owner_id" defaultValue={session.user.id}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
-                    <label><span>الموعد النهائي</span><input name="due_at" type="datetime-local" defaultValue={suggestedDue} required /></label>
+                    <label><span>{selectedDeliverableKind === "social_post" ? "مسؤول الدفعة" : "المسؤول"}</span><select name="owner_id" defaultValue={session.user.id}>{workingPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+                    {selectedDeliverableKind === "social_post" ? <label><span>أول موعد نشر</span><input name="first_publish_at" type="datetime-local" defaultValue={suggestedFirstPublish} required /></label> : null}
+                    <label><span>{selectedDeliverableKind === "social_post" ? "آخر موعد نشر" : "الموعد النهائي"}</span><input name="due_at" type="datetime-local" defaultValue={suggestedDue} required /></label>
                     <label><span>نوع التكلفة</span><select name="budget_category" defaultValue="production">{(Object.keys(launchBudgetCategoryConfig) as LaunchBudgetCategory[]).map((category) => <option value={category} key={category}>{launchBudgetCategoryConfig[category].label}</option>)}</select></label>
                     <label><span>الميزانية</span><input name="budget_amount" type="number" min="0" step="0.01" defaultValue="0" required /></label>
                     <label><span>العملة</span><input name="currency" defaultValue={launch.currency} minLength={3} maxLength={3} pattern="[A-Za-z]{3}" dir="ltr" required /></label>
                     <label><span>يعتمد على — اختياري</span><select name="depends_on_deliverable_id"><option value="">لا يعتمد على بند سابق</option>{launchDeliverables.map((deliverable) => <option value={deliverable.id} key={deliverable.id}>{deliverable.title}</option>)}</select></label>
                     <label className="wide"><span>التفاصيل ومعيار التسليم</span><textarea name="brief" minLength={5} maxLength={5000} rows={4} required placeholder="الفكرة، الرسالة، المطلوب، المقاسات، المراجع، ما الذي يعتبر تسليمًا مقبولًا…" /></label>
-                    <div className="form-actions"><Button type="submit" disabled={working}><Sparkles size={14} /> إنشاء البند والمهمة</Button><button className="text-button" type="button" onClick={() => setDeliverableFormId(null)}>إلغاء</button></div>
+                    {selectedDeliverableKind === "social_post" ? <>
+                      <div className="wide social-workflow-note"><Sparkles size={16} /><div><strong>السيستم هيفك البند تلقائيًا</strong><p>لكل بوست: Brief ← الكابشن والتصميم بالتوازي ← المراجعة ← الجدولة ← النشر والتوثيق.</p></div></div>
+                      <label className="wide"><span>هدف البوستات</span><textarea name="goal" minLength={5} maxLength={1000} rows={2} required placeholder="ما النتيجة التي نريدها من هذه الدفعة؟" /></label>
+                      <label><span>الـHook الأساسي</span><textarea name="hook" minLength={3} maxLength={1000} rows={2} required placeholder="الجملة التي توقف العميل" /></label>
+                      <label><span>الـCTA</span><textarea name="cta" minLength={2} maxLength={500} rows={2} required placeholder="الإجراء المطلوب من العميل" /></label>
+                      <label className="wide"><span>تعليمات كتابة الكابشن</span><textarea name="copy_brief" minLength={10} maxLength={8000} rows={4} required placeholder="النبرة، النقاط الأساسية، الكلمات الممنوعة، الهاشتاجات، طول النص…" /></label>
+                      <label className="wide"><span>تعليمات التصميم</span><textarea name="design_brief" minLength={10} maxLength={8000} rows={4} required placeholder="الفكرة البصرية، المقاس، النص على التصميم، المراجع وما يجب تجنبه…" /></label>
+                      <fieldset className="wide platform-picker"><legend>منصات النشر</legend>{[
+                        ["instagram", "Instagram"], ["facebook", "Facebook"], ["tiktok", "TikTok"],
+                        ["linkedin", "LinkedIn"], ["telegram", "Telegram"], ["youtube", "YouTube"],
+                      ].map(([value, label]) => <label key={value}><input type="checkbox" name="platforms" value={value} defaultChecked={value === "instagram" || value === "facebook"} /><span>{label}</span></label>)}</fieldset>
+                      <div className="wide assignment-block"><div><p className="overline">توزيع التنفيذ</p><h5>مسؤول كل مرحلة</h5></div><div className="assignment-grid">
+                        {[
+                          ["brief_owner_id", "اعتماد الـBrief"], ["caption_owner_id", "كتابة الكابشن"],
+                          ["design_owner_id", "التصميم"], ["approval_owner_id", "المراجعة"],
+                          ["scheduling_owner_id", "الجدولة"], ["publishing_owner_id", "النشر"],
+                        ].map(([name, label]) => <label key={name}><span>{label}</span><select name={name} defaultValue={session.user.id} required>{workingPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>)}
+                      </div></div>
+                    </> : null}
+                    <div className="form-actions"><Button type="submit" disabled={working}><Sparkles size={14} /> {selectedDeliverableKind === "social_post" ? "إنشاء البند ومصنع البوستات" : "إنشاء البند والمهمة"}</Button><button className="text-button" type="button" onClick={() => setDeliverableFormId(null)}>إلغاء</button></div>
                   </form> : null}
                   {launchDeliverables.length ? <div className="launch-deliverable-list">{launchDeliverables.map((deliverable) => {
                     const task = deliverableTaskById.get(deliverable.id);
                     const dependencies = (dependenciesByDeliverable.get(deliverable.id) ?? []).map((dependency) => deliverableById.get(dependency.depends_on_deliverable_id)).filter((item): item is LaunchDeliverable => Boolean(item));
                     const canSubmit = manager || deliverable.owner_id === session.user.id;
                     const submittable = task && ["ready", "in_progress", "review"].includes(task.status);
-                    return <article key={deliverable.id} id={`deliverable-${deliverable.id}`}><header><div><span className="launch-deliverable-kind">{deliverable.planned_quantity} × {launchDeliverableKindConfig[deliverable.kind].label}</span><h5>{deliverable.title}</h5></div>{task ? <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusConfig[task.status].label}</StatusBadge> : null}</header><p>{deliverable.brief}</p><dl><div><dt>المسؤول</dt><dd>{peopleById.get(deliverable.owner_id)?.name ?? "عضو فريق"}</dd></div><div><dt>الموعد</dt><dd>{formatDate(deliverable.due_at)}</dd></div><div><dt>القناة / المكان</dt><dd>{[deliverable.channel, deliverable.destination].filter(Boolean).join(" · ") || "غير محدد"}</dd></div><div><dt>{launchBudgetCategoryConfig[deliverable.budget_category].label}</dt><dd>{formatTarget(Number(deliverable.budget_amount), deliverable.currency)}</dd></div></dl>{dependencies.length ? <p className="launch-dependency-note"><Route size={12} /> يبدأ بعد: {dependencies.map((dependency) => dependency.title).join(" + ")}</p> : null}{deliverable.delivered_at ? <div className="launch-delivery-result"><strong>التسليم المحفوظ</strong>{deliverable.result_note ? <p>{deliverable.result_note}</p> : null}{deliverable.result_url ? <a href={deliverable.result_url} target="_blank" rel="noreferrer">فتح التسليم <Link2 size={12} /></a> : null}<small>{formatDate(deliverable.delivered_at)}</small></div> : null}{canSubmit && submittable ? <button className="text-button" type="button" onClick={() => setSubmissionFormId(submissionFormId === deliverable.id ? null : deliverable.id)}><Upload size={12} /> {deliverable.delivered_at ? "تحديث التسليم" : "تسليم النتيجة"}</button> : null}{submissionFormId === deliverable.id && canSubmit && submittable ? <form className="launch-submission-form" onSubmit={(event) => void submitDeliverable(event, deliverable)}><label><span>ملاحظة النتيجة</span><textarea name="result_note" maxLength={5000} rows={3} placeholder="ما الذي تم؟ وما الذي يجب أن يراجعه المدير؟" /></label><label><span>رابط التسليم — اختياري إذا كتبت ملاحظة</span><input name="result_url" type="url" dir="ltr" maxLength={2000} placeholder="https://drive.google.com/..." /></label><div className="form-actions"><Button type="submit" disabled={working}>حفظ وإرسال للمراجعة</Button><button className="text-button" type="button" onClick={() => setSubmissionFormId(null)}>إلغاء</button></div></form> : null}</article>;
+                    const generatedItems = contentLinks
+                      .filter((link) => link.launch_deliverable_id === deliverable.id)
+                      .map((link) => contentById.get(link.content_item_id))
+                      .filter((item): item is ContentItem => Boolean(item));
+                    const publishedItems = generatedItems.filter((item) => item.status === "published").length;
+                    return <article key={deliverable.id} id={`deliverable-${deliverable.id}`}><header><div><span className="launch-deliverable-kind">{deliverable.planned_quantity} × {launchDeliverableKindConfig[deliverable.kind].label}</span><h5>{deliverable.title}</h5></div>{task ? <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusConfig[task.status].label}</StatusBadge> : null}</header><p>{deliverable.brief}</p><dl><div><dt>المسؤول</dt><dd>{peopleById.get(deliverable.owner_id)?.name ?? "عضو فريق"}</dd></div><div><dt>الموعد</dt><dd>{formatDate(deliverable.due_at)}</dd></div><div><dt>القناة / المكان</dt><dd>{[deliverable.channel, deliverable.destination].filter(Boolean).join(" · ") || "غير محدد"}</dd></div><div><dt>{launchBudgetCategoryConfig[deliverable.budget_category].label}</dt><dd>{formatTarget(Number(deliverable.budget_amount), deliverable.currency)}</dd></div></dl>{deliverable.workflow_template === "social_post" ? <div className="generated-content-summary"><div><strong>{publishedItems}/{generatedItems.length}</strong><span>بوستات منشورة</span></div><div className="content-progress-track"><span style={{ width: `${generatedItems.length ? Math.round((publishedItems / generatedItems.length) * 100) : 0}%` }} /></div><div className="generated-content-links">{generatedItems.map((item) => <a href={`/content#content-${item.id}`} key={item.id}>{item.title} <Link2 size={11} /></a>)}</div><small>{task?.status === "backlog" ? "اعتماد الدفعة يفتح تلقائيًا بعد نشر وتوثيق كل البوستات." : "كل كروت البوستات منشورة؛ الدفعة جاهزة للاعتماد."}</small></div> : null}{dependencies.length ? <p className="launch-dependency-note"><Route size={12} /> يبدأ بعد: {dependencies.map((dependency) => dependency.title).join(" + ")}</p> : null}{deliverable.delivered_at ? <div className="launch-delivery-result"><strong>التسليم المحفوظ</strong>{deliverable.result_note ? <p>{deliverable.result_note}</p> : null}{deliverable.result_url ? <a href={deliverable.result_url} target="_blank" rel="noreferrer">فتح التسليم <Link2 size={12} /></a> : null}<small>{formatDate(deliverable.delivered_at)}</small></div> : null}{canSubmit && submittable ? <button className="text-button" type="button" onClick={() => setSubmissionFormId(submissionFormId === deliverable.id ? null : deliverable.id)}><Upload size={12} /> {deliverable.delivered_at ? "تحديث التسليم" : deliverable.workflow_template === "social_post" ? "اعتماد دفعة البوستات" : "تسليم النتيجة"}</button> : null}{submissionFormId === deliverable.id && canSubmit && submittable ? <form className="launch-submission-form" onSubmit={(event) => void submitDeliverable(event, deliverable)}><label><span>ملاحظة النتيجة</span><textarea name="result_note" maxLength={5000} rows={3} placeholder="ما الذي تم؟ وما الذي يجب أن يراجعه المدير؟" /></label><label><span>رابط التسليم — اختياري إذا كتبت ملاحظة</span><input name="result_url" type="url" dir="ltr" maxLength={2000} placeholder="https://drive.google.com/..." /></label><div className="form-actions"><Button type="submit" disabled={working}>حفظ وإرسال للمراجعة</Button><button className="text-button" type="button" onClick={() => setSubmissionFormId(null)}>إلغاء</button></div></form> : null}</article>;
                   })}</div> : <p className="launch-assets-empty">لا توجد بنود تنفيذية بعد. مثال مناسب للبداية: 6 ريلز + 12 ستوري + 4 تصميمات + 3 إعلانات، لكن الأرقام تعتمد على الاستراتيجية التي تعتمدها أنت.</p>}
                 </section>
 

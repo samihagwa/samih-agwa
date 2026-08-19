@@ -2,8 +2,9 @@ import { createSupabaseContext } from "npm:@supabase/server@1.4.1";
 import { corsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
 
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
-const contentSteps = new Set(["brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing"]);
-const revisionSteps = new Set(["recording", "editing", "thumbnail", "caption"]);
+const contentSteps = new Set(["brief", "recording", "editing", "thumbnail", "caption", "design", "approval", "scheduling", "publishing"]);
+const revisionSteps = new Set(["recording", "editing", "thumbnail", "caption", "design"]);
+const resultSteps = new Set(["caption", "design", "scheduling", "publishing"]);
 const assetKinds = new Set([
   "raw_video", "source", "b_roll", "image", "audio", "reference",
   "draft_video", "thumbnail", "caption", "final_export",
@@ -52,6 +53,50 @@ async function updateBrief(body: Record<string, unknown>, context: Context) {
     content_brand_notes: text(body.content_brand_notes),
   });
   return commandError(error, "تعذّر تحديث Production Brief.") ?? jsonResponse({ updated: data });
+}
+
+async function updateSocialPostBrief(body: Record<string, unknown>, context: Context) {
+  const contentId = text(body.content_item_id);
+  const title = text(body.content_title);
+  const goal = text(body.content_goal);
+  const hook = text(body.content_hook);
+  const cta = text(body.content_cta);
+  const copyBrief = text(body.content_copy_brief);
+  const designBrief = text(body.content_design_brief);
+  if (!contentId || title.length < 3 || goal.length < 5 || hook.length < 3 || cta.length < 2
+    || copyBrief.length < 10 || designBrief.length < 10) {
+    return jsonResponse({ message: "أكمل عنوان البوست وهدفه والـHook والـCTA وتعليمات الكتابة والتصميم." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("update_social_post_brief", {
+    target_user_id: context!.userClaims!.id,
+    target_content_item_id: contentId,
+    content_title: title,
+    content_goal: goal,
+    content_hook: hook,
+    content_cta: cta,
+    content_copy_brief: copyBrief,
+    content_design_brief: designBrief,
+  });
+  return commandError(error, "تعذّر تحديث Brief البوست.") ?? jsonResponse({ updated: data });
+}
+
+async function submitStepDelivery(body: Record<string, unknown>, context: Context) {
+  const taskId = text(body.task_id);
+  const step = text(body.step);
+  const note = text(body.result_note);
+  const url = text(body.result_url);
+  if (!taskId || !resultSteps.has(step) || (!note && !url)
+    || note.length > 10000 || url.length > 2000 || (url && !isHttpUrl(url))
+    || ((step === "design" || step === "publishing") && !url)) {
+    return jsonResponse({ message: "أضف نتيجة المرحلة بشكل صحيح؛ التصميم والنشر يحتاجان رابطًا." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("submit_content_step_delivery", {
+    target_user_id: context!.userClaims!.id,
+    target_task_id: taskId,
+    delivery_result_note: note || null,
+    delivery_result_url: url || null,
+  });
+  return commandError(error, "تعذّر حفظ نتيجة مرحلة المحتوى.") ?? jsonResponse({ deliveryId: data }, 201);
 }
 
 async function addAsset(body: Record<string, unknown>, context: Context) {
@@ -142,6 +187,8 @@ export default {
     }
 
     if (body.action === "update_brief") return updateBrief(body, context);
+    if (body.action === "update_social_post_brief") return updateSocialPostBrief(body, context);
+    if (body.action === "submit_step_delivery") return submitStepDelivery(body, context);
     if (body.action === "add_asset") return addAsset(body, context);
     if (body.action === "remove_asset") return removeAsset(body, context);
     if (body.action === "request_revision") return requestRevision(body, context);

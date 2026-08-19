@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "مركز القيادة" };
 const foundations = [
   { label: "هوية وصلاحيات الفريق", state: "جاهزة تقنيًا — لم يبدأ الفريق", icon: ShieldCheck },
   { label: "إدارة المهام والتسليم", state: "قواعد آمنة وبورد حقيقي", icon: CircleCheck },
-  { label: "مصنع محتوى مترابط", state: "7 خطوات واعتماديات تلقائية", icon: CircleCheck },
+  { label: "مصنع محتوى مترابط", state: "مسارات ريلز وبوستات باعتماديات تلقائية", icon: CircleCheck },
   { label: "مركز معرفة البراند", state: "جاهز لإدخال واعتماد المراجع الحقيقية", icon: BookOpenCheck },
 ];
 
@@ -21,8 +21,10 @@ const contentStepDescriptions: Record<ContentStep, string> = {
   editing: "نسخة مطابقة للبراند",
   thumbnail: "غلاف جاهز للنشر",
   caption: "نص وCTA معتمدان",
+  design: "تصميم مطابق للهوية",
   approval: "فحص كل الأصول معًا",
-  publishing: "جدولة وتأكيد فعلي",
+  scheduling: "موعد ومنصات موثقة",
+  publishing: "نشر ورابط فعلي",
 };
 
 export default function Home() {
@@ -82,7 +84,7 @@ export default function Home() {
       <section className="content-grid">
         <article className="panel span-two">
           <div className="section-heading">
-            <div><p className="overline">خط التشغيل المقترح</p><h2>الريلز يتحرك تلقائيًا بين التخصصات</h2></div>
+            <div><p className="overline">خط التشغيل المقترح</p><h2>المحتوى يتحرك تلقائيًا بين التخصصات</h2></div>
             <a className="text-link" href="/content">فتح خط المحتوى <ArrowLeft size={16} /></a>
           </div>
           <ol className="workflow-line">

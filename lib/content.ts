@@ -1,6 +1,7 @@
 import type { Database } from "./supabase/database.types";
 
 export type ContentStatus = Database["public"]["Enums"]["content_status"];
+export type ContentFormat = Database["public"]["Enums"]["content_format"];
 export type ContentStep = Database["public"]["Enums"]["content_step"];
 export type ContentAssetKind = Database["public"]["Enums"]["content_asset_kind"];
 export type ContentRevisionStatus = Database["public"]["Enums"]["content_revision_status"];
@@ -24,13 +25,33 @@ export const contentStepConfig: Record<ContentStep, { label: string; order: numb
   editing: { label: "مونتاج", order: 3 },
   thumbnail: { label: "غلاف", order: 4 },
   caption: { label: "كابشن", order: 5 },
-  approval: { label: "اعتماد", order: 6 },
-  publishing: { label: "نشر", order: 7 },
+  design: { label: "تصميم", order: 6 },
+  approval: { label: "اعتماد", order: 7 },
+  scheduling: { label: "جدولة", order: 8 },
+  publishing: { label: "نشر", order: 9 },
 };
 
 export const contentSteps = (Object.keys(contentStepConfig) as ContentStep[]).sort(
   (a, b) => contentStepConfig[a].order - contentStepConfig[b].order,
 );
+
+export const reelContentSteps: ContentStep[] = [
+  "brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing",
+];
+
+export const socialPostContentSteps: ContentStep[] = [
+  "brief", "caption", "design", "approval", "scheduling", "publishing",
+];
+
+export function contentWorkflowSteps(format: ContentFormat) {
+  return format === "post" ? socialPostContentSteps : reelContentSteps;
+}
+
+export function contentRevisionSteps(format: ContentFormat) {
+  return format === "post"
+    ? (["caption", "design"] as ContentStep[])
+    : (["recording", "editing", "thumbnail", "caption"] as ContentStep[]);
+}
 
 export const contentAssignmentFields: Array<{ step: ContentStep; name: string }> = [
   { step: "brief", name: "brief_owner_id" },

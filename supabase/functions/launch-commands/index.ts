@@ -11,6 +11,7 @@ const launchGates = new Set(["strategy", "offer", "registration", "delivery", "p
 const documentStatuses = new Set(["draft", "submitted", "approved"]);
 const deliverableKinds = new Set(["reel", "story", "design", "telegram_post", "social_post", "email", "ad", "landing_page", "webinar_asset", "other"]);
 const budgetCategories = new Set(["production", "media_spend", "tools", "event", "other"]);
+const publishingPlatforms = new Set(["instagram", "facebook", "tiktok", "youtube", "linkedin", "telegram", "email"]);
 
 const ownerFields = [
   "strategy_owner_id",
@@ -46,6 +47,10 @@ function validHttpUrl(value: string) {
   } catch {
     return false;
   }
+}
+
+function validUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function nullableTarget(value: unknown) {
@@ -243,15 +248,74 @@ async function createDeliverable(
   const budget = Number(body.budget_amount ?? 0);
   const dueAt = text(body.due_at);
   const currency = text(body.currency).toUpperCase();
+  const isSocialPostWorkflow = kind === "social_post";
   if (!isNonEmptyString(body.launch_id) || !isNonEmptyString(body.owner_id)
     || !deliverableKinds.has(kind) || !budgetCategories.has(budgetCategory)
     || text(body.title).length < 3 || text(body.title).length > 180
     || text(body.brief).length < 5 || text(body.brief).length > 5000
-    || !Number.isInteger(quantity) || quantity < 1 || quantity > 500
+    || !Number.isInteger(quantity) || quantity < 1 || quantity > (isSocialPostWorkflow ? 60 : 500)
     || !Number.isFinite(budget) || budget < 0 || Number.isNaN(Date.parse(dueAt))
     || !/^[A-Z]{3}$/.test(currency)) {
     return jsonResponse({ message: "أكمل نوع المخرج وكميته ومسؤوله وموعده وميزانيته بشكل صحيح." }, 400);
   }
+
+  if (isSocialPostWorkflow) {
+    const firstPublishAt = text(body.first_publish_at);
+    const platforms = Array.isArray(body.platforms)
+      ? [...new Set(body.platforms.map((platform) => text(platform)).filter(Boolean))]
+      : [];
+    const workflowOwnerFields = [
+      "brief_owner_id", "caption_owner_id", "design_owner_id",
+      "approval_owner_id", "scheduling_owner_id", "publishing_owner_id",
+    ];
+    const requestId = text(body.creation_request_id);
+    if (Number.isNaN(Date.parse(firstPublishAt)) || Date.parse(firstPublishAt) > Date.parse(dueAt)
+      || platforms.length < 1 || platforms.some((platform) => !publishingPlatforms.has(platform))
+      || workflowOwnerFields.some((field) => !isNonEmptyString(body[field]))
+      || !validUuid(requestId)
+      || text(body.goal).length < 5 || text(body.goal).length > 1000
+      || text(body.hook).length < 3 || text(body.hook).length > 1000
+      || text(body.cta).length < 2 || text(body.cta).length > 500
+      || text(body.copy_brief).length < 10 || text(body.copy_brief).length > 8000
+      || text(body.design_brief).length < 10 || text(body.design_brief).length > 8000) {
+      return jsonResponse({ message: "أكمل خطة البوستات، مواعيد النشر، المنصات ومسؤولي مراحل التنفيذ." }, 400);
+    }
+
+    const { data, error } = await context!.supabaseAdmin.rpc("create_social_post_deliverable", {
+      target_user_id: context!.userClaims!.id,
+      target_launch_id: body.launch_id,
+      deliverable_title: text(body.title),
+      deliverable_brief: text(body.brief),
+      deliverable_destination: text(body.destination) || null,
+      deliverable_quantity: quantity,
+      deliverable_owner_id: body.owner_id,
+      first_publish_at: firstPublishAt,
+      deliverable_due_at: dueAt,
+      deliverable_budget_category: budgetCategory,
+      deliverable_budget_amount: budget,
+      deliverable_currency: currency,
+      depends_on_deliverable_id: text(body.depends_on_deliverable_id) || null,
+      content_goal: text(body.goal),
+      content_hook: text(body.hook),
+      content_cta: text(body.cta),
+      content_copy_brief: text(body.copy_brief),
+      content_design_brief: text(body.design_brief),
+      content_platforms: platforms,
+      brief_owner_id: body.brief_owner_id,
+      caption_owner_id: body.caption_owner_id,
+      design_owner_id: body.design_owner_id,
+      approval_owner_id: body.approval_owner_id,
+      scheduling_owner_id: body.scheduling_owner_id,
+      publishing_owner_id: body.publishing_owner_id,
+      target_creation_request_id: requestId,
+    });
+    if (error) {
+      const userError = /Only |not found|active working member|incomplete|batch|dates|budget|Currency|dependency|platform|identity/i.test(error.message);
+      return jsonResponse({ message: userError ? error.message : "تعذّر إنشاء مصنع البوستات. لم يتم حفظ أي جزء." }, userError ? 400 : 500);
+    }
+    return jsonResponse({ deliverableId: data, contentItemsCreated: quantity, tasksCreated: quantity * 6 }, 201);
+  }
+
   const { data, error } = await context!.supabaseAdmin.rpc("create_launch_deliverable", {
     target_user_id: context!.userClaims!.id,
     target_launch_id: body.launch_id,

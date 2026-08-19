@@ -395,13 +395,15 @@ export function TasksWorkspace() {
                   const owner = peopleById.get(task.owner_id);
                   const canMove = !task.crm_contact_id && (manager || task.owner_id === session.user.id);
                   const options = [task.status, ...allowedTaskTransitions[task.status]].filter((option) =>
-                    !task.launch_deliverable_id || option !== "review" || task.status === "review"
+                    (!task.launch_deliverable_id || option !== "review" || task.status === "review")
+                    && (!task.content_step || !["caption", "design", "scheduling", "publishing"].includes(task.content_step)
+                      || option !== "review" || task.status === "review")
                   );
                   return (
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} key={task.id}>
                       <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><small>v{task.version}</small></div>
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
-                      {task.content_item_id ? <a className="task-production-link" href={`/content#content-${task.content_item_id}`}><FileText size={12} /> فتح Production Brief والملفات</a> : null}
+                      {task.content_item_id ? <a className="task-production-link" href={`/content#content-${task.content_item_id}`}><FileText size={12} /> فتح ملف المحتوى وتسليم النتيجة</a> : null}
                       {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
                       {task.launch_deliverable_id ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · بند تنفيذي</span> : null}
                       {task.launch_deliverable_id ? <a className="task-production-link" href={`/campaigns#deliverable-${task.launch_deliverable_id}`}><FileText size={12} /> فتح التفاصيل وتسليم النتيجة</a> : null}

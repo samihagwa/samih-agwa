@@ -285,9 +285,11 @@ export type Database = {
       content_items: {
         Row: {
           brand_notes: string | null
+          copy_brief: string
           created_at: string
           created_by: string
           cta: string
+          design_brief: string
           editing_brief: string
           format: Database["public"]["Enums"]["content_format"]
           goal: string
@@ -308,9 +310,11 @@ export type Database = {
         }
         Insert: {
           brand_notes?: string | null
+          copy_brief?: string
           created_at?: string
           created_by?: string
           cta: string
+          design_brief?: string
           editing_brief?: string
           format?: Database["public"]["Enums"]["content_format"]
           goal: string
@@ -331,9 +335,11 @@ export type Database = {
         }
         Update: {
           brand_notes?: string | null
+          copy_brief?: string
           created_at?: string
           created_by?: string
           cta?: string
+          design_brief?: string
           editing_brief?: string
           format?: Database["public"]["Enums"]["content_format"]
           goal?: string
@@ -366,6 +372,77 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_step_deliveries: {
+        Row: {
+          content_item_id: string
+          id: string
+          organization_id: string
+          result_note: string | null
+          result_url: string | null
+          step: Database["public"]["Enums"]["content_step"]
+          submitted_at: string
+          submitted_by: string
+          task_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          content_item_id: string
+          id?: string
+          organization_id: string
+          result_note?: string | null
+          result_url?: string | null
+          step: Database["public"]["Enums"]["content_step"]
+          submitted_at?: string
+          submitted_by: string
+          task_id: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          content_item_id?: string
+          id?: string
+          organization_id?: string
+          result_note?: string | null
+          result_url?: string | null
+          step?: Database["public"]["Enums"]["content_step"]
+          submitted_at?: string
+          submitted_by?: string
+          task_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_step_deliveries_content_org_fkey"
+            columns: ["content_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_step_deliveries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_step_deliveries_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_step_deliveries_task_identity_fkey"
+            columns: ["task_id", "organization_id", "content_item_id", "step"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id", "organization_id", "content_item_id", "content_step"]
           },
         ]
       }
@@ -810,6 +887,8 @@ export type Database = {
           content_item_id: string
           created_at: string
           created_by: string
+          deliverable_sequence: number | null
+          launch_deliverable_id: string | null
           launch_id: string
           organization_id: string
         }
@@ -817,6 +896,8 @@ export type Database = {
           content_item_id: string
           created_at?: string
           created_by?: string
+          deliverable_sequence?: number | null
+          launch_deliverable_id?: string | null
           launch_id: string
           organization_id: string
         }
@@ -824,10 +905,19 @@ export type Database = {
           content_item_id?: string
           created_at?: string
           created_by?: string
+          deliverable_sequence?: number | null
+          launch_deliverable_id?: string | null
           launch_id?: string
           organization_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "launch_content_items_deliverable_org_fkey"
+            columns: ["launch_deliverable_id", "launch_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "launch_deliverables"
+            referencedColumns: ["id", "launch_id", "organization_id"]
+          },
           {
             foreignKeyName: "launch_content_items_content_item_id_organization_id_fkey"
             columns: ["content_item_id", "organization_id"]
@@ -912,6 +1002,7 @@ export type Database = {
           channel: string | null
           created_at: string
           created_by: string
+          creation_request_id: string | null
           currency: string
           delivered_at: string | null
           destination: string | null
@@ -925,6 +1016,7 @@ export type Database = {
           result_note: string | null
           result_url: string | null
           title: string
+          workflow_template: string
         }
         Insert: {
           brief: string
@@ -933,6 +1025,7 @@ export type Database = {
           channel?: string | null
           created_at?: string
           created_by: string
+          creation_request_id?: string | null
           currency?: string
           delivered_at?: string | null
           destination?: string | null
@@ -946,6 +1039,7 @@ export type Database = {
           result_note?: string | null
           result_url?: string | null
           title: string
+          workflow_template?: string
         }
         Update: {
           brief?: string
@@ -954,6 +1048,7 @@ export type Database = {
           channel?: string | null
           created_at?: string
           created_by?: string
+          creation_request_id?: string | null
           currency?: string
           delivered_at?: string | null
           destination?: string | null
@@ -967,6 +1062,7 @@ export type Database = {
           result_note?: string | null
           result_url?: string | null
           title?: string
+          workflow_template?: string
         }
         Relationships: [
           {
@@ -1957,7 +2053,9 @@ export type Database = {
         | "editing"
         | "thumbnail"
         | "caption"
+        | "design"
         | "approval"
+        | "scheduling"
         | "publishing"
       crm_activity_kind: "created" | "call" | "message" | "email" | "note"
       crm_consent_status: "unknown" | "granted" | "denied"
@@ -2233,7 +2331,9 @@ export const Constants = {
         "editing",
         "thumbnail",
         "caption",
+        "design",
         "approval",
+        "scheduling",
         "publishing",
       ],
       crm_activity_kind: ["created", "call", "message", "email", "note"],

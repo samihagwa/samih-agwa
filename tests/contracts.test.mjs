@@ -186,9 +186,55 @@ test("content production briefs, assets, and revision rounds share one secured w
   assert.match(workspace, /مركز الأصول/);
   assert.match(workspace, /جولات التعديل/);
   assert.match(workspace, /functions\.invoke\("content-commands"/);
-  assert.match(taskWorkspace, /فتح Production Brief والملفات/);
+  assert.match(taskWorkspace, /فتح ملف المحتوى وتسليم النتيجة/);
   assert.match(contentContract, /contentAssetKindConfig/);
   assert.match(contentContract, /contentRevisionStatusConfig/);
+});
+
+test("social post deliverables expand into parallel copy and design workflows without double-counting the campaign output", async () => {
+  const [enumMigration, engineMigration, launchCommand, contentCommand, campaignWorkspace, contentWorkspace, taskWorkspace, contract, types] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260819015223_social_post_workflow_template.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260819015240_social_post_workflow_engine.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/launch-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/content.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(enumMigration, /add value if not exists 'design'/);
+  assert.match(enumMigration, /add value if not exists 'scheduling'/);
+  assert.match(engineMigration, /create table public\.content_step_deliveries/);
+  assert.match(engineMigration, /alter table public\.content_step_deliveries enable row level security/);
+  assert.match(engineMigration, /grant select on table public\.content_step_deliveries to authenticated/);
+  assert.doesNotMatch(engineMigration, /grant (insert|update|delete) on table public\.content_step_deliveries to authenticated/i);
+  for (const rpc of ["create_social_post_deliverable", "submit_content_step_delivery", "update_social_post_brief"]) {
+    assert.match(engineMigration, new RegExp(`function public\\.${rpc}`));
+    assert.match(engineMigration, new RegExp(`grant execute on function public\\.${rpc}`));
+  }
+  assert.match(engineMigration, /\(caption_task_id, brief_task_id\)/);
+  assert.match(engineMigration, /\(design_task_id, brief_task_id\)/);
+  assert.match(engineMigration, /\(approval_task_id, caption_task_id\)/);
+  assert.match(engineMigration, /\(approval_task_id, design_task_id\)/);
+  assert.match(engineMigration, /\(parent_task_id, publishing_task_id\)/);
+  assert.match(engineMigration, /workflow_template/);
+  assert.match(engineMigration, /target_creation_request_id/);
+  assert.match(engineMigration, /tasks_require_content_step_delivery/);
+  assert.match(launchCommand, /create_social_post_deliverable/);
+  assert.match(launchCommand, /crypto|creation_request_id/);
+  assert.match(contentCommand, /submit_step_delivery/);
+  assert.match(contentCommand, /update_social_post_brief/);
+  assert.match(campaignWorkspace, /إنشاء البند ومصنع البوستات/);
+  assert.match(campaignWorkspace, /الكابشن والتصميم بالتوازي/);
+  assert.match(contentWorkspace, /كل مرحلة تسلّم نتيجتها داخل الكارت/);
+  assert.match(contentWorkspace, /Social Post Brief/);
+  assert.match(taskWorkspace, /\["caption", "design", "scheduling", "publishing"\]/);
+  assert.match(contract, /socialPostContentSteps/);
+  for (const field of ["content_step_deliveries", "copy_brief", "design_brief", "launch_deliverable_id", "workflow_template"]) {
+    assert.match(types, new RegExp(`${field}:`));
+  }
 });
 
 test("brand knowledge is versioned, owner-approved, and linked to content by an exact secured reference", async () => {
