@@ -94,12 +94,25 @@ async function sendPreviews(supabase: ReturnType<typeof adminClient>) {
           [{ text: "أجّل ساعة", callback_data: `pub:${callback}:delay_60` }, { text: "إلغاء", callback_data: `pub:${callback}:cancel` }]]
         : [[{ text: "انشر الآن", callback_data: `pub:${callback}:publish_now` }, { text: "أجّل ساعة", callback_data: `pub:${callback}:delay_60` }],
           [{ text: "إلغاء", callback_data: `pub:${callback}:cancel` }]];
-      const { result } = await telegram("sendMessage", {
-        chat_id: chatId,
-        text: previewText(row),
-        reply_markup: { inline_keyboard: buttons },
-        disable_web_page_preview: false,
-      });
+      const payload = (row.snapshot_payload ?? {}) as JsonRecord;
+      const mediaKind = String(payload.media_kind ?? "none");
+      const mediaSource = String(payload.media_source ?? "");
+      const hasMedia = (mediaKind === "photo" || mediaKind === "video") && Boolean(mediaSource);
+      const previewMethod = hasMedia ? (mediaKind === "photo" ? "sendPhoto" : "sendVideo") : "sendMessage";
+      const previewBody: JsonRecord = hasMedia
+        ? {
+          chat_id: chatId,
+          [mediaKind]: mediaSource,
+          caption: previewText(row).slice(0, 1024),
+          reply_markup: { inline_keyboard: buttons },
+        }
+        : {
+          chat_id: chatId,
+          text: previewText(row),
+          reply_markup: { inline_keyboard: buttons },
+          disable_web_page_preview: false,
+        };
+      const { result } = await telegram(previewMethod, previewBody);
       const ok = result?.ok === true;
       const telegramMessage = result?.result as JsonRecord | undefined;
       await supabase.rpc("complete_publishing_preview", {

@@ -1,10 +1,11 @@
 "use client";
 
 import type { Session } from "@supabase/supabase-js";
+import Image from "next/image";
 import {
   AlertTriangle, CalendarClock, CheckCircle2, CirclePause, ExternalLink,
-  LoaderCircle, LockKeyhole, MessageSquareText, OctagonX,
-  Plus, RefreshCw, Send, ShieldCheck, ToggleLeft, ToggleRight,
+  ImageIcon, Library, LoaderCircle, LockKeyhole, MessageSquareText, OctagonX,
+  Plus, RefreshCw, Send, ShieldCheck, ToggleLeft, ToggleRight, Video,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { previewPolicyConfig, publicationStatus } from "../../lib/publishing";
@@ -25,6 +26,7 @@ type Occurrence = Tables<"publishing_occurrences">;
 type PublicationLog = Tables<"publishing_publication_logs">;
 type Control = Tables<"publishing_controls">;
 type AdminConnection = Tables<"publishing_admin_connections">;
+type TelegramAsset = Tables<"publishing_telegram_assets">;
 type ContentItem = Tables<"content_items">;
 type Workspace = { organization: Organization; membership: Membership };
 type ScheduleType = "once" | "weekly";
@@ -53,6 +55,23 @@ function text(form: FormData, name: string) {
   return String(form.get(name) ?? "").trim();
 }
 
+function mediaKindLabel(kind: string) {
+  return kind === "photo" ? "صورة" : "فيديو";
+}
+
+function formatFileSize(value: number | null) {
+  if (!value) return null;
+  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.ceil(value / 1024)} KB`;
+}
+
+function MediaAssetVisual({ asset, previewUrl }: { asset: TelegramAsset; previewUrl?: string }) {
+  return <span className="publishing-asset-visual">
+    {previewUrl ? <Image src={previewUrl} alt={`معاينة ${asset.display_name}`} width={152} height={124} unoptimized /> : asset.media_kind === "photo" ? <ImageIcon size={23} /> : <Video size={23} />}
+    {asset.media_kind === "video" ? <span className="publishing-video-mark"><Video size={11} /></span> : null}
+  </span>;
+}
+
 export function PublishingWorkspace() {
   const configured = isSupabaseConfigured();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -62,6 +81,8 @@ export function PublishingWorkspace() {
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
   const [logs, setLogs] = useState<PublicationLog[]>([]);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [telegramAssets, setTelegramAssets] = useState<TelegramAsset[]>([]);
+  const [assetPreviewUrls, setAssetPreviewUrls] = useState<Record<string, string>>({});
   const [control, setControl] = useState<Control | null>(null);
   const [connection, setConnection] = useState<AdminConnection | null>(null);
   const [loading, setLoading] = useState(configured);
@@ -69,34 +90,46 @@ export function PublishingWorkspace() {
   const [showComposer, setShowComposer] = useState(false);
   const [scheduleType, setScheduleType] = useState<ScheduleType>("once");
   const [mediaKind, setMediaKind] = useState("none");
+  const [mediaSourceMode, setMediaSourceMode] = useState<"library" | "url">("library");
+  const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [manualMediaUrl, setManualMediaUrl] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد Supabase لهذه النسخة.");
 
   const clearData = useCallback(() => {
     setChannels([]); setPosts([]); setSchedules([]); setOccurrences([]);
-    setLogs([]); setContentItems([]); setControl(null); setConnection(null);
+    setLogs([]); setContentItems([]); setTelegramAssets([]); setAssetPreviewUrls({});
+    setControl(null); setConnection(null);
   }, []);
   const clearWorkspace = useCallback(() => { setWorkspace(null); clearData(); }, [clearData]);
   const clearTransientState = useCallback(() => { setNotice(null); setError(null); }, []);
 
   const refreshPublishing = useCallback(async (organizationId: string, userId: string) => {
     const supabase = getSupabaseBrowserClient();
-    const [channelResult, postResult, scheduleResult, occurrenceResult, logResult, contentResult, controlResult, connectionResult] = await Promise.all([
+    const [channelResult, postResult, scheduleResult, occurrenceResult, logResult, contentResult, assetResult, controlResult, connectionResult] = await Promise.all([
       supabase.from("publishing_channels").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
       supabase.from("publishing_posts").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
       supabase.from("publishing_schedules").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
       supabase.from("publishing_occurrences").select("*").eq("organization_id", organizationId).order("scheduled_at", { ascending: false }).limit(100),
       supabase.from("publishing_publication_logs").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(200),
       supabase.from("content_items").select("*").eq("organization_id", organizationId).neq("status", "cancelled").order("publish_at", { ascending: false }).limit(100),
+      supabase.from("publishing_telegram_assets").select("*").eq("organization_id", organizationId).is("archived_at", null).order("created_at", { ascending: false }).limit(100),
       supabase.from("publishing_controls").select("*").eq("organization_id", organizationId).maybeSingle(),
       supabase.from("publishing_admin_connections").select("*").eq("organization_id", organizationId).eq("user_id", userId).maybeSingle(),
     ]);
-    const firstError = [channelResult, postResult, scheduleResult, occurrenceResult, logResult, contentResult, controlResult, connectionResult]
+    const firstError = [channelResult, postResult, scheduleResult, occurrenceResult, logResult, contentResult, assetResult, controlResult, connectionResult]
       .find((result) => result.error)?.error;
     if (firstError) throw firstError;
     setChannels(channelResult.data ?? []); setPosts(postResult.data ?? []);
     setSchedules(scheduleResult.data ?? []); setOccurrences(occurrenceResult.data ?? []);
     setLogs(logResult.data ?? []); setContentItems(contentResult.data ?? []);
+    const nextAssets = assetResult.data ?? [];
+    setTelegramAssets(nextAssets);
+    const previewPaths = nextAssets.map((asset) => asset.preview_object_path).filter((path): path is string => Boolean(path));
+    if (previewPaths.length) {
+      const { data: signedPreviews } = await supabase.storage.from("publishing-media-previews").createSignedUrls(previewPaths, 3600);
+      setAssetPreviewUrls(Object.fromEntries((signedPreviews ?? []).flatMap((item) => item.signedUrl ? [[item.path, item.signedUrl]] : [])));
+    } else setAssetPreviewUrls({});
     setControl(controlResult.data ?? null); setConnection(connectionResult.data ?? null);
   }, []);
 
@@ -127,12 +160,21 @@ export function PublishingWorkspace() {
       .on("postgres_changes", { event: "*", schema: "public", table: "publishing_occurrences", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
       .on("postgres_changes", { event: "*", schema: "public", table: "publishing_publication_logs", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
       .on("postgres_changes", { event: "*", schema: "public", table: "publishing_channels", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "publishing_telegram_assets", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
       .subscribe();
     return () => { void supabase.removeChannel(realtime); };
   }, [refreshPublishing, session, workspace]);
 
   const postById = useMemo(() => new Map(posts.map((post) => [post.id, post])), [posts]);
   const scheduleById = useMemo(() => new Map(schedules.map((schedule) => [schedule.id, schedule])), [schedules]);
+  const selectedAsset = useMemo(
+    () => telegramAssets.find((asset) => asset.id === selectedAssetId && asset.media_kind === mediaKind) ?? null,
+    [mediaKind, selectedAssetId, telegramAssets],
+  );
+  const compatibleAssets = useMemo(
+    () => telegramAssets.filter((asset) => mediaKind === "none" || asset.media_kind === mediaKind),
+    [mediaKind, telegramAssets],
+  );
   const logsByOccurrence = useMemo(() => {
     const result = new Map<string, PublicationLog[]>();
     for (const log of logs) result.set(log.occurrence_id, [...(result.get(log.occurrence_id) ?? []), log]);
@@ -158,6 +200,11 @@ export function PublishingWorkspace() {
     const form = new FormData(formElement);
     const selectedChannels = form.getAll("channel_ids").map(String);
     const onceValue = text(form, "once_at");
+    const mediaSource = text(form, "media_source");
+    if (mediaKind !== "none" && !mediaSource) {
+      setError(mediaSourceMode === "library" ? "اختر ملفًا من مكتبة Telegram أولًا." : "أضف رابط HTTPS مباشرًا للملف.");
+      return;
+    }
     setWorking(true); setError(null); setNotice(null);
     const { error: rpcError } = await getSupabaseBrowserClient().rpc("create_telegram_publication", {
       target_organization_id: workspace.organization.id,
@@ -166,7 +213,7 @@ export function PublishingWorkspace() {
       post_text: text(form, "post_text"),
       post_link_url: text(form, "link_url"),
       post_media_kind: text(form, "media_kind"),
-      post_media_source: text(form, "media_source"),
+      post_media_source: mediaSource,
       post_disable_link_preview: form.get("disable_link_preview") === "on",
       target_schedule_type: scheduleType,
       target_once_at: scheduleType === "once" && onceValue ? new Date(onceValue).toISOString() : null,
@@ -185,6 +232,7 @@ export function PublishingWorkspace() {
     else {
       setNotice("تم حفظ المنشور والجدول والنسخة القادمة معًا. العامل سيتولى المعاينة والنشر.");
       formElement.reset(); setShowComposer(false); setScheduleType("once"); setMediaKind("none");
+      setMediaSourceMode("library"); setSelectedAssetId(""); setManualMediaUrl("");
       await refreshPublishing(workspace.organization.id, session.user.id);
     }
   }
@@ -244,6 +292,9 @@ export function PublishingWorkspace() {
   const upcoming = occurrences.filter((occurrence) => !["published", "cancelled", "skipped"].includes(occurrence.status));
   const publishedCount = occurrences.filter((occurrence) => occurrence.status === "published").length;
   const problemCount = occurrences.filter((occurrence) => ["failed", "unknown", "held_changed"].includes(occurrence.status)).length;
+  const activeMediaSource = mediaKind === "none" ? "" : mediaSourceMode === "library"
+    ? selectedAsset?.telegram_file_id ?? ""
+    : manualMediaUrl.trim();
 
   return <section className="publishing-workspace">
     <div className="workspace-toolbar">
@@ -264,8 +315,36 @@ export function PublishingWorkspace() {
       <section className="panel publishing-safety-panel"><div><ShieldCheck size={19} /><div><p className="overline">سياسة آمنة افتراضيًا</p><h3>المعاينة لا توقف العجلة</h3></div></div><ul><li><CheckCircle2 size={14} /> Claim فريد قبل أي اتصال بـTelegram.</li><li><CheckCircle2 size={14} /> تعديل المحتوى بعد المعاينة يوقف النشر.</li><li><CheckCircle2 size={14} /> Timeout بعد بدء الطلب يصبح «غير مؤكد» ولا يُعاد.</li><li><CheckCircle2 size={14} /> Kill switch يمنع أي اتصال جديد فورًا.</li></ul><div className="publishing-connection-state"><span className={connection?.connected_at ? "connected" : ""} />{connection?.connected_at ? `التنبيهات مربوطة منذ ${formatDate(connection.connected_at)}` : "المعاينات لن تصل لك قبل ربط البوت؛ الوضع الافتراضي سيظل ينشر في موعده."}</div></section>
     </div>
 
+    <section className="panel publishing-media-library">
+      <div className="section-heading">
+        <div><p className="overline">Telegram Inbox</p><h2>مكتبة وسائط النشر</h2><p>أرسل أو اعمل Forward لصورة أو فيديو إلى <b dir="ltr">@teamwhalesbot</b> من الحساب المربوط؛ سيظهر هنا تلقائيًا.</p></div>
+        <StatusBadge tone={telegramAssets.length ? "success" : "neutral"}>{telegramAssets.length ? `${telegramAssets.length} ملف` : "في انتظار أول ملف"}</StatusBadge>
+      </div>
+      {telegramAssets.length ? <div className="publishing-asset-strip">{telegramAssets.slice(0, 8).map((asset) => <article className="publishing-asset-card" key={asset.id}>
+        <MediaAssetVisual asset={asset} previewUrl={asset.preview_object_path ? assetPreviewUrls[asset.preview_object_path] : undefined} />
+        <span className="publishing-asset-copy"><strong>{asset.display_name}</strong><small>{mediaKindLabel(asset.media_kind)}{formatFileSize(asset.file_size) ? ` · ${formatFileSize(asset.file_size)}` : ""} · {formatDate(asset.created_at)}</small></span>
+      </article>)}</div> : <div className="publishing-media-empty"><Library size={22} /><div><strong>مش محتاج تجيب رابط أو file_id</strong><p>{connection?.connected_at ? "ابعت الملف للبوت الآن، ولما يرد إنه اتحفظ اضغط تحديث لو لم يظهر فورًا." : "اربط تنبيهات Telegram أولًا، ثم أرسل الملف للبوت من نفس الحساب."}</p></div></div>}
+    </section>
+
     {showComposer && manager ? <form className="panel publishing-composer" onSubmit={(event) => void createPublication(event)}><div className="section-heading"><div><p className="overline">منشور + جدول ذري</p><h2>جدولة نشر جديد</h2></div><button className="text-button" type="button" onClick={() => setShowComposer(false)}>إغلاق</button></div>
-      <div className="form-grid"><label><span>اسم داخلي للمنشور</span><input name="post_name" minLength={2} maxLength={180} required placeholder="مثال: إعلان ويبنار الأربعاء" /></label><label><span>ربط بمحتوى موجود — اختياري</span><select name="content_item_id"><option value="">بدون ربط</option>{contentItems.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label><label className="full-field"><span>نص المنشور</span><textarea name="post_text" maxLength={3800} rows={7} placeholder="اكتب النص النهائي كما سيظهر على القناة…" /></label><label><span>رابط CTA — اختياري</span><input name="link_url" type="url" dir="ltr" placeholder="https://…" /></label><label><span>نوع الوسائط</span><select name="media_kind" value={mediaKind} onChange={(event) => setMediaKind(event.target.value)}><option value="none">بدون صورة أو فيديو</option><option value="photo">صورة</option><option value="video">فيديو</option></select></label>{mediaKind !== "none" ? <label className="full-field"><span>رابط HTTPS أو Telegram file_id</span><input name="media_source" dir="ltr" required placeholder="https://… أو file_id" /><small>مع صورة أو فيديو يجب ألا يتجاوز النص والرابط 1024 حرفًا.</small></label> : <input name="media_source" type="hidden" value="" />}<label className="publishing-check"><input name="disable_link_preview" type="checkbox" /><span>إخفاء معاينة الروابط</span></label></div>
+      <div className="form-grid">
+        <label><span>اسم داخلي للمنشور</span><input name="post_name" minLength={2} maxLength={180} required placeholder="مثال: إعلان ويبنار الأربعاء" /></label>
+        <label><span>ربط بمحتوى موجود — اختياري</span><select name="content_item_id"><option value="">بدون ربط</option>{contentItems.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label>
+        <label className="full-field"><span>نص المنشور</span><textarea name="post_text" maxLength={3800} rows={7} placeholder="اكتب النص النهائي كما سيظهر على القناة…" /></label>
+        <label><span>رابط CTA — اختياري</span><input name="link_url" type="url" dir="ltr" placeholder="https://…" /></label>
+        <label><span>نوع الوسائط</span><select name="media_kind" value={mediaKind} onChange={(event) => { setMediaKind(event.target.value); setSelectedAssetId(""); setManualMediaUrl(""); }}><option value="none">بدون صورة أو فيديو</option><option value="photo">صورة</option><option value="video">فيديو</option></select></label>
+        <label className="publishing-check"><input name="disable_link_preview" type="checkbox" /><span>إخفاء معاينة الروابط</span></label>
+      </div>
+      <input name="media_source" type="hidden" value={activeMediaSource} />
+      {mediaKind !== "none" ? <section className="publishing-media-picker">
+        <div className="section-heading"><div><p className="overline">الوسائط</p><h3>اختيار {mediaKindLabel(mediaKind)}</h3></div><div className="segmented-control"><button type="button" className={mediaSourceMode === "library" ? "active" : ""} onClick={() => setMediaSourceMode("library")}>مكتبة Telegram</button><button type="button" className={mediaSourceMode === "url" ? "active" : ""} onClick={() => setMediaSourceMode("url")}>رابط مباشر</button></div></div>
+        {mediaSourceMode === "library" ? compatibleAssets.length ? <div className="publishing-asset-picker-grid">{compatibleAssets.map((asset) => <button type="button" className={selectedAssetId === asset.id ? "publishing-asset-card selected" : "publishing-asset-card"} onClick={() => setSelectedAssetId(asset.id)} key={asset.id}>
+          <MediaAssetVisual asset={asset} previewUrl={asset.preview_object_path ? assetPreviewUrls[asset.preview_object_path] : undefined} />
+          <span className="publishing-asset-copy"><strong>{asset.display_name}</strong><small>{formatFileSize(asset.file_size) ?? mediaKindLabel(asset.media_kind)} · {formatDate(asset.created_at)}</small></span>
+          <span className="publishing-asset-check">{selectedAssetId === asset.id ? "✓ تم الاختيار" : "اختيار"}</span>
+        </button>)}</div> : <div className="publishing-media-empty"><MessageSquareText size={22} /><div><strong>لا توجد ملفات من هذا النوع</strong><p>أرسل {mediaKindLabel(mediaKind)} إلى @teamwhalesbot ثم ارجع هنا. ستظهر تلقائيًا بدون أي رابط.</p></div></div> : <label className="publishing-direct-media"><span>رابط HTTPS مباشر للملف</span><input type="url" dir="ltr" value={manualMediaUrl} onChange={(event) => setManualMediaUrl(event.target.value)} placeholder={mediaKind === "photo" ? "https://example.com/image.jpg" : "https://example.com/video.mp4"} /><small>لا تستخدم رابط رسالة Telegram أو صفحة مشاهدة Google Drive.</small></label>}
+        <p className="publishing-caption-limit">مع الصورة أو الفيديو يجب ألا يتجاوز نص المنشور ورابط CTA معًا 1024 حرفًا.</p>
+      </section> : null}
       <fieldset className="publishing-channel-picker"><legend>القنوات</legend>{readyChannels.map((channel) => <label key={channel.id}><input aria-label={`اختيار قناة ${channel.title}`} type="checkbox" name="channel_ids" value={channel.id} defaultChecked /><span><strong>{channel.title}</strong><small dir="ltr">{channel.telegram_username ?? channel.telegram_chat_id}</small></span></label>)}</fieldset>
       <div className="publishing-policy-grid">{(Object.keys(previewPolicyConfig) as PreviewPolicy[]).map((policy) => <label key={policy}><input aria-label={previewPolicyConfig[policy].label} type="radio" name="preview_policy" value={policy} defaultChecked={policy === "review_window"} /><span><strong>{previewPolicyConfig[policy].label}</strong><small>{previewPolicyConfig[policy].description}</small></span></label>)}</div>
       <div className="publishing-schedule-block"><div className="segmented-control"><button type="button" className={scheduleType === "once" ? "active" : ""} onClick={() => setScheduleType("once")}>مرة واحدة</button><button type="button" className={scheduleType === "weekly" ? "active" : ""} onClick={() => setScheduleType("weekly")}>أسبوعي متكرر</button></div>{scheduleType === "once" ? <label><span>موعد النشر — القاهرة</span><input name="once_at" type="datetime-local" defaultValue={dateInputInOneHour()} required /></label> : <><fieldset className="weekday-picker"><legend>أيام الأسبوع</legend>{[[1,"الاثنين"],[2,"الثلاثاء"],[3,"الأربعاء"],[4,"الخميس"],[5,"الجمعة"],[6,"السبت"],[7,"الأحد"]].map(([value,label]) => <label key={value}><input type="checkbox" name="weekdays" value={value} defaultChecked={value === 1} /><span>{label}</span></label>)}</fieldset><div className="form-grid"><label><span>الوقت — القاهرة</span><input name="time_local" type="time" defaultValue="18:00" required /></label><label><span>تاريخ البداية</span><input name="starts_on" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label><label><span>تاريخ النهاية — اختياري</span><input name="ends_on" type="date" /></label><label><span>أقصى عدد مرات</span><input name="occurrence_limit" type="number" min="1" max="1000" defaultValue="12" required /></label></div></>}</div>

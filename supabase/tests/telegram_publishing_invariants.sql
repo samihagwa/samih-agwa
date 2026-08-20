@@ -23,6 +23,10 @@ declare
   fourth_occurrence uuid;
   occurrence_count integer;
   media_guarded boolean := false;
+  test_asset uuid;
+  media_post uuid;
+  linked_asset uuid;
+  unregistered_media_guarded boolean := false;
 begin
   select membership.organization_id, membership.user_id
   into test_org, test_user
@@ -145,6 +149,42 @@ begin
     media_guarded := true;
   end;
   if not media_guarded then raise exception 'Oversized media caption was accepted'; end if;
+
+  -- Telegram file IDs can only be scheduled after the connected bot has
+  -- captured them in this organization's media library.
+  insert into public.publishing_telegram_assets (
+    organization_id, received_by_user_id, telegram_chat_id, telegram_user_id,
+    telegram_message_id, telegram_file_id, telegram_file_unique_id,
+    media_kind, display_name
+  ) values (
+    test_org, test_user, 999999, 999999, 1,
+    'telegram-photo-file-id-12345678', 'telegram-photo-unique-1',
+    'photo', 'Invariant media asset'
+  ) returning id into test_asset;
+  insert into public.publishing_posts (
+    organization_id, name, post_text, media_kind, media_source, created_by
+  ) values (
+    test_org, 'Linked Telegram media', 'Saved through the bot', 'photo',
+    'telegram-photo-file-id-12345678', test_user
+  ) returning id into media_post;
+  select post.media_asset_id into linked_asset
+  from public.publishing_posts post where post.id = media_post;
+  if linked_asset is distinct from test_asset then
+    raise exception 'Telegram library file was not linked to the publication';
+  end if;
+  begin
+    insert into public.publishing_posts (
+      organization_id, name, post_text, media_kind, media_source, created_by
+    ) values (
+      test_org, 'Unregistered Telegram media', 'Must be rejected', 'photo',
+      'unknown-telegram-file-id-12345678', test_user
+    );
+  exception when raise_exception then
+    unregistered_media_guarded := true;
+  end;
+  if not unregistered_media_guarded then
+    raise exception 'Unregistered Telegram file ID was accepted';
+  end if;
 
   -- Moving the effective delivery time must not create a new copy of the
   -- original scheduled slot on the next materialization tick.

@@ -1711,6 +1711,7 @@ export type Database = {
           disable_link_preview: boolean
           id: string
           link_url: string | null
+          media_asset_id: string | null
           media_kind: string
           media_source: string | null
           name: string
@@ -1726,6 +1727,7 @@ export type Database = {
           disable_link_preview?: boolean
           id?: string
           link_url?: string | null
+          media_asset_id?: string | null
           media_kind?: string
           media_source?: string | null
           name: string
@@ -1741,6 +1743,7 @@ export type Database = {
           disable_link_preview?: boolean
           id?: string
           link_url?: string | null
+          media_asset_id?: string | null
           media_kind?: string
           media_source?: string | null
           name?: string
@@ -1763,6 +1766,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_posts_media_asset_org_fkey"
+            columns: ["organization_id", "media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "publishing_telegram_assets"
+            referencedColumns: ["organization_id", "id"]
           },
           {
             foreignKeyName: "publishing_posts_organization_id_fkey"
@@ -1992,6 +2002,96 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "publishing_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publishing_telegram_assets: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          display_name: string
+          duration_seconds: number | null
+          file_name: string | null
+          file_size: number | null
+          height: number | null
+          id: string
+          last_received_at: string
+          media_kind: string
+          mime_type: string | null
+          organization_id: string
+          original_caption: string | null
+          preview_object_path: string | null
+          received_by_user_id: string
+          telegram_chat_id: number
+          telegram_file_id: string
+          telegram_file_unique_id: string
+          telegram_message_id: number
+          telegram_user_id: number
+          updated_at: string
+          width: number | null
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          display_name: string
+          duration_seconds?: number | null
+          file_name?: string | null
+          file_size?: number | null
+          height?: number | null
+          id?: string
+          last_received_at?: string
+          media_kind: string
+          mime_type?: string | null
+          organization_id: string
+          original_caption?: string | null
+          preview_object_path?: string | null
+          received_by_user_id: string
+          telegram_chat_id: number
+          telegram_file_id: string
+          telegram_file_unique_id: string
+          telegram_message_id: number
+          telegram_user_id: number
+          updated_at?: string
+          width?: number | null
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          display_name?: string
+          duration_seconds?: number | null
+          file_name?: string | null
+          file_size?: number | null
+          height?: number | null
+          id?: string
+          last_received_at?: string
+          media_kind?: string
+          mime_type?: string | null
+          organization_id?: string
+          original_caption?: string | null
+          preview_object_path?: string | null
+          received_by_user_id?: string
+          telegram_chat_id?: number
+          telegram_file_id?: string
+          telegram_file_unique_id?: string
+          telegram_message_id?: number
+          telegram_user_id?: number
+          updated_at?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publishing_telegram_assets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publishing_telegram_assets_received_by_user_id_fkey"
+            columns: ["received_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
