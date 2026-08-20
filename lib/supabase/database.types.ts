@@ -2840,6 +2840,10 @@ export type Database = {
         }
         Returns: string
       }
+      delete_publishing_schedule: {
+        Args: { target_schedule_id: string }
+        Returns: boolean
+      }
       detach_content_from_launch: {
         Args: {
           target_content_item_id: string
@@ -2928,6 +2932,30 @@ export type Database = {
       record_member_presence: {
         Args: { target_organization_id: string; target_section: string }
         Returns: boolean
+      }
+      revise_telegram_publication: {
+        Args: {
+          post_disable_link_preview: boolean
+          post_link_url: string
+          post_media_kind: string
+          post_media_source: string
+          post_name: string
+          post_text: string
+          target_channel_ids: string[]
+          target_content_item_id: string
+          target_ends_on: string
+          target_missed_grace_minutes: number
+          target_occurrence_limit: number
+          target_once_at: string
+          target_preview_lead_minutes: number
+          target_preview_policy: string
+          target_schedule_id: string
+          target_schedule_type: string
+          target_starts_on: string
+          target_time_local: string
+          target_weekdays: number[]
+        }
+        Returns: string
       }
       remove_content_asset: {
         Args: { target_asset_id: string; target_user_id: string }

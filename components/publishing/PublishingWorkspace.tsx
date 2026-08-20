@@ -5,7 +5,8 @@ import Image from "next/image";
 import {
   AlertTriangle, CalendarClock, CheckCircle2, CirclePause, ExternalLink,
   ImageIcon, Library, LoaderCircle, LockKeyhole, MessageSquareText, OctagonX,
-  Plus, RefreshCw, Send, ShieldCheck, ToggleLeft, ToggleRight, Video,
+  Pencil, Plus, RefreshCw, Send, ShieldCheck, ToggleLeft, ToggleRight, Trash2,
+  Video, X,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewPolicyConfig, publicationStatus } from "../../lib/publishing";
@@ -21,6 +22,7 @@ type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
 type Channel = Tables<"publishing_channels">;
 type Schedule = Tables<"publishing_schedules">;
+type ScheduleChannel = Tables<"publishing_schedule_channels">;
 type Post = Tables<"publishing_posts">;
 type Occurrence = Tables<"publishing_occurrences">;
 type PublicationLog = Tables<"publishing_publication_logs">;
@@ -31,6 +33,11 @@ type ContentItem = Tables<"content_items">;
 type Workspace = { organization: Organization; membership: Membership };
 type ScheduleType = "once" | "weekly";
 type PreviewPolicy = keyof typeof previewPolicyConfig;
+type QueueView = "upcoming" | "history";
+
+const terminalOccurrenceStatuses = new Set([
+  "published", "skipped", "held_changed", "failed", "unknown", "cancelled",
+]);
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -49,6 +56,22 @@ function dateInputInOneHour() {
   value.setMinutes(Math.ceil(value.getMinutes() / 5) * 5, 0, 0);
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
+function cairoDateInput() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+}
+
+function cairoDateTimeInput(value: string | null) {
+  if (!value) return dateInputInOneHour();
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 }
 
 function text(form: FormData, name: string) {
@@ -78,6 +101,7 @@ export function PublishingWorkspace() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [scheduleChannels, setScheduleChannels] = useState<ScheduleChannel[]>([]);
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
   const [logs, setLogs] = useState<PublicationLog[]>([]);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
@@ -88,6 +112,9 @@ export function PublishingWorkspace() {
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ schedule: Schedule; post: Post } | null>(null);
+  const [queueView, setQueueView] = useState<QueueView>("upcoming");
   const [scheduleType, setScheduleType] = useState<ScheduleType>("once");
   const [mediaKind, setMediaKind] = useState("none");
   const [mediaSourceMode, setMediaSourceMode] = useState<"library" | "url">("library");
@@ -98,7 +125,7 @@ export function PublishingWorkspace() {
   const composerRef = useRef<HTMLFormElement>(null);
 
   const clearData = useCallback(() => {
-    setChannels([]); setPosts([]); setSchedules([]); setOccurrences([]);
+    setChannels([]); setPosts([]); setSchedules([]); setScheduleChannels([]); setOccurrences([]);
     setLogs([]); setContentItems([]); setTelegramAssets([]); setAssetPreviewUrls({});
     setControl(null); setConnection(null);
   }, []);
@@ -107,10 +134,11 @@ export function PublishingWorkspace() {
 
   const refreshPublishing = useCallback(async (organizationId: string, userId: string) => {
     const supabase = getSupabaseBrowserClient();
-    const [channelResult, postResult, scheduleResult, occurrenceResult, logResult, contentResult, assetResult, controlResult, connectionResult] = await Promise.all([
+    const [channelResult, postResult, scheduleResult, scheduleChannelResult, occurrenceResult, logResult, contentResult, assetResult, controlResult, connectionResult] = await Promise.all([
       supabase.from("publishing_channels").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
       supabase.from("publishing_posts").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
       supabase.from("publishing_schedules").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }),
+      supabase.from("publishing_schedule_channels").select("*").eq("organization_id", organizationId),
       supabase.from("publishing_occurrences").select("*").eq("organization_id", organizationId).order("scheduled_at", { ascending: false }).limit(100),
       supabase.from("publishing_publication_logs").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(200),
       supabase.from("content_items").select("*").eq("organization_id", organizationId).neq("status", "cancelled").order("publish_at", { ascending: false }).limit(100),
@@ -118,11 +146,12 @@ export function PublishingWorkspace() {
       supabase.from("publishing_controls").select("*").eq("organization_id", organizationId).maybeSingle(),
       supabase.from("publishing_admin_connections").select("*").eq("organization_id", organizationId).eq("user_id", userId).maybeSingle(),
     ]);
-    const firstError = [channelResult, postResult, scheduleResult, occurrenceResult, logResult, contentResult, assetResult, controlResult, connectionResult]
+    const firstError = [channelResult, postResult, scheduleResult, scheduleChannelResult, occurrenceResult, logResult, contentResult, assetResult, controlResult, connectionResult]
       .find((result) => result.error)?.error;
     if (firstError) throw firstError;
     setChannels(channelResult.data ?? []); setPosts(postResult.data ?? []);
-    setSchedules(scheduleResult.data ?? []); setOccurrences(occurrenceResult.data ?? []);
+    setSchedules(scheduleResult.data ?? []); setScheduleChannels(scheduleChannelResult.data ?? []);
+    setOccurrences(occurrenceResult.data ?? []);
     setLogs(logResult.data ?? []); setContentItems(contentResult.data ?? []);
     const nextAssets = assetResult.data ?? [];
     setTelegramAssets(nextAssets);
@@ -161,6 +190,9 @@ export function PublishingWorkspace() {
       .on("postgres_changes", { event: "*", schema: "public", table: "publishing_occurrences", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
       .on("postgres_changes", { event: "*", schema: "public", table: "publishing_publication_logs", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
       .on("postgres_changes", { event: "*", schema: "public", table: "publishing_channels", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "publishing_posts", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "publishing_schedules", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "publishing_schedule_channels", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
       .on("postgres_changes", { event: "*", schema: "public", table: "publishing_telegram_assets", filter: `organization_id=eq.${workspace.organization.id}` }, reload)
       .subscribe();
     return () => { void supabase.removeChannel(realtime); };
@@ -175,8 +207,25 @@ export function PublishingWorkspace() {
     return () => window.cancelAnimationFrame(frame);
   }, [showComposer]);
 
+  useEffect(() => {
+    if (!pendingDelete) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !working) setPendingDelete(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [pendingDelete, working]);
+
   const postById = useMemo(() => new Map(posts.map((post) => [post.id, post])), [posts]);
   const scheduleById = useMemo(() => new Map(schedules.map((schedule) => [schedule.id, schedule])), [schedules]);
+  const channelIdsBySchedule = useMemo(() => {
+    const result = new Map<string, Set<string>>();
+    for (const link of scheduleChannels) {
+      const ids = result.get(link.schedule_id) ?? new Set<string>();
+      ids.add(link.channel_id); result.set(link.schedule_id, ids);
+    }
+    return result;
+  }, [scheduleChannels]);
   const selectedAsset = useMemo(
     () => telegramAssets.find((asset) => asset.id === selectedAssetId && asset.media_kind === mediaKind) ?? null,
     [mediaKind, selectedAssetId, telegramAssets],
@@ -204,7 +253,7 @@ export function PublishingWorkspace() {
     else { setNotice(String(data.message)); await refreshPublishing(workspace.organization.id, session.user.id); }
   }
 
-  async function createPublication(event: FormEvent<HTMLFormElement>) {
+  async function savePublication(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!workspace || !session) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -215,9 +264,7 @@ export function PublishingWorkspace() {
       setError(mediaSourceMode === "library" ? "اختر ملفًا من مكتبة Telegram أولًا." : "أضف رابط HTTPS مباشرًا للملف.");
       return;
     }
-    setWorking(true); setError(null); setNotice(null);
-    const { error: rpcError } = await getSupabaseBrowserClient().rpc("create_telegram_publication", {
-      target_organization_id: workspace.organization.id,
+    const publicationArgs = {
       target_content_item_id: text(form, "content_item_id") || null,
       post_name: text(form, "post_name"),
       post_text: text(form, "post_text"),
@@ -236,13 +283,23 @@ export function PublishingWorkspace() {
       target_preview_lead_minutes: Number(form.get("preview_lead_minutes") || 60),
       target_missed_grace_minutes: Number(form.get("missed_grace_minutes") || 10),
       target_channel_ids: selectedChannels,
-    } as never);
+    };
+    setWorking(true); setError(null); setNotice(null);
+    const { error: rpcError } = editingSchedule
+      ? await getSupabaseBrowserClient().rpc("revise_telegram_publication", {
+          ...publicationArgs, target_schedule_id: editingSchedule.id,
+        } as never)
+      : await getSupabaseBrowserClient().rpc("create_telegram_publication", {
+          ...publicationArgs, target_organization_id: workspace.organization.id,
+        } as never);
     setWorking(false);
     if (rpcError) setError(rpcError.message);
     else {
-      setNotice("تم حفظ المنشور والجدول والنسخة القادمة معًا. العامل سيتولى المعاينة والنشر.");
+      setNotice(editingSchedule
+        ? "تم حفظ التعديلات وإلغاء النسخة القديمة بأمان. النسخ القادمة ستستخدم البيانات الجديدة."
+        : "تم حفظ المنشور والجدول والنسخة القادمة معًا. العامل سيتولى المعاينة والنشر.");
       formElement.reset(); setShowComposer(false); setScheduleType("once"); setMediaKind("none");
-      setMediaSourceMode("library"); setSelectedAssetId(""); setManualMediaUrl("");
+      setEditingSchedule(null); setMediaSourceMode("library"); setSelectedAssetId(""); setManualMediaUrl("");
       await refreshPublishing(workspace.organization.id, session.user.id);
     }
   }
@@ -293,9 +350,44 @@ export function PublishingWorkspace() {
     setNotice("فُتح البوت. اضغط Start خلال 15 دقيقة ليتم ربط المعاينات بحسابك.");
   }
 
+  function resetComposerState() {
+    setEditingSchedule(null); setScheduleType("once"); setMediaKind("none");
+    setMediaSourceMode("library"); setSelectedAssetId(""); setManualMediaUrl("");
+  }
+
+  function startEditing(schedule: Schedule) {
+    const post = postById.get(schedule.post_id);
+    if (!post || schedule.deleted_at) return;
+    const linkedAsset = telegramAssets.find((asset) => asset.telegram_file_id === post.media_source);
+    setError(null); setNotice(null); setEditingSchedule(schedule);
+    setScheduleType(schedule.schedule_type as ScheduleType); setMediaKind(post.media_kind);
+    if (linkedAsset) {
+      setMediaSourceMode("library"); setSelectedAssetId(linkedAsset.id); setManualMediaUrl("");
+    } else {
+      setMediaSourceMode("url"); setSelectedAssetId(""); setManualMediaUrl(post.media_source ?? "");
+    }
+    setShowComposer(true);
+  }
+
+  async function deleteSchedule() {
+    if (!pendingDelete || !workspace || !session) return;
+    setWorking(true); setError(null); setNotice(null);
+    const { data, error: rpcError } = await getSupabaseBrowserClient().rpc("delete_publishing_schedule", {
+      target_schedule_id: pendingDelete.schedule.id,
+    });
+    setWorking(false);
+    if (rpcError) { setPendingDelete(null); setError(rpcError.message); return; }
+    if (!data) { setPendingDelete(null); setError("لم يتم العثور على الجدول المطلوب حذفه."); return; }
+    setPendingDelete(null); setNotice("تم حذف الجدول من القائمة وإلغاء كل النسخ القادمة. سجل النشر السابق محفوظ.");
+    if (editingSchedule?.id === pendingDelete.schedule.id) { setShowComposer(false); resetComposerState(); }
+    setQueueView("upcoming");
+    await refreshPublishing(workspace.organization.id, session.user.id);
+  }
+
   function toggleComposer() {
     setError(null); setNotice(null);
-    setShowComposer((value) => !value);
+    if (showComposer) { setShowComposer(false); resetComposerState(); }
+    else { resetComposerState(); setShowComposer(true); }
   }
 
   if (loading) return <section className="workspace-state"><LoaderCircle className="spin" size={24} /><div><h2>جارٍ تحميل مركز النشر</h2><p>نقرأ القنوات والجداول وسجل النشر الآمن.</p></div></section>;
@@ -304,12 +396,16 @@ export function PublishingWorkspace() {
 
   const manager = canManageTasks(workspace.membership.role);
   const readyChannels = channels.filter((channel) => channel.verification_status === "ready" && channel.allowlisted && channel.bot_can_post);
-  const upcoming = occurrences.filter((occurrence) => !["published", "cancelled", "skipped"].includes(occurrence.status));
+  const upcoming = occurrences.filter((occurrence) => !terminalOccurrenceStatuses.has(occurrence.status));
+  const history = occurrences.filter((occurrence) => terminalOccurrenceStatuses.has(occurrence.status));
+  const visibleOccurrences = queueView === "upcoming" ? upcoming : history;
   const publishedCount = occurrences.filter((occurrence) => occurrence.status === "published").length;
   const problemCount = occurrences.filter((occurrence) => ["failed", "unknown", "held_changed"].includes(occurrence.status)).length;
   const activeMediaSource = mediaKind === "none" ? "" : mediaSourceMode === "library"
     ? selectedAsset?.telegram_file_id ?? ""
     : manualMediaUrl.trim();
+  const editingPost = editingSchedule ? postById.get(editingSchedule.post_id) ?? null : null;
+  const editingChannelIds = editingSchedule ? channelIdsBySchedule.get(editingSchedule.id) ?? new Set<string>() : new Set<string>();
 
   return <section className="publishing-workspace">
     <div className="workspace-toolbar">
@@ -341,15 +437,16 @@ export function PublishingWorkspace() {
       </article>)}</div> : <div className="publishing-media-empty"><Library size={22} /><div><strong>مش محتاج تجيب رابط أو file_id</strong><p>{connection?.connected_at ? "ابعت الملف للبوت الآن، ولما يرد إنه اتحفظ اضغط تحديث لو لم يظهر فورًا." : "اربط تنبيهات Telegram أولًا، ثم أرسل الملف للبوت من نفس الحساب."}</p></div></div>}
     </section>
 
-    {showComposer && manager ? <form ref={composerRef} id="publishing-composer" className="panel publishing-composer" onSubmit={(event) => void createPublication(event)}><div className="section-heading"><div><p className="overline">منشور + جدول ذري</p><h2>جدولة نشر جديد</h2></div><button className="text-button" type="button" onClick={() => setShowComposer(false)}>إغلاق</button></div>
+    {showComposer && manager ? <form key={editingSchedule?.id ?? "new-publication"} ref={composerRef} id="publishing-composer" className="panel publishing-composer" onSubmit={(event) => void savePublication(event)}><div className="section-heading"><div><p className="overline">{editingSchedule ? "تعديل آمن" : "منشور + جدول ذري"}</p><h2>{editingSchedule ? `تعديل: ${editingPost?.name ?? "المنشور"}` : "جدولة نشر جديد"}</h2></div><button className="text-button" type="button" onClick={() => { setShowComposer(false); resetComposerState(); }}>إغلاق</button></div>
+      {editingSchedule ? <p className="publishing-edit-note"><ShieldCheck size={14} /> الحفظ سينشئ نسخة جديدة ويلغي النسخ القادمة القديمة؛ لن تتغير المنشورات التي نُشرت بالفعل.</p> : null}
       {!readyChannels.length ? <p className="form-notice error" role="alert">افتحنا النموذج، لكن الحفظ سيظل متوقفًا لحين وجود قناة Telegram جاهزة للنشر.</p> : null}
       <div className="form-grid">
-        <label><span>اسم داخلي للمنشور</span><input name="post_name" minLength={2} maxLength={180} required placeholder="مثال: إعلان ويبنار الأربعاء" /></label>
-        <label><span>ربط بمحتوى موجود — اختياري</span><select name="content_item_id"><option value="">بدون ربط</option>{contentItems.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label>
-        <label className="full-field"><span>نص المنشور</span><textarea name="post_text" maxLength={3800} rows={7} placeholder="اكتب النص النهائي كما سيظهر على القناة…" /></label>
-        <label><span>رابط CTA — اختياري</span><input name="link_url" type="url" dir="ltr" placeholder="https://…" /></label>
+        <label><span>اسم داخلي للمنشور</span><input name="post_name" minLength={2} maxLength={180} required defaultValue={editingPost?.name ?? ""} placeholder="مثال: إعلان ويبنار الأربعاء" /></label>
+        <label><span>ربط بمحتوى موجود — اختياري</span><select name="content_item_id" defaultValue={editingPost?.content_item_id ?? ""}><option value="">بدون ربط</option>{contentItems.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label>
+        <label className="full-field"><span>نص المنشور</span><textarea name="post_text" maxLength={3800} rows={7} defaultValue={editingPost?.post_text ?? ""} placeholder="اكتب النص النهائي كما سيظهر على القناة…" /></label>
+        <label><span>رابط CTA — اختياري</span><input name="link_url" type="url" dir="ltr" defaultValue={editingPost?.link_url ?? ""} placeholder="https://…" /></label>
         <label><span>نوع الوسائط</span><select name="media_kind" value={mediaKind} onChange={(event) => { setMediaKind(event.target.value); setSelectedAssetId(""); setManualMediaUrl(""); }}><option value="none">بدون صورة أو فيديو</option><option value="photo">صورة</option><option value="video">فيديو</option></select></label>
-        <label className="publishing-check"><input name="disable_link_preview" type="checkbox" /><span>إخفاء معاينة الروابط</span></label>
+        <label className="publishing-check"><input name="disable_link_preview" type="checkbox" defaultChecked={editingPost?.disable_link_preview ?? false} /><span>إخفاء معاينة الروابط</span></label>
       </div>
       <input name="media_source" type="hidden" value={activeMediaSource} />
       {mediaKind !== "none" ? <section className="publishing-media-picker">
@@ -361,13 +458,25 @@ export function PublishingWorkspace() {
         </button>)}</div> : <div className="publishing-media-empty"><MessageSquareText size={22} /><div><strong>لا توجد ملفات من هذا النوع</strong><p>أرسل {mediaKindLabel(mediaKind)} إلى @teamwhalesbot ثم ارجع هنا. ستظهر تلقائيًا بدون أي رابط.</p></div></div> : <label className="publishing-direct-media"><span>رابط HTTPS مباشر للملف</span><input type="url" dir="ltr" value={manualMediaUrl} onChange={(event) => setManualMediaUrl(event.target.value)} placeholder={mediaKind === "photo" ? "https://example.com/image.jpg" : "https://example.com/video.mp4"} /><small>لا تستخدم رابط رسالة Telegram أو صفحة مشاهدة Google Drive.</small></label>}
         <p className="publishing-caption-limit">مع الصورة أو الفيديو يجب ألا يتجاوز نص المنشور ورابط CTA معًا 1024 حرفًا.</p>
       </section> : null}
-      <fieldset className="publishing-channel-picker"><legend>القنوات</legend>{readyChannels.map((channel) => <label key={channel.id}><input aria-label={`اختيار قناة ${channel.title}`} type="checkbox" name="channel_ids" value={channel.id} defaultChecked /><span><strong>{channel.title}</strong><small dir="ltr">{channel.telegram_username ?? channel.telegram_chat_id}</small></span></label>)}</fieldset>
-      <div className="publishing-policy-grid">{(Object.keys(previewPolicyConfig) as PreviewPolicy[]).map((policy) => <label key={policy}><input aria-label={previewPolicyConfig[policy].label} type="radio" name="preview_policy" value={policy} defaultChecked={policy === "review_window"} /><span><strong>{previewPolicyConfig[policy].label}</strong><small>{previewPolicyConfig[policy].description}</small></span></label>)}</div>
-      <div className="publishing-schedule-block"><div className="segmented-control"><button type="button" className={scheduleType === "once" ? "active" : ""} onClick={() => setScheduleType("once")}>مرة واحدة</button><button type="button" className={scheduleType === "weekly" ? "active" : ""} onClick={() => setScheduleType("weekly")}>أسبوعي متكرر</button></div>{scheduleType === "once" ? <label><span>موعد النشر — القاهرة</span><input name="once_at" type="datetime-local" defaultValue={dateInputInOneHour()} required /></label> : <><fieldset className="weekday-picker"><legend>أيام الأسبوع</legend>{[[1,"الاثنين"],[2,"الثلاثاء"],[3,"الأربعاء"],[4,"الخميس"],[5,"الجمعة"],[6,"السبت"],[7,"الأحد"]].map(([value,label]) => <label key={value}><input type="checkbox" name="weekdays" value={value} defaultChecked={value === 1} /><span>{label}</span></label>)}</fieldset><div className="form-grid"><label><span>الوقت — القاهرة</span><input name="time_local" type="time" defaultValue="18:00" required /></label><label><span>تاريخ البداية</span><input name="starts_on" type="date" defaultValue={new Date().toISOString().slice(0,10)} required /></label><label><span>تاريخ النهاية — اختياري</span><input name="ends_on" type="date" /></label><label><span>أقصى عدد مرات</span><input name="occurrence_limit" type="number" min="1" max="1000" defaultValue="12" required /></label></div></>}</div>
-      <div className="publishing-advanced"><label><span>المعاينة قبل الموعد (دقيقة)</span><input name="preview_lead_minutes" type="number" min="5" max="10080" defaultValue="60" /></label><label><span>مهلة تجاوز الموعد (دقيقة)</span><input name="missed_grace_minutes" type="number" min="1" max="1440" defaultValue="10" /></label></div>
-      <div className="form-actions"><Button type="submit" disabled={working || !readyChannels.length}>{working ? <LoaderCircle className="spin" size={15} /> : <CalendarClock size={15} />} حفظ وجدولة</Button><small>إما يُحفظ المنشور والجدول والقنوات معًا، أو لا يُحفظ شيء.</small></div>
+      <fieldset className="publishing-channel-picker"><legend>القنوات</legend>{readyChannels.map((channel) => <label key={channel.id}><input aria-label={`اختيار قناة ${channel.title}`} type="checkbox" name="channel_ids" value={channel.id} defaultChecked={editingSchedule ? editingChannelIds.has(channel.id) : true} /><span><strong>{channel.title}</strong><small dir="ltr">{channel.telegram_username ?? channel.telegram_chat_id}</small></span></label>)}</fieldset>
+      <div className="publishing-policy-grid">{(Object.keys(previewPolicyConfig) as PreviewPolicy[]).map((policy) => <label key={policy}><input aria-label={previewPolicyConfig[policy].label} type="radio" name="preview_policy" value={policy} defaultChecked={editingSchedule ? editingSchedule.preview_policy === policy : policy === "review_window"} /><span><strong>{previewPolicyConfig[policy].label}</strong><small>{previewPolicyConfig[policy].description}</small></span></label>)}</div>
+      <div className="publishing-schedule-block"><div className="segmented-control"><button type="button" className={scheduleType === "once" ? "active" : ""} onClick={() => setScheduleType("once")}>مرة واحدة</button><button type="button" className={scheduleType === "weekly" ? "active" : ""} onClick={() => setScheduleType("weekly")}>أسبوعي متكرر</button></div>{scheduleType === "once" ? <label><span>موعد النشر — القاهرة</span><input name="once_at" type="datetime-local" defaultValue={cairoDateTimeInput(editingSchedule?.once_at ?? null)} required /></label> : <><fieldset className="weekday-picker"><legend>أيام الأسبوع</legend>{[[1,"الاثنين"],[2,"الثلاثاء"],[3,"الأربعاء"],[4,"الخميس"],[5,"الجمعة"],[6,"السبت"],[7,"الأحد"]].map(([value,label]) => <label key={value}><input type="checkbox" name="weekdays" value={value} defaultChecked={editingSchedule ? editingSchedule.weekdays?.includes(Number(value)) : value === 1} /><span>{label}</span></label>)}</fieldset><div className="form-grid"><label><span>الوقت — القاهرة</span><input name="time_local" type="time" defaultValue={editingSchedule?.time_local?.slice(0, 5) ?? "18:00"} required /></label><label><span>تاريخ البداية</span><input name="starts_on" type="date" defaultValue={editingSchedule?.starts_on ?? cairoDateInput()} required /></label><label><span>تاريخ النهاية — اختياري</span><input name="ends_on" type="date" defaultValue={editingSchedule?.ends_on ?? ""} /></label><label><span>أقصى عدد مرات</span><input name="occurrence_limit" type="number" min="1" max="1000" defaultValue={editingSchedule?.occurrence_limit ?? 12} required /></label></div></>}</div>
+      <div className="publishing-advanced"><label><span>المعاينة قبل الموعد (دقيقة)</span><input name="preview_lead_minutes" type="number" min="5" max="10080" defaultValue={editingSchedule?.preview_lead_minutes ?? 60} /></label><label><span>مهلة تجاوز الموعد (دقيقة)</span><input name="missed_grace_minutes" type="number" min="1" max="1440" defaultValue={editingSchedule?.missed_grace_minutes ?? 10} /></label></div>
+      <div className="form-actions"><Button type="submit" disabled={working || !readyChannels.length}>{working ? <LoaderCircle className="spin" size={15} /> : editingSchedule ? <Pencil size={15} /> : <CalendarClock size={15} />} {editingSchedule ? "حفظ التعديلات" : "حفظ وجدولة"}</Button><small>إما تُحفظ كل التغييرات والقنوات معًا، أو لا يتغير شيء.</small></div>
     </form> : null}
 
-    <section className="publishing-queue"><div className="section-heading"><div><p className="overline">Queue</p><h2>قائمة النشر</h2></div><span>{occurrences.length} نسخة</span></div>{occurrences.length ? <div className="publishing-occurrence-list">{occurrences.map((occurrence) => { const post = postById.get(occurrence.post_id); const schedule = scheduleById.get(occurrence.schedule_id); const status = publicationStatus(occurrence.status); const occurrenceLogs = logsByOccurrence.get(occurrence.id) ?? []; return <article className="panel publishing-occurrence" id={`occurrence-${occurrence.id}`} key={occurrence.id}><header><div><p className="overline">{schedule?.schedule_type === "weekly" ? "متكرر أسبوعيًا" : "مرة واحدة"}</p><h3>{post?.name ?? "منشور"}</h3><small>{formatDate(occurrence.scheduled_at)}</small></div><StatusBadge tone={status.tone}>{status.label}</StatusBadge></header>{post?.post_text ? <p className="publishing-post-excerpt">{post.post_text}</p> : null}{occurrence.error ? <p className="publishing-error"><AlertTriangle size={13} /> {occurrence.error}</p> : null}{occurrence.hold_reason ? <small className="publishing-hold">سبب التوقف: {occurrence.hold_reason}</small> : null}{occurrenceLogs.length ? <div className="publishing-results">{occurrenceLogs.map((log) => <div key={log.id}><span>{publicationStatus(log.status).label}</span>{log.message_url ? <a href={log.message_url} target="_blank" rel="noreferrer">فتح المنشور <ExternalLink size={11} /></a> : null}{log.error ? <small>{log.error}</small> : null}</div>)}</div> : null}<footer>{schedule ? <button className="text-button" type="button" disabled={!manager || working} onClick={() => void toggleSchedule(schedule)}>{schedule.paused ? <ToggleRight size={14} /> : <CirclePause size={14} />} {schedule.paused ? "تشغيل الجدول" : "إيقاف الجدول"}</button> : null}{manager && ["pending","previewing","previewed","awaiting_approval","approved","ready","held"].includes(occurrence.status) ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void cancelOccurrence(occurrence.id)}><OctagonX size={13} /> إلغاء هذه النسخة</button> : null}</footer></article>; })}</div> : <section className="panel publishing-empty-state"><Send size={22} /><div><h3>لا توجد منشورات مجدولة بعد</h3><p>تحقق من قناة Telegram ثم أنشئ أول جدول حقيقي أو اختبار واضح.</p></div></section>}</section>
+    <section className="publishing-queue">
+      <div className="section-heading publishing-queue-heading"><div><p className="overline">Queue</p><h2>قائمة النشر</h2></div><div className="segmented-control" aria-label="عرض قائمة النشر"><button type="button" className={queueView === "upcoming" ? "active" : ""} onClick={() => setQueueView("upcoming")}>القادمة ({upcoming.length})</button><button type="button" className={queueView === "history" ? "active" : ""} onClick={() => setQueueView("history")}>السجل ({history.length})</button></div></div>
+      {visibleOccurrences.length ? <div className="publishing-occurrence-list">{visibleOccurrences.map((occurrence) => {
+        const post = postById.get(occurrence.post_id);
+        const schedule = scheduleById.get(occurrence.schedule_id);
+        const status = publicationStatus(occurrence.status);
+        const occurrenceLogs = logsByOccurrence.get(occurrence.id) ?? [];
+        const canChangeSchedule = Boolean(manager && schedule && post && !schedule.deleted_at && !["publishing", "unknown"].includes(occurrence.status));
+        return <article className="panel publishing-occurrence" id={`occurrence-${occurrence.id}`} key={occurrence.id}><header><div><p className="overline">{schedule?.schedule_type === "weekly" ? "متكرر أسبوعيًا" : "مرة واحدة"}</p><h3>{post?.name ?? "منشور"}</h3><small>{formatDate(occurrence.scheduled_at)}</small></div><StatusBadge tone={status.tone}>{status.label}</StatusBadge></header>{post?.post_text ? <p className="publishing-post-excerpt">{post.post_text}</p> : null}{occurrence.error ? <p className="publishing-error"><AlertTriangle size={13} /> {occurrence.error}</p> : null}{occurrence.hold_reason ? <small className="publishing-hold">سبب التوقف: {occurrence.hold_reason}</small> : null}{occurrenceLogs.length ? <div className="publishing-results">{occurrenceLogs.map((log) => <div key={log.id}><span>{publicationStatus(log.status).label}</span>{log.message_url ? <a href={log.message_url} target="_blank" rel="noreferrer">فتح المنشور <ExternalLink size={11} /></a> : null}{log.error ? <small>{log.error}</small> : null}</div>)}</div> : null}{queueView === "upcoming" ? <footer>{schedule && !schedule.deleted_at ? <button className="text-button" type="button" disabled={!manager || working} onClick={() => void toggleSchedule(schedule)}>{schedule.paused ? <ToggleRight size={14} /> : <CirclePause size={14} />} {schedule.paused ? "تشغيل الجدول" : "إيقاف الجدول"}</button> : null}{canChangeSchedule && schedule ? <button className="text-button" type="button" disabled={working} onClick={() => startEditing(schedule)}><Pencil size={13} /> تعديل المنشور والجدول</button> : null}{canChangeSchedule && schedule && post ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => setPendingDelete({ schedule, post })}><Trash2 size={13} /> حذف الجدول</button> : null}{manager && ["pending","previewing","previewed","awaiting_approval","approved","ready","held"].includes(occurrence.status) ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void cancelOccurrence(occurrence.id)}><OctagonX size={13} /> إلغاء هذه النسخة فقط</button> : null}</footer> : null}</article>;
+      })}</div> : <section className="panel publishing-empty-state"><Send size={22} /><div><h3>{queueView === "upcoming" ? "لا توجد منشورات قادمة" : "لا يوجد سجل نشر بعد"}</h3><p>{queueView === "upcoming" ? "أنشئ جدولًا جديدًا، أو افتح السجل لمراجعة المنشورات السابقة والملغاة." : "ستظهر هنا المنشورات المكتملة والملغاة وحالات الفشل."}</p></div></section>}
+    </section>
+
+    {pendingDelete ? <div className="publishing-dialog-backdrop"><section className="publishing-dialog" role="dialog" aria-modal="true" aria-labelledby="publishing-delete-title"><header><div><p className="overline">تأكيد مطلوب</p><h2 id="publishing-delete-title">حذف «{pendingDelete.post.name}»؟</h2></div><button className="icon-button" type="button" aria-label="إغلاق نافذة الحذف" disabled={working} onClick={() => setPendingDelete(null)}><X size={17} /></button></header><div className="publishing-dialog-warning"><AlertTriangle size={19} /><p>سيُلغى هذا الجدول وكل نسخه القادمة ولن يُرسل النظام أي نسخة جديدة منه. المنشورات التي نُشرت بالفعل وسجل التدقيق سيظلان محفوظين.</p></div><footer><Button type="button" variant="secondary" disabled={working} onClick={() => setPendingDelete(null)}>رجوع</Button><Button type="button" className="publishing-delete-confirm" disabled={working} onClick={() => void deleteSchedule()}>{working ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />} نعم، احذف الجدول</Button></footer></section></div> : null}
   </section>;
 }

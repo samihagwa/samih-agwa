@@ -276,12 +276,13 @@ test("social post deliverables expand into parallel copy and design workflows wi
   }
 });
 
-test("Telegram auto-publishing is durable, allowlisted, fenced, and visible in one control room", async () => {
-  const [schema, workerMigration, occurrenceKeyMigration, mediaLibraryMigration, invariantTest, worker, webhook, commands, workspace, publishingContract, navigation, types] = await Promise.all([
+test("Telegram auto-publishing is durable, allowlisted, fenced, safely editable, and visible in one control room", async () => {
+  const [schema, workerMigration, occurrenceKeyMigration, mediaLibraryMigration, scheduleManagementMigration, invariantTest, worker, webhook, commands, workspace, publishingContract, navigation, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260819165956_telegram_auto_publishing.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819170000_telegram_auto_publishing_worker.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260820030355_immutable_publishing_occurrence_key.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260820153739_telegram_media_library.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260820163232_manage_publishing_schedule_revisions.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/tests/telegram_publishing_invariants.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/telegram-publisher/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/telegram-webhook/index.ts", import.meta.url), "utf8"),
@@ -309,6 +310,14 @@ test("Telegram auto-publishing is durable, allowlisted, fenced, and visible in o
   assert.match(mediaLibraryMigration, /alter table public\.publishing_telegram_assets enable row level security/);
   assert.match(mediaLibraryMigration, /publishing-media-previews/);
   assert.match(mediaLibraryMigration, /resolve_publishing_post_media_asset/);
+  assert.match(scheduleManagementMigration, /function public\.revise_telegram_publication/);
+  assert.match(scheduleManagementMigration, /function public\.delete_publishing_schedule/);
+  assert.match(scheduleManagementMigration, /hold_reason = 'schedule_revised'/);
+  assert.match(scheduleManagementMigration, /hold_reason = 'schedule_deleted'/);
+  assert.match(scheduleManagementMigration, /publication_log\.status in \('claimed', 'publishing'\)/);
+  assert.match(scheduleManagementMigration, /publishing\.schedule_revised/);
+  assert.match(scheduleManagementMigration, /publishing\.schedule_deleted/);
+  assert.doesNotMatch(scheduleManagementMigration, /delete from public\.publishing_/);
   assert.match(invariantTest, /Duplicate publication claim was created/);
   assert.match(invariantTest, /Expired network call was retried/);
   assert.match(invariantTest, /Publish-now rematerialized the original scheduled slot/);
@@ -330,7 +339,14 @@ test("Telegram auto-publishing is durable, allowlisted, fenced, and visible in o
   assert.match(workspace, /aria-controls="publishing-composer"/);
   assert.match(workspace, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
   assert.match(workspace, /إغلاق نموذج الجدولة/);
+  assert.match(workspace, /تعديل المنشور والجدول/);
+  assert.match(workspace, /نعم، احذف الجدول/);
+  assert.match(workspace, /النسخ القادمة القديمة/);
+  assert.match(workspace, /revise_telegram_publication/);
+  assert.match(workspace, /delete_publishing_schedule/);
   assert.doesNotMatch(workspace, /disabled=\{!readyChannels\.length\} onClick=\{toggleComposer\}/);
+  assert.match(types, /revise_telegram_publication:/);
+  assert.match(types, /delete_publishing_schedule:/);
   assert.match(navigation, /href: "\/publishing"/);
 });
 
