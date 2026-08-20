@@ -20,7 +20,7 @@ type RangePreset = "week" | "month" | "custom";
 
 const sectionLabels: Record<string, string> = {
   dashboard: "مركز القيادة", tasks: "مهام الفريق", content: "مصنع المحتوى",
-  brand: "مركز البراند", campaigns: "الحملات", crm: "العملاء",
+  publishing: "النشر التلقائي", brand: "مركز البراند", campaigns: "الحملات", crm: "العملاء",
   analytics: "التحليلات", team: "الفريق", settings: "الإعدادات",
 };
 
@@ -31,7 +31,22 @@ function dateInput(date: Date) {
 
 function formatDate(value: string | null) {
   if (!value) return "لا يوجد نشاط مسجل";
-  return new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("ar-EG", {
+    dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo",
+  }).format(new Date(value));
+}
+
+function formatLastSeen(value: string | null, now: number) {
+  if (!value) return "لا يوجد ظهور مسجل";
+  const elapsedMinutes = Math.max(0, Math.floor((now - new Date(value).getTime()) / 60_000));
+  const relative = elapsedMinutes < 1
+    ? "منذ أقل من دقيقة"
+    : elapsedMinutes < 60
+      ? `منذ ${elapsedMinutes.toLocaleString("ar-EG")} دقيقة`
+      : elapsedMinutes < 24 * 60
+        ? `منذ ${Math.floor(elapsedMinutes / 60).toLocaleString("ar-EG")} ساعة`
+        : `منذ ${Math.floor(elapsedMinutes / (24 * 60)).toLocaleString("ar-EG")} يوم`;
+  return `${formatDate(value)} · ${relative}`;
 }
 
 function roleLabel(role: Membership["role"]) {
@@ -150,19 +165,19 @@ export function TeamWorkspace() {
     <aside className="presence-privacy-note"><ShieldCheck size={17} /><div><strong>حضور تشغيلي واضح للفريق</strong><p>نسجل القسم الحالي وآخر نبضة كل دقيقة فقط. لا نسجل نقرات أو كتابة أو محتوى شخصيًا، وهذه البيانات ظاهرة كجزء من سياسة العمل وليست مراقبة خفية.</p></div></aside>
 
     <section className="panel team-presence-panel">
-      <div className="section-heading"><div><p className="overline">الحضور الآن</p><h2>مين فاتح المنصة وآخر نشاط؟</h2></div><button className="icon-button" type="button" aria-label="تحديث الحضور" onClick={() => void refreshPresence(workspace.organization.id)}><RefreshCw size={16} /></button></div>
+      <div className="section-heading"><div><p className="overline">الحضور الآن</p><h2>مين فاتح المنصة وآخر ظهور؟</h2></div><button className="icon-button" type="button" aria-label="تحديث الحضور" onClick={() => void refreshPresence(workspace.organization.id)}><RefreshCw size={16} /></button></div>
       <div className="presence-grid">{workspace.people.map((person) => {
         const memberPresence = presenceByUser.get(person.id);
         const active = memberPresence ? now - new Date(memberPresence.last_seen_at).getTime() <= 2 * 60_000 : false;
-        return <article key={person.id}><header><span className={`presence-dot ${active ? "online" : ""}`} /><div><strong>{person.name}</strong><small>{roleLabel(person.role)}</small></div><StatusBadge tone={active ? "success" : "neutral"}>{active ? "متصل الآن" : "غير متصل"}</StatusBadge></header><dl><div><dt>آخر قسم</dt><dd>{memberPresence ? sectionLabels[memberPresence.current_section] ?? memberPresence.current_section : "لم يدخل بعد"}</dd></div><div><dt>آخر ظهور</dt><dd>{formatDate(memberPresence?.last_seen_at ?? null)}</dd></div><div><dt>بداية الجلسة</dt><dd>{formatDate(memberPresence?.session_started_at ?? null)}</dd></div></dl></article>;
+        return <article key={person.id}><header><span className={`presence-dot ${active ? "online" : ""}`} /><div><strong>{person.name}</strong><small>{roleLabel(person.role)}</small></div><StatusBadge tone={active ? "success" : "neutral"}>{active ? "متصل الآن" : "غير متصل"}</StatusBadge></header><dl><div><dt>آخر قسم</dt><dd>{memberPresence ? sectionLabels[memberPresence.current_section] ?? memberPresence.current_section : "لم يدخل بعد"}</dd></div><div><dt>آخر ظهور على المنصة</dt><dd>{formatLastSeen(memberPresence?.last_seen_at ?? null, now)}</dd></div><div><dt>بداية الجلسة</dt><dd>{formatDate(memberPresence?.session_started_at ?? null)}</dd></div></dl></article>;
       })}</div>
     </section>
 
     <section className="panel team-report-panel">
-      <div className="team-report-heading"><div><p className="overline">تقرير مبني على السجل</p><h2>ما طُلب وما نُفذ والالتزام بالموعد</h2><p>أرقام واقعية بلا تقييم شخصي أو ترتيب ظالم بين وظائف مختلفة.</p></div>{reportLoading ? <LoaderCircle className="spin" size={20} /> : <Activity size={20} />}</div>
+      <div className="team-report-heading"><div><p className="overline">تقرير مبني على السجل</p><h2>ما طُلب وما نُفذ والالتزام بالموعد</h2><p>أرقام واقعية بلا تقييم شخصي. «آخر حركة شغل» تعني مهمة أو مراجعة مسجلة، ولا تتغير بمجرد فتح المنصة.</p></div>{reportLoading ? <LoaderCircle className="spin" size={20} /> : <Activity size={20} />}</div>
       {manager ? <>
         <div className="team-range-controls"><div className="segmented-control">{(["week", "month", "custom"] as RangePreset[]).map((value) => <button type="button" key={value} className={preset === value ? "active" : ""} onClick={() => setPreset(value)}>{value === "week" ? "آخر أسبوع" : value === "month" ? "آخر 30 يوم" : "مدة محددة"}</button>)}</div>{preset === "custom" ? <div className="custom-range"><label><span>من</span><input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label><span>إلى</span><input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div> : null}<span><CalendarDays size={13} /> {formatDate(range.start.toISOString())} — {formatDate(range.end.toISOString())}</span></div>
-        <div className="team-report-table-wrap"><table className="team-report-table"><thead><tr><th>العضو</th><th>طلب مهام</th><th>أُسند له</th><th>أكمل</th><th>قبل الموعد</th><th>بعد الموعد</th><th>متأخر مفتوح</th><th>أرسل للمراجعة</th><th>طلب تعديلات</th><th>استلم تعديلات</th><th>آخر حركة</th></tr></thead><tbody>{workspace.people.filter((person) => person.role !== "viewer").map((person) => {
+        <div className="team-report-table-wrap"><table className="team-report-table"><thead><tr><th>العضو</th><th>طلب مهام</th><th>أُسند له</th><th>أكمل</th><th>قبل الموعد</th><th>بعد الموعد</th><th>متأخر مفتوح</th><th>أرسل للمراجعة</th><th>طلب تعديلات</th><th>استلم تعديلات</th><th>آخر حركة شغل</th></tr></thead><tbody>{workspace.people.filter((person) => person.role !== "viewer").map((person) => {
           const row = reportByUser.get(person.id);
           return <tr key={person.id}><th><strong>{person.name}</strong><small>{roleLabel(person.role)}</small></th><td>{row?.tasks_requested ?? 0}</td><td>{row?.tasks_assigned ?? 0}</td><td>{row?.tasks_completed ?? 0}</td><td className="positive-cell"><CheckCircle2 size={12} /> {row?.completed_on_time ?? 0}</td><td className="warning-cell"><Clock3 size={12} /> {row?.completed_late ?? 0}</td><td className="danger-cell">{row?.overdue_open ?? 0}</td><td>{row?.review_submissions ?? 0}</td><td>{row?.revisions_requested ?? 0}</td><td>{row?.revisions_received ?? 0}</td><td>{formatDate(row?.last_activity_at ?? null)}</td></tr>;
         })}</tbody></table></div>

@@ -6,10 +6,10 @@ import {
   AlertTriangle, CalendarClock, CheckCircle2, CirclePause, ExternalLink,
   ImageIcon, Library, LoaderCircle, LockKeyhole, MessageSquareText, OctagonX,
   Pencil, Plus, RefreshCw, Send, ShieldCheck, ToggleLeft, ToggleRight, Trash2,
-  Video, X,
+  Timer, Video, X,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { previewPolicyConfig, publicationStatus } from "../../lib/publishing";
+import { formatPublishingCountdown, previewPolicyConfig, publicationStatus } from "../../lib/publishing";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -122,6 +122,7 @@ export function PublishingWorkspace() {
   const [manualMediaUrl, setManualMediaUrl] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد Supabase لهذه النسخة.");
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const composerRef = useRef<HTMLFormElement>(null);
 
   const clearData = useCallback(() => {
@@ -215,6 +216,19 @@ export function PublishingWorkspace() {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [pendingDelete, working]);
+
+  useEffect(() => {
+    const refreshClock = () => setClockNow(Date.now());
+    const interval = window.setInterval(refreshClock, 30_000);
+    const refreshVisibleClock = () => { if (document.visibilityState === "visible") refreshClock(); };
+    document.addEventListener("visibilitychange", refreshVisibleClock);
+    window.addEventListener("focus", refreshClock);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisibleClock);
+      window.removeEventListener("focus", refreshClock);
+    };
+  }, []);
 
   const postById = useMemo(() => new Map(posts.map((post) => [post.id, post])), [posts]);
   const scheduleById = useMemo(() => new Map(schedules.map((schedule) => [schedule.id, schedule])), [schedules]);
@@ -473,7 +487,7 @@ export function PublishingWorkspace() {
         const status = publicationStatus(occurrence.status);
         const occurrenceLogs = logsByOccurrence.get(occurrence.id) ?? [];
         const canChangeSchedule = Boolean(manager && schedule && post && !schedule.deleted_at && !["publishing", "unknown"].includes(occurrence.status));
-        return <article className="panel publishing-occurrence" id={`occurrence-${occurrence.id}`} key={occurrence.id}><header><div><p className="overline">{schedule?.schedule_type === "weekly" ? "متكرر أسبوعيًا" : "مرة واحدة"}</p><h3>{post?.name ?? "منشور"}</h3><small>{formatDate(occurrence.scheduled_at)}</small></div><StatusBadge tone={status.tone}>{status.label}</StatusBadge></header>{post?.post_text ? <p className="publishing-post-excerpt">{post.post_text}</p> : null}{occurrence.error ? <p className="publishing-error"><AlertTriangle size={13} /> {occurrence.error}</p> : null}{occurrence.hold_reason ? <small className="publishing-hold">سبب التوقف: {occurrence.hold_reason}</small> : null}{occurrenceLogs.length ? <div className="publishing-results">{occurrenceLogs.map((log) => <div key={log.id}><span>{publicationStatus(log.status).label}</span>{log.message_url ? <a href={log.message_url} target="_blank" rel="noreferrer">فتح المنشور <ExternalLink size={11} /></a> : null}{log.error ? <small>{log.error}</small> : null}</div>)}</div> : null}{queueView === "upcoming" ? <footer>{schedule && !schedule.deleted_at ? <button className="text-button" type="button" disabled={!manager || working} onClick={() => void toggleSchedule(schedule)}>{schedule.paused ? <ToggleRight size={14} /> : <CirclePause size={14} />} {schedule.paused ? "تشغيل الجدول" : "إيقاف الجدول"}</button> : null}{canChangeSchedule && schedule ? <button className="text-button" type="button" disabled={working} onClick={() => startEditing(schedule)}><Pencil size={13} /> تعديل المنشور والجدول</button> : null}{canChangeSchedule && schedule && post ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => setPendingDelete({ schedule, post })}><Trash2 size={13} /> حذف الجدول</button> : null}{manager && ["pending","previewing","previewed","awaiting_approval","approved","ready","held"].includes(occurrence.status) ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void cancelOccurrence(occurrence.id)}><OctagonX size={13} /> إلغاء هذه النسخة فقط</button> : null}</footer> : null}</article>;
+        return <article className="panel publishing-occurrence" id={`occurrence-${occurrence.id}`} key={occurrence.id}><header><div><p className="overline">{schedule?.schedule_type === "weekly" ? "متكرر أسبوعيًا" : "مرة واحدة"}</p><h3>{post?.name ?? "منشور"}</h3><div className="publishing-occurrence-time"><small>{formatDate(occurrence.scheduled_at)}</small>{queueView === "upcoming" ? <span><Timer size={12} /> {formatPublishingCountdown(occurrence.scheduled_at, clockNow)}</span> : null}</div></div><StatusBadge tone={status.tone}>{status.label}</StatusBadge></header>{post?.post_text ? <p className="publishing-post-excerpt">{post.post_text}</p> : null}{occurrence.error ? <p className="publishing-error"><AlertTriangle size={13} /> {occurrence.error}</p> : null}{occurrence.hold_reason ? <small className="publishing-hold">سبب التوقف: {occurrence.hold_reason}</small> : null}{occurrenceLogs.length ? <div className="publishing-results">{occurrenceLogs.map((log) => <div key={log.id}><span>{publicationStatus(log.status).label}</span>{log.message_url ? <a href={log.message_url} target="_blank" rel="noreferrer">فتح المنشور <ExternalLink size={11} /></a> : null}{log.error ? <small>{log.error}</small> : null}</div>)}</div> : null}{queueView === "upcoming" ? <footer>{schedule && !schedule.deleted_at ? <button className="text-button" type="button" disabled={!manager || working} onClick={() => void toggleSchedule(schedule)}>{schedule.paused ? <ToggleRight size={14} /> : <CirclePause size={14} />} {schedule.paused ? "تشغيل الجدول" : "إيقاف الجدول"}</button> : null}{canChangeSchedule && schedule ? <button className="text-button" type="button" disabled={working} onClick={() => startEditing(schedule)}><Pencil size={13} /> تعديل المنشور والجدول</button> : null}{canChangeSchedule && schedule && post ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => setPendingDelete({ schedule, post })}><Trash2 size={13} /> حذف الجدول</button> : null}{manager && ["pending","previewing","previewed","awaiting_approval","approved","ready","held"].includes(occurrence.status) ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void cancelOccurrence(occurrence.id)}><OctagonX size={13} /> إلغاء هذه النسخة فقط</button> : null}</footer> : null}</article>;
       })}</div> : <section className="panel publishing-empty-state"><Send size={22} /><div><h3>{queueView === "upcoming" ? "لا توجد منشورات قادمة" : "لا يوجد سجل نشر بعد"}</h3><p>{queueView === "upcoming" ? "أنشئ جدولًا جديدًا، أو افتح السجل لمراجعة المنشورات السابقة والملغاة." : "ستظهر هنا المنشورات المكتملة والملغاة وحالات الفشل."}</p></div></section>}
     </section>
 

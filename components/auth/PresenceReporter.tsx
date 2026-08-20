@@ -21,26 +21,32 @@ export function PresenceReporter() {
     if (!isSupabaseConfigured()) return;
     const supabase = getSupabaseBrowserClient();
     let stopped = false;
+    let reporting = false;
     let organizationId: string | null = null;
 
     const report = async () => {
-      if (stopped || document.visibilityState !== "visible") return;
-      if (!organizationId) {
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData.session) return;
-        const { data: membership } = await supabase.from("memberships")
-          .select("organization_id")
-          .eq("user_id", sessionData.session.user.id)
-          .eq("status", "active")
-          .limit(1)
-          .maybeSingle();
-        organizationId = membership?.organization_id ?? null;
-      }
-      if (organizationId) {
-        await supabase.rpc("record_member_presence", {
-          target_organization_id: organizationId,
-          target_section: currentSection(pathname),
-        });
+      if (stopped || reporting || document.visibilityState !== "visible" || !navigator.onLine) return;
+      reporting = true;
+      try {
+        if (!organizationId) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (!sessionData.session) return;
+          const { data: membership } = await supabase.from("memberships")
+            .select("organization_id")
+            .eq("user_id", sessionData.session.user.id)
+            .eq("status", "active")
+            .limit(1)
+            .maybeSingle();
+          organizationId = membership?.organization_id ?? null;
+        }
+        if (organizationId) {
+          await supabase.rpc("record_member_presence", {
+            target_organization_id: organizationId,
+            target_section: currentSection(pathname),
+          });
+        }
+      } finally {
+        reporting = false;
       }
     };
 
@@ -48,10 +54,16 @@ export function PresenceReporter() {
     const interval = window.setInterval(() => void report(), 60_000);
     const onVisibility = () => { if (document.visibilityState === "visible") void report(); };
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onVisibility);
+    window.addEventListener("online", onVisibility);
+    window.addEventListener("pageshow", onVisibility);
     return () => {
       stopped = true;
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onVisibility);
+      window.removeEventListener("online", onVisibility);
+      window.removeEventListener("pageshow", onVisibility);
     };
   }, [pathname]);
 

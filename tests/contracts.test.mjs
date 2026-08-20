@@ -342,6 +342,9 @@ test("Telegram auto-publishing is durable, allowlisted, fenced, safely editable,
   assert.match(workspace, /تعديل المنشور والجدول/);
   assert.match(workspace, /نعم، احذف الجدول/);
   assert.match(workspace, /النسخ القادمة القديمة/);
+  assert.match(workspace, /formatPublishingCountdown/);
+  assert.match(workspace, /30_000/);
+  assert.match(publishingContract, /متبقي على النشر/);
   assert.match(workspace, /revise_telegram_publication/);
   assert.match(workspace, /delete_publishing_schedule/);
   assert.doesNotMatch(workspace, /disabled=\{!readyChannels\.length\} onClick=\{toggleComposer\}/);
@@ -549,9 +552,10 @@ test("task and content workspaces default to focused current work with clear Ara
 });
 
 test("notifications, evidence-based team reports, and transparent coarse presence are tenant secured", async () => {
-  const [migration, hardening, selfRevisionFix, selfAssignmentFix, appShell, notificationCenter, presenceReporter, teamWorkspace, teamPage, types] = await Promise.all([
+  const [migration, hardening, publishingPresenceFix, selfRevisionFix, selfAssignmentFix, appShell, notificationCenter, presenceReporter, teamWorkspace, teamPage, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260819021613_team_operations_notifications_presence.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819022259_harden_user_state_commands.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260820235016_allow_publishing_presence.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819024032_notify_self_assigned_content_revisions.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819034452_notify_self_assigned_tasks.sql", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
@@ -572,6 +576,7 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
   assert.match(migration, /No clicks, keystrokes, or hidden surveillance/i);
   assert.match(hardening, /security invoker/g);
   assert.match(hardening, /member_presence_enforce_write/);
+  assert.match(publishingPresenceFix, /'publishing'/);
   assert.match(selfRevisionFix, /تم تسجيل طلب تعديل لك/);
   assert.match(selfRevisionFix, /on conflict \(dedupe_key\) do nothing/);
   assert.doesNotMatch(selfRevisionFix, /if new\.assigned_to is distinct from new\.requested_by/);
@@ -585,7 +590,12 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
   assert.match(notificationCenter, /visibilitychange/);
   assert.match(notificationCenter, /notification-toast/);
   assert.match(presenceReporter, /60_000/);
+  assert.match(presenceReporter, /\["\/publishing", "publishing"\]/);
+  assert.match(presenceReporter, /addEventListener\("focus"/);
+  assert.match(presenceReporter, /addEventListener\("online"/);
   assert.match(teamWorkspace, /أرقام واقعية بلا تقييم شخصي/);
+  assert.match(teamWorkspace, /آخر ظهور على المنصة/);
+  assert.match(teamWorkspace, /آخر حركة شغل/);
   assert.match(teamWorkspace, /آخر أسبوع/);
   assert.match(teamWorkspace, /آخر 30 يوم/);
   assert.match(teamWorkspace, /مدة محددة/);

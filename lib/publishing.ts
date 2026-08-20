@@ -34,3 +34,25 @@ export function publicationStatus(status: string) {
   return publishingStatusConfig[status] ?? { label: status, tone: "neutral" as const };
 }
 
+const arabicNumber = new Intl.NumberFormat("ar-EG", { useGrouping: false });
+
+export function formatPublishingCountdown(scheduledAt: string, now = Date.now()) {
+  const scheduledTime = new Date(scheduledAt).getTime();
+  if (Number.isNaN(scheduledTime)) return "موعد النشر غير صالح";
+
+  const remaining = scheduledTime - now;
+  if (remaining <= 0) return "حان موعد النشر";
+  if (remaining < 60_000) return "متبقي على النشر أقل من دقيقة";
+
+  const totalMinutes = Math.ceil(remaining / 60_000);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [
+    days ? `${arabicNumber.format(days)} يوم` : null,
+    hours ? `${arabicNumber.format(hours)} ساعة` : null,
+    minutes ? `${arabicNumber.format(minutes)} دقيقة` : null,
+  ].filter((part): part is string => Boolean(part));
+
+  return `متبقي على النشر ${parts.join(" و")}`;
+}
