@@ -277,9 +277,10 @@ test("social post deliverables expand into parallel copy and design workflows wi
 });
 
 test("Telegram auto-publishing is durable, allowlisted, fenced, and visible in one control room", async () => {
-  const [schema, workerMigration, invariantTest, worker, webhook, commands, workspace, publishingContract, navigation, types] = await Promise.all([
+  const [schema, workerMigration, occurrenceKeyMigration, invariantTest, worker, webhook, commands, workspace, publishingContract, navigation, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260819165956_telegram_auto_publishing.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819170000_telegram_auto_publishing_worker.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260820030355_immutable_publishing_occurrence_key.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/tests/telegram_publishing_invariants.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/telegram-publisher/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/telegram-webhook/index.ts", import.meta.url), "utf8"),
@@ -300,8 +301,11 @@ test("Telegram auto-publishing is durable, allowlisted, fenced, and visible in o
   assert.match(workerMigration, /network_started_at is not null[\s\S]*status = 'unknown'/);
   assert.match(workerMigration, /snapshot_hash_mismatch/);
   assert.match(workerMigration, /kill_switch_generation_changed/);
+  assert.match(occurrenceKeyMigration, /occurrence_key/);
+  assert.match(occurrenceKeyMigration, /on conflict \(occurrence_key\) do nothing/);
   assert.match(invariantTest, /Duplicate publication claim was created/);
   assert.match(invariantTest, /Expired network call was retried/);
+  assert.match(invariantTest, /Publish-now rematerialized the original scheduled slot/);
   assert.match(worker, /mark_publication_network_started/);
   assert.match(worker, /target_terminal_status: "unknown"/);
   assert.match(webhook, /x-telegram-bot-api-secret-token/);

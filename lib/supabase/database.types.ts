@@ -1616,6 +1616,7 @@ export type Database = {
           error: string | null
           hold_reason: string | null
           id: string
+          occurrence_key: string
           organization_id: string
           post_id: string
           preview_chat_id: number | null
@@ -1639,6 +1640,7 @@ export type Database = {
           error?: string | null
           hold_reason?: string | null
           id?: string
+          occurrence_key: string
           organization_id: string
           post_id: string
           preview_chat_id?: number | null
@@ -1662,6 +1664,7 @@ export type Database = {
           error?: string | null
           hold_reason?: string | null
           id?: string
+          occurrence_key?: string
           organization_id?: string
           post_id?: string
           preview_chat_id?: number | null

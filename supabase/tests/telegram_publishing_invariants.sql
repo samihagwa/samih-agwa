@@ -18,6 +18,10 @@ declare
   third_post uuid;
   third_schedule uuid;
   third_claim record;
+  fourth_post uuid;
+  fourth_schedule uuid;
+  fourth_occurrence uuid;
+  occurrence_count integer;
   media_guarded boolean := false;
 begin
   select membership.organization_id, membership.user_id
@@ -141,6 +145,31 @@ begin
     media_guarded := true;
   end;
   if not media_guarded then raise exception 'Oversized media caption was accepted'; end if;
+
+  -- Moving the effective delivery time must not create a new copy of the
+  -- original scheduled slot on the next materialization tick.
+  insert into public.publishing_posts (organization_id, name, post_text, created_by)
+  values (test_org, 'Immutable slot invariant', 'Publish-now must stay one occurrence', test_user)
+  returning id into fourth_post;
+  insert into public.publishing_schedules (
+    organization_id, post_id, schedule_type, once_at, preview_policy, created_by
+  ) values (
+    test_org, fourth_post, 'once', now() + interval '1 hour', 'review_window', test_user
+  ) returning id into fourth_schedule;
+  perform private.materialize_publishing_occurrences(now());
+  select occurrence.id into fourth_occurrence
+  from public.publishing_occurrences occurrence
+  where occurrence.schedule_id = fourth_schedule;
+  update public.publishing_occurrences occurrence
+  set scheduled_at = now(), status = 'ready'
+  where occurrence.id = fourth_occurrence;
+  perform private.materialize_publishing_occurrences(now());
+  select count(*) into occurrence_count
+  from public.publishing_occurrences occurrence
+  where occurrence.schedule_id = fourth_schedule;
+  if occurrence_count <> 1 then
+    raise exception 'Publish-now rematerialized the original scheduled slot';
+  end if;
 end;
 $$;
 
