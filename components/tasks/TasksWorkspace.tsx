@@ -296,17 +296,22 @@ export function TasksWorkspace() {
     setError(null);
     setNotice(null);
 
-    const { error: authError } = await getSupabaseBrowserClient().auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}/tasks`,
-      },
-    });
+    try {
+      const { error: authError } = await getSupabaseBrowserClient().auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/tasks`,
+        },
+      });
 
-    setWorking(false);
-    if (authError) setError(authError.message);
-    else setNotice("أرسلنا رابط دخول آمن إلى بريدك. افتحه من نفس المتصفح لإكمال الدخول.");
+      if (authError) throw authError;
+      setNotice("أرسلنا رابط دخول آمن إلى بريدك. افتحه من نفس المتصفح لإكمال الدخول.");
+    } catch (requestError) {
+      setError(getErrorMessage(requestError));
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function bootstrapWorkspace() {
@@ -397,6 +402,10 @@ export function TasksWorkspace() {
 
   if (loading) {
     return <section className="workspace-state" aria-live="polite"><LoaderCircle className="spin" size={24} /><div><h2>جارٍ تحميل مساحة العمل</h2><p>نتحقق من الجلسة والصلاحيات والمهام المتاحة لك.</p></div></section>;
+  }
+
+  if (!configured) {
+    return <section className="workspace-state workspace-onboarding" role="alert"><AlertTriangle size={27} /><div><h2>اتصال تسجيل الدخول غير متاح مؤقتًا</h2><p>إعدادات الاتصال لم تصل إلى هذه النسخة. حدّث الصفحة بعد إصلاح النشر بدلًا من محاولة إرسال الرابط مرة أخرى.</p></div></section>;
   }
 
   if (!session) {
