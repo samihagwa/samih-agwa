@@ -327,6 +327,10 @@ test("Telegram auto-publishing is durable, allowlisted, fenced, and visible in o
   assert.match(workspace, /إيقاف طوارئ/);
   assert.match(workspace, /مكتبة وسائط النشر/);
   assert.match(workspace, /@teamwhalesbot/);
+  assert.match(workspace, /aria-controls="publishing-composer"/);
+  assert.match(workspace, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+  assert.match(workspace, /إغلاق نموذج الجدولة/);
+  assert.doesNotMatch(workspace, /disabled=\{!readyChannels\.length\} onClick=\{toggleComposer\}/);
   assert.match(navigation, /href: "\/publishing"/);
 });
 

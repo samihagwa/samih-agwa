@@ -7,7 +7,7 @@ import {
   ImageIcon, Library, LoaderCircle, LockKeyhole, MessageSquareText, OctagonX,
   Plus, RefreshCw, Send, ShieldCheck, ToggleLeft, ToggleRight, Video,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewPolicyConfig, publicationStatus } from "../../lib/publishing";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
@@ -95,6 +95,7 @@ export function PublishingWorkspace() {
   const [manualMediaUrl, setManualMediaUrl] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد Supabase لهذه النسخة.");
+  const composerRef = useRef<HTMLFormElement>(null);
 
   const clearData = useCallback(() => {
     setChannels([]); setPosts([]); setSchedules([]); setOccurrences([]);
@@ -164,6 +165,15 @@ export function PublishingWorkspace() {
       .subscribe();
     return () => { void supabase.removeChannel(realtime); };
   }, [refreshPublishing, session, workspace]);
+
+  useEffect(() => {
+    if (!showComposer) return;
+    const frame = window.requestAnimationFrame(() => {
+      composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      composerRef.current?.querySelector<HTMLInputElement>('input[name="post_name"]')?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [showComposer]);
 
   const postById = useMemo(() => new Map(posts.map((post) => [post.id, post])), [posts]);
   const scheduleById = useMemo(() => new Map(schedules.map((schedule) => [schedule.id, schedule])), [schedules]);
@@ -283,6 +293,11 @@ export function PublishingWorkspace() {
     setNotice("فُتح البوت. اضغط Start خلال 15 دقيقة ليتم ربط المعاينات بحسابك.");
   }
 
+  function toggleComposer() {
+    setError(null); setNotice(null);
+    setShowComposer((value) => !value);
+  }
+
   if (loading) return <section className="workspace-state"><LoaderCircle className="spin" size={24} /><div><h2>جارٍ تحميل مركز النشر</h2><p>نقرأ القنوات والجداول وسجل النشر الآمن.</p></div></section>;
   if (!session) return <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><h2>سجّل الدخول أولًا</h2><p>إدارة القنوات والنشر متاحة لأعضاء الشركة الموثقين فقط.</p></div><Button href="/tasks">فتح تسجيل الدخول</Button></section>;
   if (!workspace) return <section className="workspace-state workspace-onboarding"><ShieldCheck size={27} /><div><h2>أنشئ مساحة الشركة أولًا</h2><p>ابدأ من قسم المهام ثم ارجع لمركز النشر.</p></div><Button href="/tasks">فتح المهام</Button></section>;
@@ -299,7 +314,7 @@ export function PublishingWorkspace() {
   return <section className="publishing-workspace">
     <div className="workspace-toolbar">
       <div><p className="overline">{workspace.organization.name}</p><h2>غرفة عمليات النشر</h2><p>{readyChannels.length} قناة جاهزة · {upcoming.length} نسخة قادمة · التوقيت Africa/Cairo</p></div>
-      <div className="toolbar-actions"><button className="icon-button" type="button" aria-label="تحديث" onClick={() => void refreshPublishing(workspace.organization.id, session.user.id)}><RefreshCw size={17} /></button>{manager ? <Button variant="secondary" type="button" onClick={() => void connectTelegram()}><MessageSquareText size={15} /> {connection?.connected_at ? "إعادة ربط التنبيهات" : "ربط تنبيهات Telegram"}</Button> : null}{manager ? <Button type="button" disabled={!readyChannels.length} onClick={() => setShowComposer((value) => !value)}><Plus size={15} /> جدولة منشور</Button> : null}</div>
+      <div className="toolbar-actions"><button className="icon-button" type="button" aria-label="تحديث" onClick={() => void refreshPublishing(workspace.organization.id, session.user.id)}><RefreshCw size={17} /></button>{manager ? <Button variant="secondary" type="button" onClick={() => void connectTelegram()}><MessageSquareText size={15} /> {connection?.connected_at ? "إعادة ربط التنبيهات" : "ربط تنبيهات Telegram"}</Button> : null}{manager ? <Button type="button" aria-controls="publishing-composer" aria-expanded={showComposer} onClick={toggleComposer}>{showComposer ? <OctagonX size={15} /> : <Plus size={15} />} {showComposer ? "إغلاق نموذج الجدولة" : "جدولة منشور"}</Button> : null}</div>
     </div>
 
     {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
@@ -326,7 +341,8 @@ export function PublishingWorkspace() {
       </article>)}</div> : <div className="publishing-media-empty"><Library size={22} /><div><strong>مش محتاج تجيب رابط أو file_id</strong><p>{connection?.connected_at ? "ابعت الملف للبوت الآن، ولما يرد إنه اتحفظ اضغط تحديث لو لم يظهر فورًا." : "اربط تنبيهات Telegram أولًا، ثم أرسل الملف للبوت من نفس الحساب."}</p></div></div>}
     </section>
 
-    {showComposer && manager ? <form className="panel publishing-composer" onSubmit={(event) => void createPublication(event)}><div className="section-heading"><div><p className="overline">منشور + جدول ذري</p><h2>جدولة نشر جديد</h2></div><button className="text-button" type="button" onClick={() => setShowComposer(false)}>إغلاق</button></div>
+    {showComposer && manager ? <form ref={composerRef} id="publishing-composer" className="panel publishing-composer" onSubmit={(event) => void createPublication(event)}><div className="section-heading"><div><p className="overline">منشور + جدول ذري</p><h2>جدولة نشر جديد</h2></div><button className="text-button" type="button" onClick={() => setShowComposer(false)}>إغلاق</button></div>
+      {!readyChannels.length ? <p className="form-notice error" role="alert">افتحنا النموذج، لكن الحفظ سيظل متوقفًا لحين وجود قناة Telegram جاهزة للنشر.</p> : null}
       <div className="form-grid">
         <label><span>اسم داخلي للمنشور</span><input name="post_name" minLength={2} maxLength={180} required placeholder="مثال: إعلان ويبنار الأربعاء" /></label>
         <label><span>ربط بمحتوى موجود — اختياري</span><select name="content_item_id"><option value="">بدون ربط</option>{contentItems.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label>

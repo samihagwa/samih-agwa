@@ -886,7 +886,7 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
 .publishing-media-empty svg { flex: 0 0 auto; color: var(--teal-700); }
 .publishing-media-empty strong { display: block; margin-bottom: 3px; color: var(--ink-800); font-size: 11px; }
 .publishing-media-empty p { margin: 0; font-size: 10px; line-height: 1.7; }
-.publishing-composer { display: grid; gap: 18px; }
+.publishing-composer { scroll-margin-top: 18px; display: grid; gap: 18px; }
 .publishing-media-picker { padding: 15px; display: grid; gap: 13px; border: 1px solid var(--line); border-radius: 13px; background: var(--paper-muted); }
 .publishing-media-picker .section-heading { align-items: center; }
 .publishing-media-picker h3 { margin: 3px 0 0; font-size: 14px; }
