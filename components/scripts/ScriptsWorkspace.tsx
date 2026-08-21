@@ -266,12 +266,19 @@ export function ScriptsWorkspace() {
         generation_direction: researchPreview?.researchId === item.id ? researchAiDirection : "",
       });
       const generated = result.generated as { variants?: ScriptVariant[]; hook_variants?: string[] } | undefined;
+      const variants = Array.isArray(generated?.variants) ? generated.variants : [];
+      const quality = result.quality as { removed_variants?: number; removed_hooks?: number } | undefined;
+      const removedVariants = Number(quality?.removed_variants ?? 0);
+      const removedHooks = Number(quality?.removed_hooks ?? 0);
       setResearchPreview({
         researchId: item.id,
-        variants: Array.isArray(generated?.variants) ? generated.variants : [],
+        variants,
         hooks: Array.isArray(generated?.hook_variants) ? generated.hook_variants : [],
       });
-      setNotice("دي معاينة فقط. الفكرة مازالت في مكانها ولم يُنشأ أي اسكريبت.");
+      const guardNotice = removedVariants || removedHooks
+        ? ` الحارس استبعد ${removedVariants ? `${removedVariants} نسخة` : ""}${removedVariants && removedHooks ? " و" : ""}${removedHooks ? `${removedHooks} هوك` : ""} لعدم مطابقتها، من غير طلب إضافي.`
+        : "";
+      setNotice(`عدد البدائل السليمة: ${variants.length}. دي معاينة فقط؛ الفكرة مازالت في مكانها ولم يُنشأ أي اسكريبت.${guardNotice}`);
     } catch (previewError) { setError(previewError instanceof Error ? previewError.message : "تعذّر توليد معاينة الفكرة."); }
     finally { setResearchAiLoading(null); }
   }

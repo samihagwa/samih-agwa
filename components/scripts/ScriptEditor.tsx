@@ -22,6 +22,8 @@ type Workspace = { organization: Organization; membership: Membership; people: P
 type WritingMode = "idea" | "reference" | "improve";
 type AiScope = "script_variants" | "hooks" | "production_pack" | "recording" | "editing" | "thumbnail" | "caption";
 type ScriptVariant = { label: string; hook: string; spoken_script: string; cta: string };
+type CaptionOption = { label: string; caption: string; hashtags: string[] };
+type ThumbnailOption = { label: string; cover_text: string; visual_direction: string; script_connection: string };
 type EditorForm = {
   title: string; input_mode: Script["input_mode"]; source_url: string; source_text: string;
   objective: string; audience: string; platform: string; duration_seconds: string; content_pillar: string;
@@ -43,6 +45,10 @@ function formFromScript(script: Script): EditorForm {
 function localDateTime(date: Date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function thumbnailOptionText(option: ThumbnailOption) {
+  return `النص على الغلاف: ${option.cover_text}\nالاتجاه البصري: ${option.visual_direction}\nصلته بالاسكريبت: ${option.script_connection}`;
 }
 
 async function invokeFunction(name: string, body: Record<string, unknown>) {
@@ -70,6 +76,8 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   const [saving, setSaving] = useState(false);
   const [aiScope, setAiScope] = useState<AiScope | null>(null);
   const [scriptVariants, setScriptVariants] = useState<ScriptVariant[]>([]);
+  const [captionOptions, setCaptionOptions] = useState<CaptionOption[]>([]);
+  const [thumbnailOptions, setThumbnailOptions] = useState<ThumbnailOption[]>([]);
   const [generationDirection, setGenerationDirection] = useState("");
   const [selectedStory, setSelectedStory] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -163,6 +171,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         version_note: versionNote,
       });
       setVersionNote(""); setScriptVariants([]);
+      if (writingHasUnsavedChanges) { setCaptionOptions([]); setThumbnailOptions([]); }
       setNotice(workspace.script.status === "ready_to_record" && writingHasUnsavedChanges
         ? "تم حفظ النص وإرجاعه إلى «قيد الكتابة» لأن النسخة المعتمدة اتغيرت."
         : "تم حفظ نسخة جديدة.");
@@ -194,11 +203,19 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         generation_direction: generationDirection, selected_story: selectedStory,
       });
       const generated = result.generated as { variants?: ScriptVariant[]; hook_variants?: string[] } | undefined;
-      if (scope === "script_variants") setScriptVariants(Array.isArray(generated?.variants) ? generated.variants : []);
+      const variants = Array.isArray(generated?.variants) ? generated.variants : [];
+      const hooks = Array.isArray(generated?.hook_variants) ? generated.hook_variants : [];
+      const quality = result.quality as { removed_variants?: number; removed_hooks?: number } | undefined;
+      const removedVariants = Number(quality?.removed_variants ?? 0);
+      const removedHooks = Number(quality?.removed_hooks ?? 0);
+      const guardNotice = removedVariants || removedHooks
+        ? ` الحارس استبعد ${removedVariants ? `${removedVariants} نسخة` : ""}${removedVariants && removedHooks ? " و" : ""}${removedHooks ? `${removedHooks} هوك` : ""} لعدم مطابقتها، من غير طلب API إضافي.`
+        : "";
+      if (scope === "script_variants") setScriptVariants(variants);
       if (Array.isArray(generated?.hook_variants)) update("hook_variants", generated.hook_variants.join("\n"));
       setNotice(scope === "script_variants"
-        ? "ظهرت 3 بدائل للمعاينة فقط. اختر نسخة ثم احفظها بنفسك؛ لم نغيّر الاسكريبت ولا مصنع المحتوى."
-        : "ظهرت بدائل الهوك داخل المحرر ولم تُحفظ بعد.");
+        ? `عدد البدائل السليمة: ${variants.length}. دي معاينة فقط؛ اختر نسخة ثم احفظها بنفسك، ولم نغيّر الاسكريبت أو مصنع المحتوى.${guardNotice}`
+        : `عدد الهوكات السليمة: ${hooks.length}. ظهرت داخل المحرر ولم تُحفظ بعد.${guardNotice}`);
     } catch (generateError) { setError(generateError instanceof Error ? generateError.message : "تعذّر توليد بدائل الكتابة."); }
     finally { setAiScope(null); }
   }
@@ -215,15 +232,38 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     if (productionHasUnsavedChanges) { setError("احفظ تعديلات حزمة التنفيذ أولًا قبل إعادة توليد أي جزء."); return; }
     setAiScope(scope); setError(null); setNotice(null);
     try {
-      await invokeFunction("script-ai", {
+      const result = await invokeFunction("script-ai", {
         script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version,
         mode: "improve", scope, generation_direction: generationDirection,
       });
-      setNotice(scope === "production_pack" ? "تم إنشاء حزمة التنفيذ من النص المعتمد فقط."
+      const generated = result.generated as { caption_options?: CaptionOption[]; thumbnail_options?: ThumbnailOption[] } | undefined;
+      const captions = Array.isArray(generated?.caption_options) ? generated.caption_options : [];
+      const thumbnails = Array.isArray(generated?.thumbnail_options) ? generated.thumbnail_options : [];
+      if (scope === "caption" || scope === "production_pack") setCaptionOptions(captions);
+      if (scope === "thumbnail" || scope === "production_pack") setThumbnailOptions(thumbnails);
+      const quality = result.quality as { removed_options?: number } | undefined;
+      const removed = Number(quality?.removed_options ?? 0);
+      const guardNotice = removed ? ` الحارس استبعد ${removed} اقتراحات غير مطابقة، من غير طلب API إضافي.` : "";
+      if (scope === "caption") setNotice(`ظهر ${captions.length} اقتراحات كابشن. اختر واحدًا بعلامة صح ثم احفظ بنفسك؛ لم نعتمد شيئًا تلقائيًا.${guardNotice}`);
+      else if (scope === "thumbnail") setNotice(`ظهر ${thumbnails.length} اقتراحات غلاف مبنية على الاسكريبت. اختر واحدًا بعلامة صح ثم احفظ بنفسك؛ لم نعتمد شيئًا تلقائيًا.${guardNotice}`);
+      else setNotice(scope === "production_pack"
+        ? `تم إنشاء تعليمات التسجيل والمونتاج من النص المعتمد، وظهرت بدائل الكابشن والغلاف لتختارها بنفسك.${guardNotice}`
         : "تم إعادة توليد الجزء المطلوب فقط من حزمة التنفيذ.");
-      await refresh();
+      if (result.saved) await refresh();
     } catch (generateError) { setError(generateError instanceof Error ? generateError.message : "تعذّر إنشاء تعليمات التنفيذ."); }
     finally { setAiScope(null); }
+  }
+
+  function chooseCaptionOption(option: CaptionOption) {
+    if (!form) return;
+    setForm({ ...form, caption: option.caption, hashtags: option.hashtags.join("\n") });
+    setNotice(`تم تحديد كابشن «${option.label}» بعلامة صح داخل المحرر. راجعه ثم اضغط حفظ لاعتماده.`);
+  }
+
+  function chooseThumbnailOption(option: ThumbnailOption) {
+    if (!form) return;
+    setForm({ ...form, thumbnail_notes: thumbnailOptionText(option) });
+    setNotice(`تم تحديد غلاف «${option.label}» بعلامة صح داخل المحرر. راجعه ثم اضغط حفظ لاعتماده.`);
   }
 
   async function approveVoiceSample() {
@@ -316,8 +356,8 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
             <Button type="button" disabled={Boolean(aiScope) || saving} onClick={() => void generateProduction("production_pack")}>{aiScope === "production_pack" ? <LoaderCircle className="spin" size={15} /> : <Factory size={15} />} {packExists ? "إعادة بناء الحزمة كاملة" : "إنشاء حزمة التنفيذ"}</Button>
             <Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving || !packExists || packStale} onClick={() => void generateProduction("recording")}><RefreshCw size={14} /> التسجيل فقط</Button>
             <Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving || !packExists || packStale} onClick={() => void generateProduction("editing")}><RefreshCw size={14} /> المونتاج فقط</Button>
-            <Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving || !packExists || packStale} onClick={() => void generateProduction("thumbnail")}><RefreshCw size={14} /> الغلاف فقط</Button>
-            <Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving || !packExists || packStale} onClick={() => void generateProduction("caption")}><RefreshCw size={14} /> الكابشن فقط</Button>
+            <Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving} onClick={() => void generateProduction("thumbnail")}><RefreshCw size={14} /> 3 اقتراحات للغلاف</Button>
+            <Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving} onClick={() => void generateProduction("caption")}><RefreshCw size={14} /> 3 اقتراحات للكابشن</Button>
           </div> : null}
           <div className="script-fields-grid execution-fields">
             <label><span>تعليمات التسجيل</span><textarea disabled={readOnly} value={form.recording_notes} onChange={(event) => update("recording_notes", event.target.value)} /></label>
@@ -327,10 +367,18 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
             <label><span>B-roll وصور ومصادر بصرية</span><textarea disabled={readOnly} value={form.b_roll_notes} onChange={(event) => update("b_roll_notes", event.target.value)} /></label>
             <label><span>حقائق تحتاج مراجعة</span><textarea disabled={readOnly} value={form.claims_notes} onChange={(event) => update("claims_notes", event.target.value)} /></label>
           </div>
+          {thumbnailOptions.length ? <div className="script-variants-grid" aria-label="اقتراحات الغلاف">{thumbnailOptions.map((option, index) => {
+            const selected = form.thumbnail_notes === thumbnailOptionText(option);
+            return <article key={`${option.label}-${index}`}><header><span>غلاف {index + 1}</span><strong>{option.label}</strong></header><p><strong>النص:</strong> {option.cover_text}</p><p><strong>الاتجاه البصري:</strong> {option.visual_direction}</p><p><strong>صلته بالنص:</strong> {option.script_connection}</p><Button type="button" variant={selected ? "primary" : "secondary"} aria-pressed={selected} onClick={() => chooseThumbnailOption(option)}>{selected ? <CheckCircle2 size={15} /> : null}{selected ? " محدد بعلامة صح" : "اختيار هذا الغلاف"}</Button></article>;
+          })}</div> : null}
         </section>
         <section className="panel script-editor-section">
           <div className="section-heading"><div><p className="overline">بعد التسجيل</p><h2>الكابشن والهاشتاجات</h2><p>مبنيان على النص المعتمد ويصلان لموظف النشر لاحقًا.</p></div></div>
           <div className="script-fields-grid"><label className="span-2"><span>الكابشن</span><textarea className="caption-textarea" disabled={readOnly} value={form.caption} onChange={(event) => update("caption", event.target.value)} /></label><label className="span-2"><span>الهاشتاجات — واحد في كل سطر</span><textarea disabled={readOnly} value={form.hashtags} onChange={(event) => update("hashtags", event.target.value)} /></label></div>
+          {captionOptions.length ? <div className="script-variants-grid" aria-label="اقتراحات الكابشن">{captionOptions.map((option, index) => {
+            const selected = form.caption === option.caption && lines(form.hashtags).join("\n") === option.hashtags.join("\n");
+            return <article key={`${option.label}-${index}`}><header><span>كابشن {index + 1}</span><strong>{option.label}</strong></header><p>{option.caption}</p><small>{option.hashtags.join(" ")}</small><Button type="button" variant={selected ? "primary" : "secondary"} aria-pressed={selected} onClick={() => chooseCaptionOption(option)}>{selected ? <CheckCircle2 size={15} /> : null}{selected ? " محدد بعلامة صح" : "اختيار هذا الكابشن"}</Button></article>;
+          })}</div> : null}
         </section>
       </> : <aside className="script-production-gate"><Factory size={20} /><div><strong>تعليمات التنفيذ لسه مقفولة</strong><p>عدّل النص واختار نسختك، ثم اضغط «جاهز للتصوير». بعدها فقط يظهر توليد التسجيل والمونتاج والغلاف والكابشن.</p></div></aside>}
 
