@@ -31,14 +31,16 @@ test("status badges never rely on color alone", async () => {
 });
 
 test("script studio is private by assignee, owner-visible, versioned, AI-assisted, and handed off atomically", async () => {
-  const [migration, calibration, stagedAi, commands, ai, workspace, editor, contract, navigation, presence, team, types, config] = await Promise.all([
+  const [migration, calibration, stagedAi, captionHandoff, commands, ai, workspace, editor, content, contract, navigation, presence, team, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821010000_content_script_studio.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821023326_script_voice_calibration.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821032746_stage_script_ai_and_production_pack.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260821122852_carry_selected_caption_to_content.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/scripts.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/auth/PresenceReporter.tsx", import.meta.url), "utf8"),
@@ -130,6 +132,14 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(editor, /3 اقتراحات للكابشن/);
   assert.match(editor, /محدد بعلامة صح/);
   assert.match(editor, /لم نعتمد شيئًا تلقائيًا/);
+  assert.match(captionHandoff, /add column caption_brief text not null default ''/);
+  assert.match(captionHandoff, /content_items_caption_brief_length/);
+  assert.match(captionHandoff, /caption_brief = left\(concat_ws/);
+  assert.match(captionHandoff, /caption_brief_carried/);
+  assert.match(captionHandoff, /to service_role/);
+  assert.match(content, /item\.caption_brief/);
+  assert.match(content, /مسودة مختارة من استوديو الاسكريبتات/);
+  assert.match(types, /caption_brief: string/);
   assert.match(editor, /إنشاء حزمة التنفيذ/);
   assert.match(editor, /CTA جزء من النص النهائي/);
   assert.doesNotMatch(editor, /<span>الدعوة للإجراء CTA<\/span>/);

@@ -623,11 +623,13 @@ export function ContentWorkspace() {
               <div><MessageSquareText size={17} /><div><p className="overline">داخل ملف الريلز</p><h4>الكابشن النهائي</h4></div></div>
               <div><small>المسؤول</small><strong>{peopleById.get(captionTask.owner_id)?.name ?? "صانع المحتوى"}</strong></div>
             </div>
-            {captionDelivery ? <div className="saved-reel-caption"><span>آخر حفظ: إصدار {captionDelivery.version} · {formatDate(captionDelivery.submitted_at)}</span><p>{captionDelivery.result_note}</p></div> : <p className="reel-caption-empty">صانع المحتوى يكتب الكابشن هنا بعد تثبيت الفكرة. لا تُنشأ له مهمة ثانية في البورد، وسيُراجع الكابشن مع الفيديو والغلاف مرة واحدة.</p>}
+            {captionDelivery ? <div className="saved-reel-caption"><span>آخر حفظ: إصدار {captionDelivery.version} · {formatDate(captionDelivery.submitted_at)}</span><p>{captionDelivery.result_note}</p></div>
+              : item.caption_brief ? <div className="saved-reel-caption"><span>مسودة مختارة من استوديو الاسكريبتات — راجعها قبل الإغلاق</span><p>{item.caption_brief}</p></div>
+                : <p className="reel-caption-empty">صانع المحتوى يكتب الكابشن هنا بعد تثبيت الفكرة. لا تُنشأ له مهمة ثانية في البورد، وسيُراجع الكابشن مع الفيديو والغلاف مرة واحدة.</p>}
             {(manager || captionTask.owner_id === session.user.id) && ["ready", "in_progress", "review", "done"].includes(captionTask.status) ? <>
               {captionDelivery && deliveryFormTaskId !== captionTask.id ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(captionTask.id)}><Pencil size={12} /> تعديل الكابشن</button> : null}
               {(!captionDelivery || deliveryFormTaskId === captionTask.id) ? <form className="reel-caption-form" onSubmit={(event) => void submitStepDelivery(event, captionTask)}>
-                <label><span>نص الكابشن والهاشتاجات</span><textarea name="result_note" minLength={3} maxLength={10000} rows={6} required defaultValue={captionDelivery?.result_note ?? ""} placeholder={`اكتب الكابشن النهائي، ثم CTA واضح مثل: ${item.cta}\nوأضف الهاشتاجات المناسبة في النهاية.`} /></label>
+                <label><span>نص الكابشن والهاشتاجات</span><textarea name="result_note" minLength={3} maxLength={10000} rows={6} required defaultValue={captionDelivery?.result_note ?? item.caption_brief} placeholder={`اكتب الكابشن النهائي، ثم CTA واضح مثل: ${item.cta}\nوأضف الهاشتاجات المناسبة في النهاية.`} /></label>
                 <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ الكابشن وإغلاق الخطوة</Button>{captionDelivery ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button> : null}<small>الحفظ يغلق خطوة الكتابة ويفتح ما يليها تلقائيًا.</small></div>
               </form> : null}
             </> : captionTask.status === "backlog" ? <p className="reel-caption-locked"><LockKeyhole size={13} /> سيفتح الكابشن تلقائيًا عند جاهزية الملف.</p> : null}

@@ -350,6 +350,7 @@ export type Database = {
       content_items: {
         Row: {
           brand_notes: string | null
+          caption_brief: string
           copy_brief: string
           created_at: string
           created_by: string
@@ -375,6 +376,7 @@ export type Database = {
         }
         Insert: {
           brand_notes?: string | null
+          caption_brief?: string
           copy_brief?: string
           created_at?: string
           created_by?: string
@@ -400,6 +402,7 @@ export type Database = {
         }
         Update: {
           brand_notes?: string | null
+          caption_brief?: string
           copy_brief?: string
           created_at?: string
           created_by?: string
