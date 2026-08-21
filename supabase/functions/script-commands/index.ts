@@ -52,7 +52,8 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/changed in another session/i, "الاسكريبت اتعدل من جلسة أخرى. حدّث الصفحة قبل الحفظ."],
     [/Handed-off or archived scripts are read-only/i, "الاسكريبت المُسلّم أو المؤرشف للقراءة فقط."],
     [/Mark the script ready to record/i, "حوّل الاسكريبت إلى «جاهز للتسجيل» قبل تسليمه للمصنع."],
-    [/Complete the spoken script and CTA/i, "أكمل نص الكلام والدعوة للإجراء قبل التسليم."],
+    [/Complete the spoken script/i, "أكمل نص الكلام قبل التسليم."],
+    [/Choose a complete generated script/i, "اختر نسخة كاملة من معاينة AI قبل الحفظ."],
     [/Publish time must be in the future/i, "موعد النشر لازم يكون في المستقبل."],
     [/private script|private research/i, "ليس لديك صلاحية للوصول لهذا العنصر الخاص."],
   ];
@@ -144,7 +145,7 @@ async function saveScript(body: Record<string, unknown>, context: Context) {
     script_on_screen_text: text(body.on_screen_text),
     script_b_roll_notes: text(body.b_roll_notes),
     script_claims_notes: text(body.claims_notes),
-    version_note: text(body.version_note) || "حفظ يدوي",
+    version_note: text(body.version_note),
   });
   return commandError(error, "تعذّر حفظ الاسكريبت.") ?? jsonResponse({ editVersion: data });
 }
@@ -206,6 +207,22 @@ async function researchToScript(body: Record<string, unknown>, context: Context)
     target_research_id: researchId,
   });
   return commandError(error, "تعذّر تحويل الفكرة إلى اسكريبت.") ?? jsonResponse({ scriptId: data }, 201);
+}
+
+async function researchVariantToScript(body: Record<string, unknown>, context: Context) {
+  const researchId = text(body.research_id);
+  const spokenScript = text(body.spoken_script);
+  if (!researchId || spokenScript.length < 20 || spokenScript.length > 30000) {
+    return jsonResponse({ message: "اختر نسخة اسكريبت كاملة قبل حفظها في اسكريبتاتك." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("create_script_from_research_variant", {
+    target_user_id: context!.userClaims!.id,
+    target_research_id: researchId,
+    selected_hook_variants: textArray(body.hook_variants, 8),
+    selected_spoken_script: spokenScript,
+    selected_cta: text(body.cta),
+  });
+  return commandError(error, "تعذّر حفظ النسخة المختارة كاسكريبت.") ?? jsonResponse({ scriptId: data }, 201);
 }
 
 async function saveVoice(body: Record<string, unknown>, context: Context) {
@@ -279,6 +296,7 @@ export default {
     if (body.action === "change_status") return changeStatus(body, context);
     if (body.action === "create_research") return createResearch(body, context);
     if (body.action === "research_to_script") return researchToScript(body, context);
+    if (body.action === "research_variant_to_script") return researchVariantToScript(body, context);
     if (body.action === "save_voice") return saveVoice(body, context);
     if (body.action === "approve_voice_sample") return approveVoiceSample(body, context);
     if (body.action === "handoff") return handoff(body, context);

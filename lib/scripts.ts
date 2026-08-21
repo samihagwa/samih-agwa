@@ -5,9 +5,9 @@ export type ScriptInputMode = Enums<"script_input_mode">;
 export type ScriptResearchKind = Enums<"script_research_kind">;
 
 export const scriptStatusConfig: Record<ScriptStatus, { label: string; tone: "neutral" | "info" | "success" | "warning" }> = {
-  draft: { label: "مسودة", tone: "neutral" },
-  ready_to_record: { label: "جاهز للتسجيل", tone: "warning" },
-  handed_off: { label: "داخل مصنع المحتوى", tone: "success" },
+  draft: { label: "قيد الكتابة", tone: "neutral" },
+  ready_to_record: { label: "جاهز للتصوير", tone: "warning" },
+  handed_off: { label: "متابعة التنفيذ", tone: "success" },
   archived: { label: "مؤرشف", tone: "info" },
 };
 

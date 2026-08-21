@@ -2406,6 +2406,8 @@ export type Database = {
           on_screen_text: string
           organization_id: string
           platform: string
+          production_pack_source_version: number | null
+          production_pack_stale: boolean
           recording_notes: string
           source_text: string | null
           source_url: string | null
@@ -2443,6 +2445,8 @@ export type Database = {
           on_screen_text?: string
           organization_id: string
           platform?: string
+          production_pack_source_version?: number | null
+          production_pack_stale?: boolean
           recording_notes?: string
           source_text?: string | null
           source_url?: string | null
@@ -2480,6 +2484,8 @@ export type Database = {
           on_screen_text?: string
           organization_id?: string
           platform?: string
+          production_pack_source_version?: number | null
+          production_pack_stale?: boolean
           recording_notes?: string
           source_text?: string | null
           source_url?: string | null
@@ -3260,6 +3266,16 @@ export type Database = {
         Args: { target_research_id: string; target_user_id: string }
         Returns: string
       }
+      create_script_from_research_variant: {
+        Args: {
+          selected_cta: string
+          selected_hook_variants: string[]
+          selected_spoken_script: string
+          target_research_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       create_script_research_item: {
         Args: {
           research_brand_fit: number
@@ -3366,6 +3382,14 @@ export type Database = {
       }
       get_script_ai_context: {
         Args: { target_script_id: string; target_user_id: string }
+        Returns: Json
+      }
+      get_script_research_ai_context: {
+        Args: { target_research_id: string; target_user_id: string }
+        Returns: Json
+      }
+      get_script_research_ai_provider_runtime: {
+        Args: { target_research_id: string; target_user_id: string }
         Returns: Json
       }
       get_team_task_performance: {
@@ -3490,20 +3514,19 @@ export type Database = {
         }
         Returns: string
       }
-      save_ai_script_generation: {
+      save_ai_script_production: {
         Args: {
           expected_edit_version: number
-          script_b_roll_notes: string
-          script_caption: string
-          script_claims_notes: string
-          script_cta: string
-          script_editing_notes: string
-          script_hashtags: string[]
-          script_hook_variants: string[]
-          script_on_screen_text: string
-          script_recording_notes: string
-          script_spoken_script: string
-          script_thumbnail_notes: string
+          generated_b_roll_notes: string
+          generated_caption: string
+          generated_claims_notes: string
+          generated_cta: string
+          generated_editing_notes: string
+          generated_hashtags: string[]
+          generated_on_screen_text: string
+          generated_recording_notes: string
+          generated_thumbnail_notes: string
+          generation_scope: string
           target_script_id: string
           target_user_id: string
         }

@@ -31,9 +31,10 @@ test("status badges never rely on color alone", async () => {
 });
 
 test("script studio is private by assignee, owner-visible, versioned, AI-assisted, and handed off atomically", async () => {
-  const [migration, calibration, commands, ai, workspace, editor, contract, navigation, presence, team, types, config] = await Promise.all([
+  const [migration, calibration, stagedAi, commands, ai, workspace, editor, contract, navigation, presence, team, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821010000_content_script_studio.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821023326_script_voice_calibration.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260821032746_stage_script_ai_and_production_pack.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
@@ -57,7 +58,7 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(migration, /array\['owner'\]::public\.app_role\[\]/);
   assert.doesNotMatch(migration, /array\['owner', 'admin', 'manager'\].*scripts_select/i);
   assert.doesNotMatch(migration, /grant (insert|update|delete) on table public\.(scripts|script_versions|script_research_items|script_voice_profiles) to authenticated/i);
-  for (const rpc of ["create_script_draft", "save_script_draft", "save_ai_script_generation", "change_script_status", "create_script_from_research", "save_script_voice_profile", "handoff_script_to_content"]) {
+  for (const rpc of ["create_script_draft", "save_script_draft", "change_script_status", "create_script_from_research", "save_script_voice_profile", "handoff_script_to_content"]) {
     assert.match(migration, new RegExp(`function public\\.${rpc}`));
     assert.match(migration, new RegExp(`grant execute on function public\\.${rpc}`));
     assert.match(types, new RegExp(`${rpc}:`));
@@ -91,6 +92,16 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.doesNotMatch(ai, /OPENAI_API_KEY|OPENAI_SCRIPT_MODEL/);
   assert.doesNotMatch(ai, /https:\/\/api\.openai\.com/);
   assert.doesNotMatch(ai, /apify|notion/i);
+  assert.match(stagedAi, /production_pack_stale/);
+  assert.match(stagedAi, /save_ai_script_production/);
+  assert.match(stagedAi, /create_script_from_research_variant/);
+  assert.match(stagedAi, /get_script_research_ai_context/);
+  assert.match(stagedAi, /drop function if exists public\.save_ai_script_generation/);
+  assert.match(ai, /script_variants/);
+  assert.match(ai, /production_pack/);
+  assert.match(ai, /writingScopes/);
+  assert.match(workspace, /اختيار وحفظ كاسكريبت/);
+  assert.match(workspace, /الفكرة مازالت في مكانها ولم يُنشأ أي اسكريبت/);
   assert.match(workspace, /اسكريبتاتي/);
   assert.match(workspace, /الأفكار والرادار/);
   assert.match(workspace, /بصمتي/);
@@ -102,6 +113,10 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(editor, /generation_direction/);
   assert.match(editor, /selected_story/);
   assert.match(editor, /اعتمد النص كعينة لصوتي/);
+  assert.match(editor, /ولّد 3 بدائل للاسكريبت/);
+  assert.match(editor, /إنشاء حزمة التنفيذ/);
+  assert.match(editor, /CTA جزء من النص النهائي/);
+  assert.doesNotMatch(editor, /<span>الدعوة للإجراء CTA<\/span>/);
   assert.match(commands, /approve_voice_sample/);
   assert.match(commands, /approve_script_as_voice_sample/);
   assert.match(calibration, /function public\.approve_script_as_voice_sample/);
@@ -157,7 +172,7 @@ test("AI providers are owner-managed, Vault-backed, testable, and provider-agnos
   assert.match(settings, /API مخصص/);
   assert.match(settings, /اتركه فارغًا للاحتفاظ بالمفتاح الحالي/);
   assert.doesNotMatch(settings, /service_role/i);
-  assert.match(editor, /القصص مقفولة افتراضيًا/);
+  assert.match(editor, /بدون قصة شخصية — الافتراضي/);
   assert.match(types, /ai_providers:/);
   assert.match(types, /ai_api_protocol/);
   assert.match(config, /\[functions\.ai-provider-commands\][\s\S]*verify_jwt = true/);

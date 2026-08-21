@@ -15,7 +15,9 @@ type Organization = Tables<"organizations">;
 type Script = Tables<"scripts">;
 type Research = Tables<"script_research_items">;
 type VoiceProfile = Tables<"script_voice_profiles">;
+type Task = Tables<"tasks">;
 type Person = { id: string; name: string; role: Membership["role"] };
+type ScriptVariant = { label: string; hook: string; spoken_script: string; cta: string };
 type Workspace = {
   organization: Organization;
   membership: Membership;
@@ -23,6 +25,7 @@ type Workspace = {
   scripts: Script[];
   research: Research[];
   voice: VoiceProfile | null;
+  productionTasks: Task[];
 };
 type Tab = "scripts" | "radar" | "voice";
 
@@ -33,6 +36,19 @@ const initialScriptForm = {
 
 function personName(people: Person[], id: string) {
   return people.find((person) => person.id === id)?.name ?? "عضو فريق";
+}
+
+function scriptCardStatus(script: Script, tasks: Task[]) {
+  if (script.status !== "handed_off" || !script.content_item_id) return scriptStatusConfig[script.status];
+  const linked = tasks.filter((task) => task.content_item_id === script.content_item_id);
+  const step = (name: Task["content_step"]) => linked.find((task) => task.content_step === name);
+  const publishing = step("publishing"); const editing = step("editing"); const recording = step("recording");
+  if (publishing?.status === "done") return { label: "تم النشر", tone: "success" as const };
+  if (publishing && ["ready", "in_progress", "review"].includes(publishing.status)) return { label: "مرحلة النشر", tone: "warning" as const };
+  if (editing?.status === "done") return { label: "تم المونتاج", tone: "success" as const };
+  if (editing && ["ready", "in_progress", "review"].includes(editing.status)) return { label: "قيد المونتاج", tone: "info" as const };
+  if (recording?.status === "done") return { label: "تم التصوير", tone: "success" as const };
+  return { label: "قيد التنفيذ", tone: "info" as const };
 }
 
 function emptyState(icon: typeof FilePenLine, title: string, body: string) {
@@ -46,6 +62,19 @@ async function invokeCommand(body: Record<string, unknown>) {
     const context = error.context as Response | undefined;
     if (context) {
       try { const payload = await context.clone().json() as { message?: string }; if (payload.message) throw new Error(payload.message); } catch (parseError) { if (parseError instanceof Error && parseError.message !== "Unexpected end of JSON input") throw parseError; }
+    }
+    throw error;
+  }
+  return data as Record<string, unknown>;
+}
+
+async function invokeScriptAi(body: Record<string, unknown>) {
+  const { data, error } = await getSupabaseBrowserClient().functions.invoke("script-ai", { body });
+  if (error) {
+    const context = error.context as Response | undefined;
+    if (context) {
+      try { const payload = await context.clone().json() as { message?: string }; if (payload.message) throw new Error(payload.message); }
+      catch (parseError) { if (parseError instanceof Error && !/JSON|Unexpected|body stream/i.test(parseError.message)) throw parseError; }
     }
     throw error;
   }
@@ -111,11 +140,14 @@ export function ScriptsWorkspace() {
   const [researchForm, setResearchForm] = useState({ kind: "idea", title: "", source_url: "", raw_notes: "", transcript: "", hook: "", transferable_principle: "", why_it_works: "", original_angles: "", performance_signal: "", brand_fit: "", freshness: "" });
   const [researchAssignedTo, setResearchAssignedTo] = useState("");
   const [saving, setSaving] = useState(false);
+  const [researchAiLoading, setResearchAiLoading] = useState<string | null>(null);
+  const [researchPreview, setResearchPreview] = useState<{ researchId: string; variants: ScriptVariant[]; hooks: string[] } | null>(null);
+  const [researchAiDirection, setResearchAiDirection] = useState("");
 
   const clearWorkspace = useCallback(() => setWorkspace(null), []);
   const clearTransientState = useCallback(() => { setError(null); setNotice(null); }, []);
 
-  const loadRows = useCallback(async (base: Omit<Workspace, "scripts" | "research" | "voice">) => {
+  const loadRows = useCallback(async (base: Omit<Workspace, "scripts" | "research" | "voice" | "productionTasks">) => {
     const supabase = getSupabaseBrowserClient();
     const [scriptsResult, researchResult, voiceResult] = await Promise.all([
       supabase.from("scripts").select("*").eq("organization_id", base.organization.id).order("updated_at", { ascending: false }),
@@ -125,7 +157,13 @@ export function ScriptsWorkspace() {
     if (scriptsResult.error) throw scriptsResult.error;
     if (researchResult.error) throw researchResult.error;
     if (voiceResult.error) throw voiceResult.error;
-    setWorkspace({ ...base, scripts: scriptsResult.data ?? [], research: researchResult.data ?? [], voice: voiceResult.data });
+    const scripts = scriptsResult.data ?? [];
+    const contentIds = scripts.map((script) => script.content_item_id).filter((id): id is string => Boolean(id));
+    const tasksResult = contentIds.length
+      ? await supabase.from("tasks").select("*").in("content_item_id", contentIds)
+      : { data: [], error: null };
+    if (tasksResult.error) throw tasksResult.error;
+    setWorkspace({ ...base, scripts, research: researchResult.data ?? [], voice: voiceResult.data, productionTasks: tasksResult.data ?? [] });
   }, []);
 
   const loadWorkspace = useCallback(async (activeSession: Session) => {
@@ -220,6 +258,39 @@ export function ScriptsWorkspace() {
     finally { setSaving(false); }
   }
 
+  async function generateResearchPreview(item: Research) {
+    setResearchAiLoading(item.id); setError(null); setNotice(null);
+    try {
+      const result = await invokeScriptAi({
+        research_id: item.id, scope: "script_variants", mode: item.source_url ? "reference" : "idea",
+        generation_direction: researchPreview?.researchId === item.id ? researchAiDirection : "",
+      });
+      const generated = result.generated as { variants?: ScriptVariant[]; hook_variants?: string[] } | undefined;
+      setResearchPreview({
+        researchId: item.id,
+        variants: Array.isArray(generated?.variants) ? generated.variants : [],
+        hooks: Array.isArray(generated?.hook_variants) ? generated.hook_variants : [],
+      });
+      setNotice("دي معاينة فقط. الفكرة مازالت في مكانها ولم يُنشأ أي اسكريبت.");
+    } catch (previewError) { setError(previewError instanceof Error ? previewError.message : "تعذّر توليد معاينة الفكرة."); }
+    finally { setResearchAiLoading(null); }
+  }
+
+  async function saveResearchVariant(item: Research, variant: ScriptVariant) {
+    setSaving(true); setError(null); setNotice(null);
+    try {
+      const result = await invokeCommand({
+        action: "research_variant_to_script", research_id: item.id,
+        hook_variants: lines(`${variant.hook}\n${researchPreview?.hooks.join("\n") ?? ""}`),
+        spoken_script: variant.spoken_script, cta: variant.cta,
+      });
+      const scriptId = String(result.scriptId ?? "");
+      setResearchPreview(null); await refresh();
+      if (scriptId) window.location.assign(`/scripts/${scriptId}`);
+    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "تعذّر حفظ النسخة المختارة."); }
+    finally { setSaving(false); }
+  }
+
   if (loading) return <section className="workspace-state"><LoaderCircle className="spin" size={24} /><div><h2>جارٍ فتح الاستوديو</h2><p>نحمّل اسكريبتاتك الخاصة وبنك الأفكار.</p></div></section>;
   if (!session) return <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><h2>سجّل الدخول أولًا</h2><p>الاسكريبتات خاصة ومحمية بحساب كل عضو.</p></div><Button href="/tasks">تسجيل الدخول</Button></section>;
   if (!workspace) return <section className="workspace-state"><UsersRound size={27} /><div><h2>لا توجد مساحة عمل</h2><p>أنشئ مساحة الشركة من قسم المهام أولًا.</p></div></section>;
@@ -237,7 +308,7 @@ export function ScriptsWorkspace() {
     {tab === "scripts" ? <>
       <section className="panel scripts-control-panel">
         <div className="section-heading"><div><p className="overline">المساحة الخاصة</p><h2>{owner ? "اسكريبتات الفريق" : "اسكريبتاتي"}</h2><p>{owner ? "ترى الجميع بصفتك المالك. كل عضو آخر يرى ملفاته وحده." : "لا يستطيع أي عضو آخر فتح اسكريبتاتك. المالك فقط لديه رؤية تشغيلية كاملة."}</p></div><Button type="button" onClick={() => setShowCreateScript((value) => !value)}><Plus size={15} /> اسكريبت جديد</Button></div>
-        <div className="scripts-filters"><label className="search-field"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث في العنوان أو النص أو الكابشن..." /></label>{owner ? <select aria-label="تصفية حسب العضو" value={personFilter} onChange={(event) => setPersonFilter(event.target.value)}><option value="all">كل الأعضاء</option>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select> : null}<select aria-label="تصفية حسب الحالة" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="active">العمل الحالي</option><option value="draft">المسودات</option><option value="ready_to_record">جاهز للتسجيل</option><option value="handed_off">داخل المصنع</option><option value="archived">الأرشيف</option><option value="all">كل الحالات</option></select></div>
+        <div className="scripts-filters"><label className="search-field"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث في العنوان أو النص أو الكابشن..." /></label>{owner ? <select aria-label="تصفية حسب العضو" value={personFilter} onChange={(event) => setPersonFilter(event.target.value)}><option value="all">كل الأعضاء</option>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select> : null}<select aria-label="تصفية حسب الحالة" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="active">العمل الحالي</option><option value="draft">قيد الكتابة</option><option value="ready_to_record">جاهز للتصوير</option><option value="handed_off">متابعة التنفيذ</option><option value="archived">الأرشيف</option><option value="all">كل الحالات</option></select></div>
         {showCreateScript ? <form className="script-create-form" onSubmit={(event) => void createScript(event)}>
           <label><span>عنوان الاسكريبت</span><input required minLength={3} value={scriptForm.title} onChange={(event) => setScriptForm((form) => ({ ...form, title: event.target.value }))} /></label>
           <label><span>طريقة البداية</span><select value={scriptForm.input_mode} onChange={(event) => setScriptForm((form) => ({ ...form, input_mode: event.target.value }))}>{Object.entries(scriptInputModeConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -253,8 +324,8 @@ export function ScriptsWorkspace() {
         </form> : null}
       </section>
       <div className="scripts-grid">{filteredScripts.length ? filteredScripts.map((script) => {
-        const config = scriptStatusConfig[script.status];
-        return <article className="script-card" key={script.id}><header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{script.objective}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header><dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl><footer><span>{formatScriptDate(script.updated_at)}</span><a className="button button-secondary" href={`/scripts/${script.id}`}>فتح الاسكريبت</a></footer></article>;
+        const config = scriptCardStatus(script, workspace.productionTasks);
+        return <article className="script-card" key={script.id}><header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{script.objective}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header><dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl><footer><span>{formatScriptDate(script.updated_at)}</span><a className="button button-secondary" href={`/scripts/${script.id}`}>{script.status === "handed_off" ? "متابعة التنفيذ" : "فتح الاسكريبت"}</a></footer></article>;
       }) : emptyState(Archive, "لا توجد اسكريبتات مطابقة", statusFilter === "active" ? "ابدأ باسكريبت جديد أو غيّر البحث والفلترة." : "غيّر الفلترة لرؤية العمل الحالي أو الأرشيف.")}</div>
     </> : null}
 
@@ -277,7 +348,21 @@ export function ScriptsWorkspace() {
           <div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Lightbulb size={15} />} حفظ في الرادار</Button><Button type="button" variant="ghost" onClick={() => setShowCreateResearch(false)}>إلغاء</Button></div>
         </form> : null}
       </section>
-      <div className="research-grid">{workspace.research.length ? workspace.research.map((item) => <article className={`research-card status-${item.status}`} key={item.id}><header><div><Radar size={17} /><div><span>{scriptResearchKindConfig[item.kind]}</span><h3>{item.title}</h3></div></div><StatusBadge tone={item.status === "used" ? "success" : item.status === "archived" ? "info" : "neutral"}>{item.status === "inbox" ? "وارد" : item.status === "selected" ? "مختار" : item.status === "used" ? "تحول لاسكريبت" : "مؤرشف"}</StatusBadge></header>{item.transferable_principle ? <div className="research-principle"><strong>المبدأ القابل للنقل</strong><p>{item.transferable_principle}</p></div> : null}{item.original_angles.length ? <ul>{item.original_angles.slice(0, 3).map((angle) => <li key={angle}>{angle}</li>)}</ul> : null}<footer><div>{item.source_url ? <a href={item.source_url} target="_blank" rel="noreferrer">فتح المصدر</a> : <span>فكرة داخلية</span>}<small>{personName(workspace.people, item.assigned_to)}</small></div>{item.status === "used" && item.linked_script_id ? <a className="button button-secondary" href={`/scripts/${item.linked_script_id}`}>فتح الاسكريبت</a> : item.status !== "archived" ? <Button type="button" disabled={saving} onClick={() => void convertResearch(item.id)}>حوّل لاسكريبت</Button> : null}</footer></article>) : emptyState(Lightbulb, "الرادار فارغ", "أضف رابط منافس أو فكرة أو مرجع مفيد، ثم استخرج منه زاوية أصلية.")}</div>
+      <div className="research-grid">{workspace.research.length ? workspace.research.map((item) => {
+        const preview = researchPreview?.researchId === item.id ? researchPreview : null;
+        const canUse = item.status !== "archived" && item.status !== "used";
+        return <article className={`research-card status-${item.status}`} key={item.id}>
+          <header><div><Radar size={17} /><div><span>{scriptResearchKindConfig[item.kind]}</span><h3>{item.title}</h3></div></div><StatusBadge tone={item.status === "used" ? "success" : item.status === "archived" ? "info" : "neutral"}>{item.status === "inbox" ? "وارد" : item.status === "selected" ? "مختار" : item.status === "used" ? "تحول لاسكريبت" : "مؤرشف"}</StatusBadge></header>
+          {item.transferable_principle ? <div className="research-principle"><strong>المبدأ القابل للنقل</strong><p>{item.transferable_principle}</p></div> : null}
+          {item.original_angles.length ? <ul>{item.original_angles.slice(0, 3).map((angle) => <li key={angle}>{angle}</li>)}</ul> : null}
+          {canUse ? <div className="research-ai-preview">
+            <label><span>توجيه للـAI — اختياري</span><textarea value={preview ? researchAiDirection : ""} onFocus={() => { if (!preview) setResearchPreview({ researchId: item.id, variants: [], hooks: [] }); }} onChange={(event) => setResearchAiDirection(event.target.value)} placeholder="عايز أوصل الفكرة من زاوية..." /></label>
+            <div className="research-ai-actions"><Button type="button" disabled={Boolean(researchAiLoading) || saving} onClick={() => void generateResearchPreview(item)}>{researchAiLoading === item.id ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />} اكتب 3 بدائل بالـAI</Button><Button type="button" variant="ghost" disabled={saving} onClick={() => void convertResearch(item.id)}>إنشاء مسودة يدوية</Button></div>
+            {preview?.variants.length ? <div className="research-variant-list">{preview.variants.map((variant, index) => <article key={`${variant.label}-${index}`}><header><strong>{variant.label}</strong><span>نسخة {index + 1}</span></header><p>{variant.spoken_script}</p><Button type="button" variant="secondary" disabled={saving} onClick={() => void saveResearchVariant(item, variant)}>اختيار وحفظ كاسكريبت</Button></article>)}</div> : <small>لن تظهر الفكرة في «اسكريبتاتي» إلا بعد اختيار نسخة والضغط على الحفظ.</small>}
+          </div> : null}
+          <footer><div>{item.source_url ? <a href={item.source_url} target="_blank" rel="noreferrer">فتح المصدر</a> : <span>فكرة داخلية</span>}<small>{personName(workspace.people, item.assigned_to)}</small></div>{item.status === "used" && item.linked_script_id ? <a className="button button-secondary" href={`/scripts/${item.linked_script_id}`}>فتح الاسكريبت</a> : null}</footer>
+        </article>;
+      }) : emptyState(Lightbulb, "الرادار فارغ", "أضف رابط منافس أو فكرة أو مرجع مفيد، ثم استخرج منه زاوية أصلية.")}</div>
     </> : null}
 
     {tab === "voice" ? <VoiceProfileForm key={workspace.voice?.edit_version ?? 0} profile={workspace.voice} owner={owner} organizationId={workspace.organization.id} onSaved={refresh} /> : null}
