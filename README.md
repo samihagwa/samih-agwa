@@ -51,6 +51,16 @@ The bootstrap endpoint is authenticated and can create only the first organizati
 
 No sample rules are seeded. Add only real brand decisions you are ready to use.
 
+## AI provider setup
+
+1. Sign in as the workspace owner and open `/settings`.
+2. Choose a ready preset for DeepSeek V4 Flash, DeepSeek V4 Pro, or OpenAI; alternatively choose **Custom API** for any HTTPS provider that supports OpenAI Chat Completions or Responses with Bearer authentication.
+3. Paste the provider key once. It is encrypted in Supabase Vault and is never returned to the browser; the public metadata keeps only a short key hint.
+4. Select **Test connection**. When it succeeds, make that provider the default.
+5. Open an editable script and use the AI actions. The script service resolves the current organization default at request time, so changing providers does not require a frontend deployment.
+
+Only an active organization owner can list or mutate provider settings. Team members can use the selected default for their own scripts but cannot see provider configuration or credentials. Private, local, credential-bearing, query-string, and non-HTTPS base URLs are rejected. Custom proprietary API shapes require a dedicated server-side adapter rather than exposing arbitrary headers in the browser.
+
 ## Personal content test
 
 1. Sign in and create the owner workspace from `/tasks`.

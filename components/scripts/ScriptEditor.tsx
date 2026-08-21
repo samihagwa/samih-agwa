@@ -236,7 +236,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
       </section>
 
       {!readOnly ? <section className="panel script-ai-panel">
-        <div><span className="script-ai-icon"><WandSparkles size={21} /></span><div><p className="overline">مساعد الكتابة</p><h2>AI يكتب داخل حدود بصمتك</h2><p>يرسل بيانات هذا الاسكريبت وبصمتك ومراجع البراند المعتمدة إلى OpenAI فقط عند ضغط زر. لا يتصفح المنافسين ولا ينشر شيئًا.</p></div></div>
+        <div><span className="script-ai-icon"><WandSparkles size={21} /></span><div><p className="overline">مساعد الكتابة</p><h2>AI يكتب داخل حدود بصمتك</h2><p>يرسل بيانات هذا الاسكريبت وبصمتك ومراجع البراند المعتمدة إلى مزوّد AI الافتراضي الذي اخترته في الإعدادات، وفقط عند ضغط زر. لا يتصفح المنافسين ولا ينشر شيئًا.</p></div></div>
         <div className="script-ai-actions"><Button type="button" disabled={Boolean(aiMode) || saving} onClick={() => void generate("idea")}>{aiMode === "idea" ? <LoaderCircle className="spin" size={15} /> : <Lightbulb size={15} />} اكتب من الفكرة</Button><Button type="button" variant="secondary" disabled={Boolean(aiMode) || saving || !form.source_url} onClick={() => void generate("reference")}>{aiMode === "reference" ? <LoaderCircle className="spin" size={15} /> : <Bot size={15} />} أعد بناء المرجع بطريقتي</Button><Button type="button" variant="secondary" disabled={Boolean(aiMode) || saving || form.spoken_script.length < 20} onClick={() => void generate("improve")}>{aiMode === "improve" ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />} حسّن مسودتي</Button></div>
       </section> : null}
 

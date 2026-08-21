@@ -14,6 +14,71 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_providers: {
+        Row: {
+          base_url: string
+          created_at: string
+          created_by: string
+          id: string
+          is_default: boolean
+          is_enabled: boolean
+          key_hint: string
+          last_test_message: string | null
+          last_test_status: string
+          last_tested_at: string | null
+          model: string
+          name: string
+          organization_id: string
+          protocol: Database["public"]["Enums"]["ai_api_protocol"]
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          base_url: string
+          created_at?: string
+          created_by: string
+          id?: string
+          is_default?: boolean
+          is_enabled?: boolean
+          key_hint: string
+          last_test_message?: string | null
+          last_test_status?: string
+          last_tested_at?: string | null
+          model: string
+          name: string
+          organization_id: string
+          protocol: Database["public"]["Enums"]["ai_api_protocol"]
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          base_url?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_default?: boolean
+          is_enabled?: boolean
+          key_hint?: string
+          last_test_message?: string | null
+          last_test_status?: string
+          last_tested_at?: string | null
+          model?: string
+          name?: string
+          organization_id?: string
+          protocol?: Database["public"]["Enums"]["ai_api_protocol"]
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_providers_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_events: {
         Row: {
           action: string
@@ -3602,6 +3667,7 @@ export type Database = {
       }
     }
     Enums: {
+      ai_api_protocol: "openai_chat_completions" | "openai_responses"
       app_role: "owner" | "admin" | "manager" | "member" | "viewer"
       brand_article_status: "draft" | "approved" | "archived"
       brand_audience:
@@ -3879,6 +3945,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ai_api_protocol: ["openai_chat_completions", "openai_responses"],
       app_role: ["owner", "admin", "manager", "member", "viewer"],
       brand_article_status: ["draft", "approved", "archived"],
       brand_audience: [

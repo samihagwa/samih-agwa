@@ -75,12 +75,14 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(commands, /createSupabaseContext/);
   assert.match(commands, /auth: "user"/);
   assert.match(commands, /handoff_script_to_content/);
-  assert.match(ai, /https:\/\/api\.openai\.com\/v1\/responses/);
-  assert.match(ai, /gpt-5\.4-mini/);
+  assert.match(ai, /get_script_ai_provider_runtime/);
+  assert.match(ai, /openai_responses/);
+  assert.match(ai, /response_format/);
   assert.match(ai, /json_schema/);
   assert.match(ai, /store: false/);
-  assert.match(ai, /OPENAI_API_KEY/);
-  assert.match(ai, /مفتاح OpenAI غير مضبوط/);
+  assert.match(ai, /أضف مزوّد AI من الإعدادات/);
+  assert.doesNotMatch(ai, /OPENAI_API_KEY|OPENAI_SCRIPT_MODEL/);
+  assert.doesNotMatch(ai, /https:\/\/api\.openai\.com/);
   assert.doesNotMatch(ai, /apify|notion/i);
   assert.match(workspace, /اسكريبتاتي/);
   assert.match(workspace, /الأفكار والرادار/);
@@ -94,6 +96,48 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(team, /scripts: "استوديو الاسكريبتات"/);
   assert.match(config, /\[functions\.script-commands\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.script-ai\][\s\S]*verify_jwt = true/);
+});
+
+test("AI providers are owner-managed, Vault-backed, testable, and provider-agnostic", async () => {
+  const [migration, commands, adapter, settings, editor, types, config] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260821012128_ai_provider_registry.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/ai-provider-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/_shared/ai-provider.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/settings/AiProvidersWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /create table public\.ai_providers/);
+  assert.match(migration, /alter table public\.ai_providers enable row level security/);
+  assert.match(migration, /ai_providers_select_owner/);
+  assert.match(migration, /array\['owner'\]::public\.app_role\[\]/);
+  assert.match(migration, /private\.ai_provider_secrets/);
+  assert.match(migration, /vault\.create_secret/);
+  assert.match(migration, /vault\.update_secret/);
+  assert.match(migration, /vault\.decrypted_secrets/);
+  assert.doesNotMatch(migration, /grant select on table private\.ai_provider_secrets/);
+  for (const rpc of ["save_ai_provider", "set_default_ai_provider", "record_ai_provider_test", "delete_ai_provider", "get_ai_provider_runtime_for_owner", "get_script_ai_provider_runtime"]) {
+    assert.match(migration, new RegExp(`function public\\.${rpc}`));
+    assert.match(migration, new RegExp(`grant execute on function public\\.${rpc}`));
+  }
+  assert.match(commands, /auth: "user"/);
+  assert.match(commands, /test_provider/);
+  assert.match(commands, /get_ai_provider_runtime_for_owner/);
+  assert.match(adapter, /https:/);
+  assert.match(adapter, /localhost/);
+  assert.match(adapter, /Authorization: `Bearer/);
+  assert.match(settings, /deepseek-v4-flash/);
+  assert.match(settings, /deepseek-v4-pro/);
+  assert.match(settings, /https:\/\/api\.deepseek\.com/);
+  assert.match(settings, /API مخصص/);
+  assert.match(settings, /اتركه فارغًا للاحتفاظ بالمفتاح الحالي/);
+  assert.doesNotMatch(settings, /service_role/i);
+  assert.match(editor, /مزوّد AI الافتراضي/);
+  assert.match(types, /ai_providers:/);
+  assert.match(types, /ai_api_protocol/);
+  assert.match(config, /\[functions\.ai-provider-commands\][\s\S]*verify_jwt = true/);
 });
 
 test("browser configuration cannot declare a service role variable", async () => {

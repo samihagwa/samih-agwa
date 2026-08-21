@@ -1,5 +1,13 @@
 import { createSupabaseContext } from "npm:@supabase/server@1.4.1";
 import { corsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
+import {
+  extractProviderText,
+  fetchProviderJson,
+  parseProviderRuntime,
+  safeProviderFailure,
+  stripJsonFence,
+  type AiProviderRuntime,
+} from "../_shared/ai-provider.ts";
 
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const modes = new Set(["idea", "reference", "improve"]);
@@ -56,22 +64,6 @@ function generatedScript(value: unknown): value is GeneratedScript {
     && Array.isArray(item.hashtags) && item.hashtags.every((tag) => typeof tag === "string");
 }
 
-function extractOutputText(response: Record<string, unknown>) {
-  if (typeof response.output_text === "string") return response.output_text;
-  if (!Array.isArray(response.output)) return "";
-  for (const output of response.output) {
-    if (!output || typeof output !== "object") continue;
-    const content = (output as Record<string, unknown>).content;
-    if (!Array.isArray(content)) continue;
-    for (const part of content) {
-      if (part && typeof part === "object" && (part as Record<string, unknown>).type === "output_text" && typeof (part as Record<string, unknown>).text === "string") {
-        return String((part as Record<string, unknown>).text);
-      }
-    }
-  }
-  return "";
-}
-
 function instructionsFor(mode: string) {
   const modeInstruction = mode === "reference"
     ? "استخرج المبدأ من المرجع ثم اكتب تنفيذًا أصليًا بالكامل؛ ممنوع نسخ الصياغة أو ترتيب المنافس."
@@ -80,6 +72,40 @@ function instructionsFor(mode: string) {
       : "حوّل الفكرة إلى اسكريبت أصلي قابل للتسجيل والتنفيذ.";
   return `أنت كاتب محتوى داخل Market Whales. اكتب بالعربية المصرية الطبيعية، مباشرة وعملية، بلا فصحى متكلفة وبلا تهويل. ${modeInstruction}
 التزم ببصمة الكاتب وقواعد البراند المرفقة متى كانت موجودة. المحتوى تعليمي في التداول: لا تعد بأرباح، لا تستخدم ضمانات، وافصل الرأي عن الحقيقة. لو توجد معلومة تحتاج تحققًا ضعها في claims_notes بدل اختراع مصدر. اجعل spoken_script كلامًا يُقال أمام الكاميرا، والكابشن مكملًا لا نسخة مكررة. أعط تعليمات مونتاج وغلاف قابلة للتنفيذ. أعد JSON فقط حسب المخطط.`;
+}
+
+function providerBody(provider: AiProviderRuntime, mode: string, aiContext: unknown) {
+  const instructions = instructionsFor(mode);
+  const input = `بيانات الاسكريبت والسياق المعتمد:\n${JSON.stringify(aiContext).slice(0, 70000)}`;
+  if (provider.protocol === "openai_responses") {
+    return {
+      model: provider.model,
+      store: false,
+      instructions,
+      input,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "market_whales_script",
+          strict: true,
+          schema: outputSchema,
+        },
+      },
+    };
+  }
+  return {
+    model: provider.model,
+    messages: [
+      {
+        role: "system",
+        content: `${instructions}\nالمخطط المطلوب حرفيًا:\n${JSON.stringify(outputSchema)}`,
+      },
+      { role: "user", content: input },
+    ],
+    response_format: { type: "json_object" },
+    max_tokens: 12000,
+    stream: false,
+  };
 }
 
 export default {
@@ -99,9 +125,6 @@ export default {
       return jsonResponse({ message: "اختر نوع مساعدة AI وحدّث الاسكريبت قبل المحاولة." }, 400);
     }
 
-    const apiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!apiKey) return jsonResponse({ message: "ميزة AI جاهزة لكن مفتاح OpenAI غير مضبوط بعد." }, 503);
-
     const { count } = await context.supabaseAdmin.from("audit_events")
       .select("id", { count: "exact", head: true })
       .eq("actor_id", context.userClaims.id)
@@ -115,39 +138,36 @@ export default {
     });
     if (contextError || !aiContext) return jsonResponse({ message: "ليس لديك صلاحية لتوليد هذا الاسكريبت أو أنه لم يعد قابلًا للتعديل." }, 403);
 
+    const { data: providerData, error: providerError } = await context.supabaseAdmin.rpc("get_script_ai_provider_runtime", {
+      target_user_id: context.userClaims.id,
+      target_script_id: scriptId,
+    });
+    const provider = parseProviderRuntime(providerData);
+    if (providerError || !provider) {
+      return jsonResponse({ message: "أضف مزوّد AI من الإعدادات واجعله افتراضيًا قبل التوليد." }, 503);
+    }
+
     const contextObject = aiContext as Record<string, unknown>;
     const contextScript = contextObject.script as Record<string, unknown> | undefined;
     if (Number(contextScript?.edit_version) !== expectedVersion) {
       return jsonResponse({ message: "الاسكريبت اتعدل. حدّث الصفحة قبل استخدام AI حتى لا نخسر تعديلاتك." }, 409);
     }
 
-    const providerResponse = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: Deno.env.get("OPENAI_SCRIPT_MODEL") ?? "gpt-5.4-mini",
-        store: false,
-        instructions: instructionsFor(mode),
-        input: `بيانات الاسكريبت والسياق المعتمد:\n${JSON.stringify(aiContext).slice(0, 70000)}`,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "market_whales_script",
-            strict: true,
-            schema: outputSchema,
-          },
-        },
-      }),
-    });
-
-    if (!providerResponse.ok) {
-      const requestId = providerResponse.headers.get("x-request-id");
-      return jsonResponse({ message: "تعذّر توليد الاسكريبت الآن. حاول لاحقًا.", requestId }, providerResponse.status === 429 ? 429 : 502);
+    let providerResult;
+    try {
+      providerResult = await fetchProviderJson(provider, providerBody(provider, mode, aiContext), 90_000);
+    } catch (providerRequestError) {
+      return jsonResponse({ message: safeProviderFailure(providerRequestError) }, 502);
+    }
+    if (!providerResult.response.ok) {
+      return jsonResponse(
+        { message: providerResult.response.status === 429 ? "المزوّد رفض الطلب بسبب الرصيد أو حد الاستخدام." : "تعذّر توليد الاسكريبت من المزوّد الحالي.", requestId: providerResult.requestId },
+        providerResult.response.status === 429 ? 429 : 502,
+      );
     }
 
-    const providerJson = await providerResponse.json() as Record<string, unknown>;
     let generated: unknown;
-    try { generated = JSON.parse(extractOutputText(providerJson)); } catch { generated = null; }
+    try { generated = JSON.parse(stripJsonFence(extractProviderText(providerResult.json, provider.protocol))); } catch { generated = null; }
     if (!generatedScript(generated)) return jsonResponse({ message: "وصلت نتيجة غير مكتملة من AI ولم نغيّر الاسكريبت." }, 502);
 
     const { data: editVersion, error: saveError } = await context.supabaseAdmin.rpc("save_ai_script_generation", {
@@ -168,6 +188,6 @@ export default {
     });
     if (saveError) return jsonResponse({ message: "تغيّر الاسكريبت أثناء التوليد؛ حدّث الصفحة قبل إعادة المحاولة." }, 409);
 
-    return jsonResponse({ generated, editVersion });
+    return jsonResponse({ generated, editVersion, provider: { name: provider.name, model: provider.model } });
   },
 };
