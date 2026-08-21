@@ -99,8 +99,9 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
 });
 
 test("AI providers are owner-managed, Vault-backed, testable, and provider-agnostic", async () => {
-  const [migration, commands, adapter, settings, editor, types, config] = await Promise.all([
+  const [migration, ambiguityFix, commands, adapter, settings, editor, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821012128_ai_provider_registry.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260821014515_fix_ai_provider_function_ambiguity.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/ai-provider-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/_shared/ai-provider.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/settings/AiProvidersWorkspace.tsx", import.meta.url), "utf8"),
@@ -117,6 +118,9 @@ test("AI providers are owner-managed, Vault-backed, testable, and provider-agnos
   assert.match(migration, /vault\.create_secret/);
   assert.match(migration, /vault\.update_secret/);
   assert.match(migration, /vault\.decrypted_secrets/);
+  assert.match(migration, /resolved_provider_id/);
+  assert.match(ambiguityFix, /resolved_provider_id/);
+  assert.doesNotMatch(`${migration}\n${ambiguityFix}`, /secret_ref\.provider_id = provider_id\b/);
   assert.doesNotMatch(migration, /grant select on table private\.ai_provider_secrets/);
   for (const rpc of ["save_ai_provider", "set_default_ai_provider", "record_ai_provider_test", "delete_ai_provider", "get_ai_provider_runtime_for_owner", "get_script_ai_provider_runtime"]) {
     assert.match(migration, new RegExp(`function public\\.${rpc}`));

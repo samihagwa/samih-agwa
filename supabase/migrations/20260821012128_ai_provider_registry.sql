@@ -121,7 +121,7 @@ as $$
 declare
   provider_record public.ai_providers%rowtype;
   previous_record public.ai_providers%rowtype;
-  provider_id uuid := coalesce(target_provider_id, gen_random_uuid());
+  resolved_provider_id uuid := coalesce(target_provider_id, gen_random_uuid());
   secret_id uuid;
   secret_name text;
   clean_name text := trim(provider_name);
@@ -179,15 +179,15 @@ begin
       id, organization_id, name, protocol, base_url, model, key_hint,
       created_by, updated_by
     ) values (
-      provider_id, target_organization_id, clean_name, provider_protocol,
+      resolved_provider_id, target_organization_id, clean_name, provider_protocol,
       clean_base_url, clean_model, right(clean_api_key, 4), target_user_id, target_user_id
     ) returning * into provider_record;
   end if;
 
-  secret_name := 'mw_ai_' || replace(target_organization_id::text, '-', '') || '_' || replace(provider_id::text, '-', '');
+  secret_name := 'mw_ai_' || replace(target_organization_id::text, '-', '') || '_' || replace(resolved_provider_id::text, '-', '');
   select secret_ref.vault_secret_id into secret_id
   from private.ai_provider_secrets secret_ref
-  where secret_ref.provider_id = provider_id
+  where secret_ref.provider_id = resolved_provider_id
   for update;
 
   if clean_api_key <> '' then
@@ -198,7 +198,7 @@ begin
         'Market Whales AI provider credential. Managed by owner-only commands.'
       );
       insert into private.ai_provider_secrets (provider_id, organization_id, vault_secret_id)
-      values (provider_id, target_organization_id, secret_id);
+      values (resolved_provider_id, target_organization_id, secret_id);
     else
       perform vault.update_secret(
         secret_id,
@@ -218,10 +218,10 @@ begin
   if should_be_default then
     update public.ai_providers
     set is_default = false, updated_by = target_user_id
-    where organization_id = target_organization_id and id <> provider_id and is_default;
+    where organization_id = target_organization_id and id <> resolved_provider_id and is_default;
     update public.ai_providers
     set is_default = true, updated_by = target_user_id
-    where id = provider_id;
+    where id = resolved_provider_id;
   end if;
 
   insert into public.audit_events (
@@ -231,7 +231,7 @@ begin
     target_user_id,
     case when target_provider_id is null then 'ai_provider.created' else 'ai_provider.updated' end,
     'ai_provider',
-    provider_id,
+    resolved_provider_id,
     case when target_provider_id is null then null else jsonb_build_object(
       'name', previous_record.name,
       'protocol', previous_record.protocol,
@@ -248,7 +248,7 @@ begin
       'credential_rotated', clean_api_key <> ''
     )
   );
-  return provider_id;
+  return resolved_provider_id;
 end;
 $$;
 
