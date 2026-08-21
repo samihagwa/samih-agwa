@@ -443,6 +443,272 @@ export type Database = {
           },
         ]
       }
+      content_plan_items: {
+        Row: {
+          content_item_id: string | null
+          created_at: string
+          created_by: string
+          cta: string | null
+          hook_direction: string | null
+          id: string
+          kind: Database["public"]["Enums"]["content_plan_item_kind"]
+          objective: string
+          organization_id: string
+          owner_id: string
+          pillar_id: string | null
+          plan_id: string
+          platforms: string[]
+          publish_at: string
+          status: Database["public"]["Enums"]["content_plan_item_status"]
+          title: string
+          updated_at: string
+          updated_by: string
+          version: number
+        }
+        Insert: {
+          content_item_id?: string | null
+          created_at?: string
+          created_by: string
+          cta?: string | null
+          hook_direction?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["content_plan_item_kind"]
+          objective: string
+          organization_id: string
+          owner_id: string
+          pillar_id?: string | null
+          plan_id: string
+          platforms?: string[]
+          publish_at: string
+          status?: Database["public"]["Enums"]["content_plan_item_status"]
+          title: string
+          updated_at?: string
+          updated_by: string
+          version?: number
+        }
+        Update: {
+          content_item_id?: string | null
+          created_at?: string
+          created_by?: string
+          cta?: string | null
+          hook_direction?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["content_plan_item_kind"]
+          objective?: string
+          organization_id?: string
+          owner_id?: string
+          pillar_id?: string | null
+          plan_id?: string
+          platforms?: string[]
+          publish_at?: string
+          status?: Database["public"]["Enums"]["content_plan_item_status"]
+          title?: string
+          updated_at?: string
+          updated_by?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_plan_items_content_org_fkey"
+            columns: ["content_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_pillar_org_fkey"
+            columns: ["pillar_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_plan_pillars"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_plan_org_fkey"
+            columns: ["plan_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_plans"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_plan_items_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_plan_pillars: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          organization_id: string
+          plan_id: string
+          purpose: string
+          sort_order: number
+          target_quantity: number
+          title: string
+          updated_at: string
+          updated_by: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          organization_id: string
+          plan_id: string
+          purpose: string
+          sort_order?: number
+          target_quantity?: number
+          title: string
+          updated_at?: string
+          updated_by: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          organization_id?: string
+          plan_id?: string
+          purpose?: string
+          sort_order?: number
+          target_quantity?: number
+          title?: string
+          updated_at?: string
+          updated_by?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_plan_pillars_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_pillars_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plan_pillars_plan_org_fkey"
+            columns: ["plan_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_plans"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "content_plan_pillars_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_plans: {
+        Row: {
+          audience: string
+          created_at: string
+          created_by: string
+          ends_on: string
+          id: string
+          name: string
+          objective: string
+          offer: string | null
+          organization_id: string
+          primary_metric: string | null
+          starts_on: string
+          status: Database["public"]["Enums"]["content_plan_status"]
+          updated_at: string
+          updated_by: string
+          version: number
+        }
+        Insert: {
+          audience: string
+          created_at?: string
+          created_by: string
+          ends_on: string
+          id?: string
+          name: string
+          objective: string
+          offer?: string | null
+          organization_id: string
+          primary_metric?: string | null
+          starts_on: string
+          status?: Database["public"]["Enums"]["content_plan_status"]
+          updated_at?: string
+          updated_by: string
+          version?: number
+        }
+        Update: {
+          audience?: string
+          created_at?: string
+          created_by?: string
+          ends_on?: string
+          id?: string
+          name?: string
+          objective?: string
+          offer?: string | null
+          organization_id?: string
+          primary_metric?: string | null
+          starts_on?: string
+          status?: Database["public"]["Enums"]["content_plan_status"]
+          updated_at?: string
+          updated_by?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plans_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_plans_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_revision_requests: {
         Row: {
           assigned_to: string
@@ -3554,6 +3820,17 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_workspace_readiness: {
+        Args: { target_organization_id: string }
+        Returns: {
+          blocking: boolean
+          check_key: string
+          detail: string
+          href: string
+          label: string
+          ready: boolean
+        }[]
+      }
       handle_publishing_callback: {
         Args: {
           target_action: string
@@ -3894,6 +4171,24 @@ export type Database = {
         | "long_video"
         | "live"
         | "email"
+      content_plan_item_kind:
+        | "reel"
+        | "social_post"
+        | "story"
+        | "telegram_post"
+        | "email"
+        | "ad"
+        | "live"
+        | "webinar"
+        | "other"
+      content_plan_item_status:
+        | "idea"
+        | "planned"
+        | "in_production"
+        | "scheduled"
+        | "published"
+        | "cancelled"
+      content_plan_status: "draft" | "active" | "completed" | "archived"
       content_revision_status:
         | "requested"
         | "in_progress"
@@ -4177,6 +4472,26 @@ export const Constants = {
         "live",
         "email",
       ],
+      content_plan_item_kind: [
+        "reel",
+        "social_post",
+        "story",
+        "telegram_post",
+        "email",
+        "ad",
+        "live",
+        "webinar",
+        "other",
+      ],
+      content_plan_item_status: [
+        "idea",
+        "planned",
+        "in_production",
+        "scheduled",
+        "published",
+        "cancelled",
+      ],
+      content_plan_status: ["draft", "active", "completed", "archived"],
       content_revision_status: [
         "requested",
         "in_progress",

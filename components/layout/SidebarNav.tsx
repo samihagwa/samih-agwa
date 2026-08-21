@@ -1,11 +1,12 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { BarChart3, BookOpenCheck, Clapperboard, FilePenLine, LayoutDashboard, Rocket, Send, Settings, SquareKanban, UsersRound } from "lucide-react";
+import { BarChart3, BookOpenCheck, CalendarRange, Clapperboard, FilePenLine, LayoutDashboard, Rocket, Send, Settings, SquareKanban, UsersRound } from "lucide-react";
 
 const items = [
   { href: "/", label: "مركز القيادة", icon: LayoutDashboard },
   { href: "/tasks", label: "مهام الفريق", icon: SquareKanban },
+  { href: "/planning", label: "الخطة وتقويم المحتوى", icon: CalendarRange },
   { href: "/content", label: "مصنع المحتوى", icon: Clapperboard },
   { href: "/scripts", label: "استوديو الاسكريبتات", icon: FilePenLine },
   { href: "/publishing", label: "النشر التلقائي", icon: Send },

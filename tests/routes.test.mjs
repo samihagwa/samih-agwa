@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const routes = [
-  ["/", "خلّي الشغل يمشي كنظام"],
+  ["/", "اعرف أين الشغل واقف"],
   ["/tasks", "كل شخص يعرف دوره"],
   ["/content", "من الفكرة إلى النشر"],
+  ["/planning", "نعرف لماذا وماذا ومتى"],
   ["/scripts", "فكرتك تبقى اسكريبت"],
   ["/scripts/example", "النسخة التي سيتكلم بها"],
   ["/publishing", "جدولة Telegram بلا نشر مكرر"],
@@ -42,11 +43,10 @@ for (const [pathname, expectedHeading] of routes) {
   });
 }
 
-test("dashboard reports onboarding truth without invented operational data", async () => {
+test("dashboard withholds operational data until a verified workspace session", async () => {
   const response = await render("/");
   const html = await response.text();
-  assert.match(html, /دعوة محددة بالبريد/);
-  assert.match(html, /لن نعرض أرقامًا وهمية/);
-  assert.match(html, /دخول الفريق/);
-  assert.match(html, /بالدعوة/);
+  assert.match(html, /بيانات تشغيل فعلية/);
+  assert.match(html, /لا أرقام شكلية/);
+  assert.match(html, /فتح خطة المحتوى/);
 });

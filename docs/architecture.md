@@ -54,9 +54,20 @@ Existing Market Whales application
 ## Team operations contract
 
 - `notifications` contains recipient-scoped, deduplicated in-app events for assignment, dependency unlock, review, blocking, completion, and revision requests. Authenticated clients can read only their own rows and can change only their own read state.
+- A database Cron job materializes due-soon, overdue, and 24-hour leadership-escalation events every ten minutes. Dedupe keys make each deadline window idempotent, and the job performs no external network call.
+- Deadline reminders stay disabled for a one-member workspace. They begin only after a second active member exists, which prevents personal test tasks from being mistaken for real team alerts.
 - `member_presence` stores only the current product section, session start, and a one-minute heartbeat. A write guard fixes identity and timestamps server-side. The system does not store clicks, keystrokes, document contents, or a covert page-by-page history.
 - Leadership can request a report for up to 366 days. Counts come from canonical tasks, task events, and revision records: requested, assigned, completed, on-time, late, overdue, review submissions, and revisions.
 - The report deliberately has no productivity score or employee ranking. Different roles are not reduced to a single misleading number, and the presence panel is not evidence of work quality.
+
+## Quarterly content-planning contract
+
+- `content_plans` owns the period, commercial objective, audience, offer, and primary metric. Only one plan can be active for an organization at a time.
+- `content_plan_pillars` expresses the few recurring content themes and target quantities; it is planning input, not evidence of production.
+- `content_plan_items` is the dated calendar. Every item has one owner, one publish time, a format, an objective, and optional platforms, hook, and CTA direction inside the plan period.
+- Saving a calendar item never creates tasks automatically. Leadership explicitly links it to one canonical `content_items` record after the brief is ready, avoiding a second workflow and duplicate work.
+- Once linked, database triggers derive the calendar state from the content source of truth. Published or cancelled history is retained rather than deleted.
+- The leadership dashboard reads live domain tables and the `get_workspace_readiness` RPC. Readiness checks are explainable links to their source sections, not a self-reported percentage.
 
 ## Content production contract
 

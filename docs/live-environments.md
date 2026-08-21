@@ -34,6 +34,8 @@ Applied migrations:
 20. `launch_execution_plan`: versioned gate outputs, quantified/budgeted launch deliverables, canonical linked tasks, dependency mirroring, delivery evidence guards, RLS, audit events, and Realtime state.
 21. `launch_execution_fk_indexes`: exact-order covering indexes for all new composite launch-execution foreign keys reported by the performance advisor.
 22. `team_onboarding_and_access_control`: owner-only, email-bound one-time claim links, first-day acknowledgements, role/status management, safe suspension guards, RLS, and immutable audit evidence. Existing owner access was backfilled as complete and no invitation row was created.
+23. Subsequent controlled foundations add compact task/content execution, notifications and presence, publishing safety, script AI/versioning, and production delivery contracts.
+24. `team_readiness_reminders_and_planning` plus `content_planning_fk_indexes`: quarterly plans, pillars and calendar items with RLS/audit/history, content-state synchronization, a leadership-only readiness RPC, a deduplicated ten-minute deadline reminder job, complete presence-section validation, and full foreign-key index coverage for the new calendar plus the missing publishing media composite index. They create no plan, task, invitation, customer, or external message.
 
 Deployed Edge Functions:
 
@@ -65,5 +67,11 @@ Verification on 2026-08-17:
 - Brand commands and content-reference wrappers are service-role only; authenticated users receive audience-aware, organization-filtered reads through RLS and no direct table writes.
 - A rollback-only brand test verified draft creation, optimistic editing, owner approval, atomic content linking, revision history, previous-version archiving, and preserved exact content references without leaving test data.
 - Team invitation and access commands are executable only by `service_role`; `anon` and direct authenticated RPC access are denied. The invitation table is owner-readable through RLS, contains only token hashes, and remained empty after deployment verification.
+
+Additional verification on 2026-08-22:
+
+- The planning migration was transaction-tested with rollback before being applied to the live project.
+- Deadline materialization performs database-only, recipient-scoped inserts and stays silent while only the owner is active.
+- The hosted application remains private and no invitation, Telegram send, customer import, or external analytics action was triggered by this release.
 
 Never commit `.env.local`, secret keys, legacy service-role keys, or production customer data.

@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("shared navigation covers every primary route", async () => {
   const source = await readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8");
-  for (const route of ["/tasks", "/content", "/scripts", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/team", "/settings"]) {
+  for (const route of ["/tasks", "/content", "/planning", "/scripts", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/team", "/settings"]) {
     assert.match(source, new RegExp(`href(?::|=)\\s*["']${route}`));
   }
 });
@@ -15,6 +15,7 @@ test("internal navigation remains usable when the experimental client router fai
     "../components/layout/SidebarNav.tsx",
     "../components/ui/Button.tsx",
     "../components/content/ContentWorkspace.tsx",
+    "../components/planning/PlanningWorkspace.tsx",
     "../components/campaigns/CampaignsWorkspace.tsx",
   ].map((path) => readFile(new URL(path, import.meta.url), "utf8")));
 
@@ -219,7 +220,7 @@ test("Supabase client consumes generated database types", async () => {
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
   assert.match(client, /createClient<Database>/);
-  for (const table of ["audit_events", "brand_articles", "content_assets", "content_brand_references", "content_items", "content_revision_requests", "content_timeline_cues", "crm_activities", "crm_contacts", "crm_conversation_links", "crm_identities", "launch_content_items", "launches", "memberships", "organizations", "profiles", "publishing_channels", "publishing_occurrences", "publishing_publication_logs", "publishing_schedules", "publishing_telegram_assets", "task_dependencies", "tasks", "task_events"]) {
+  for (const table of ["audit_events", "brand_articles", "content_assets", "content_brand_references", "content_items", "content_plan_items", "content_plan_pillars", "content_plans", "content_revision_requests", "content_timeline_cues", "crm_activities", "crm_contacts", "crm_conversation_links", "crm_identities", "launch_content_items", "launches", "memberships", "organizations", "profiles", "publishing_channels", "publishing_occurrences", "publishing_publication_logs", "publishing_schedules", "publishing_telegram_assets", "task_dependencies", "tasks", "task_events"]) {
     assert.match(types, new RegExp(`${table}:`));
   }
 });
@@ -235,6 +236,7 @@ test("background auth events do not reload the active workspace", async () => {
   const workspaces = await Promise.all([
     "../components/tasks/TasksWorkspace.tsx",
     "../components/content/ContentWorkspace.tsx",
+    "../components/planning/PlanningWorkspace.tsx",
     "../components/scripts/ScriptsWorkspace.tsx",
     "../components/scripts/ScriptEditor.tsx",
     "../components/publishing/PublishingWorkspace.tsx",
@@ -248,6 +250,47 @@ test("background auth events do not reload the active workspace", async () => {
     assert.doesNotMatch(workspace, /auth\.getSession\(\)/);
     assert.doesNotMatch(workspace, /auth\.onAuthStateChange/);
   }
+});
+
+test("quarterly planning, readiness, and deadline reminders are database-governed", async () => {
+  const [migration, indexes, planning, dashboard, navigation, presence, types, packageJson] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260821230406_team_readiness_reminders_and_planning.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260821232458_content_planning_fk_indexes.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/planning/PlanningWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/dashboard/LeadershipDashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/PresenceReporter.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ]);
+
+  for (const table of ["content_plans", "content_plan_pillars", "content_plan_items"]) {
+    assert.match(migration, new RegExp(`create table public\\.${table}`));
+    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(types, new RegExp(`${table}:`));
+  }
+  assert.match(migration, /content_plans_one_active_per_org_idx/);
+  assert.match(migration, /Planned publish time must be inside the plan period/);
+  assert.match(migration, /sync_content_plan_item_from_content/);
+  assert.match(migration, /materialize_task_deadline_notifications/);
+  assert.match(migration, /market-whales-task-deadline-reminders/);
+  assert.match(migration, /count\(\*\).*memberships[\s\S]*> 1/);
+  assert.match(migration, /task_due_soon/);
+  assert.match(migration, /task_overdue_escalated/);
+  assert.match(migration, /function public\.get_workspace_readiness/);
+  assert.match(types, /get_workspace_readiness:/);
+  for (const index of ["content_plans_creator_idx", "content_plan_pillars_plan_org_idx", "content_plan_items_plan_org_idx", "content_plan_items_pillar_org_idx"]) {
+    assert.match(indexes, new RegExp(index));
+  }
+  assert.match(planning, /لن تُنشأ أي مهام تلقائيًا/);
+  assert.match(planning, /ربط بمصنع المحتوى/);
+  assert.match(dashboard, /بوابة حقيقية من البيانات/);
+  assert.match(dashboard, /تدوير توكن Telegram/);
+  assert.match(navigation, /href: "\/planning"/);
+  assert.match(presence, /\["\/planning", "planning"\]/);
+  assert.match(packageJson, /"lint": "eslint/);
+  assert.match(packageJson, /"typecheck": "tsc --noEmit"/);
+  assert.match(packageJson, /"test": "pnpm run build/);
 });
 
 test("Telegram intake is an optional reviewed path with a secured execution timeline", async () => {

@@ -1,14 +1,14 @@
 import type { SectionConfig } from "../components/sections/SectionOverview";
 
 export const sections: Record<string, SectionConfig> = {
-  tasks: { eyebrow: "مهام الفريق", title: "كل شخص يعرف دوره والخطوة التالية", description: "بورد موحّد بمسؤول واحد، موعد، معيار قبول، ومراجعة واضحة لكل مهمة.", status: "قيد التصميم", statusTone: "info", nextStep: "اعتماد حالات المهمة وقواعد الانتقال", capabilities: [
+  tasks: { eyebrow: "مهام الفريق", title: "كل شخص يعرف دوره والخطوة التالية", description: "بورد موحّد بمسؤول واحد، موعد، معيار قبول، ومراجعة واضحة لكل مهمة.", status: "الأساس جاهز للاختبار", statusTone: "success", nextStep: "اختبار تسليم كامل بحساب عضو تجريبي", capabilities: [
     { title: "ملكية واضحة", description: "مسؤول واحد مباشر ومشاركون دون ضياع للمساءلة." },
     { title: "موعد ومعيار قبول", description: "المهمة لا تبدأ من دون deadline وتعريف واضح لكلمة تم." },
     { title: "تسليم تلقائي", description: "بعد الاعتماد ينتقل العمل للتخصص التالي ويصله تنبيه." },
     { title: "تصعيد التأخير", description: "تذكير ثم تصعيد للمدير وفق قواعد ثابتة وقابلة للقياس." },
   ]},
   content: { eyebrow: "مصنع المحتوى", title: "من الفكرة إلى النشر في مسار واحد", description: "الخطة والـbrief والخام والمونتاج والغلاف والكابشن والنتائج مرتبطة بنفس أصل المحتوى.", status: "الأساس جاهز للاختبار", statusTone: "success", nextStep: "اختبار أول ريلز ثم ربط الأصول", capabilities: [
-    { title: "تقويم ربع سنوي", description: "ربط أهداف الربع بالأعمدة والحملات ومواعيد النشر." },
+    { title: "تقويم ربع سنوي", description: "خطة وأعمدة ومواعيد فعلية مرتبطة بحالة التنفيذ من دون تكرار." },
     { title: "خط إنتاج", description: "كتابة، تسجيل، مونتاج، تصميم، مراجعة، جدولة ثم نشر." },
     { title: "مكتبة براند", description: "مرجع واضح للمصمم والمونتير: ما يصح وما لا يصح." },
     { title: "إعادة استخدام", description: "تحويل أصل واحد إلى ريلز وبوست وإيميل وقطع قصيرة." },
@@ -37,7 +37,7 @@ export const sections: Record<string, SectionConfig> = {
     { title: "Onboarding", description: "مسار دخول قصير يشرح الشركة والأدوات وقواعد التسليم." },
     { title: "مراجعة أداء", description: "تقييم مبني على اتفاقات وأرقام وسلوك عمل واضح." },
   ]},
-  settings: { eyebrow: "الإعدادات والتكاملات", title: "مركز تحكم واحد للسيستم كله", description: "سياسات مشتركة، قوالب، صلاحيات وتكاملات من دون إعدادات متضاربة بين الصفحات.", status: "للمالك فقط", statusTone: "info", nextStep: "إنشاء مشروع Supabase وربط البيئة", capabilities: [
+  settings: { eyebrow: "الإعدادات والتكاملات", title: "مركز تحكم واحد للسيستم كله", description: "سياسات مشتركة، قوالب، صلاحيات وتكاملات من دون إعدادات متضاربة بين الصفحات.", status: "للمالك فقط", statusTone: "info", nextStep: "تدوير أسرار Telegram ومراجعة التكاملات قبل دخول الفريق", capabilities: [
     { title: "مصادر الهوية", description: "إعداد الدخول والجلسات والصلاحيات من مكان واحد." },
     { title: "قوالب التشغيل", description: "حالات ومواعيد ومعايير قبول مشتركة لكل الأقسام." },
     { title: "تكاملات", description: "Telegram وDrive وMeta والموقع ضمن مفاتيح آمنة." },

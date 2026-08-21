@@ -5,10 +5,22 @@
 1. Stabilize identity, permissions, tasks, and the content production line.
 2. Add the manual CRM foundation and accountable follow-up tasks without importing or messaging production customers.
 3. Build the brand knowledge center so briefs, design, editing, and copy use one approved reference.
-4. Define metric ownership and add approved manual observations before connecting external analytics.
-5. Add external integrations incrementally, starting in test mode with explicit owner approval.
+4. Build one quarterly plan, a dated content calendar, and an evidence-based team-readiness gate.
+5. Define metric ownership and add approved manual observations before connecting external analytics.
+6. Add external integrations incrementally, starting in test mode with explicit owner approval.
 
 The brand knowledge foundation is now implemented: drafts, owner approval, immutable version history, audience-aware reads, and exact references on new content workflows. It contains no invented brand rules; the owner will add and approve the real material during personal testing.
+
+The planning foundation is now implemented: one active quarterly plan, content pillars, a dated owner-based calendar, explicit linking to canonical content, automatic state synchronization, a live leadership dashboard, and deduplicated in-app deadline reminders. No plan, pillar, calendar line, or team alert was seeded for the owner.
+
+## Before real team onboarding
+
+1. Approve at least four real brand references covering identity, writing, editing, and design/publishing rules.
+2. Create and activate one real content plan with at least the first four scheduled items.
+3. Rotate the Telegram bot token, confirm only intended channels are allowlisted, and manually inspect any `unknown` publication result.
+4. Test the AI provider, one invited account, least-privilege visibility, one task handoff, one revision, and one completed notification flow.
+5. Review the final domain/Auth redirects and hosted-site access policy before inviting a real employee.
+6. Keep analytics, imports, customer messaging, Meta publishing, and direct uploads visibly off until each trusted integration is approved and verified.
 
 ## Current raw-material contract
 

@@ -31,7 +31,7 @@ This starter does not use `wrangler.jsonc`.
 
 ## Important status
 
-The identity, owner-controlled team onboarding, task-management, reel-production, campaign-launch, manual CRM, and brand-knowledge foundations are ready for controlled testing. No real team invitation has been sent, no production customers have been imported, and no sales message or external analytics integration is active.
+The identity, owner-controlled team onboarding, task-management, deadline-reminder, quarterly content-planning, reel-production, campaign-launch, manual CRM, brand-knowledge, and Telegram publishing foundations are ready for controlled owner testing. The leadership dashboard reads live operational data and exposes an explicit readiness gate. No real team invitation has been sent, no production customers have been imported, and no sales message or external analytics integration is active.
 
 ## First owner setup
 
@@ -80,6 +80,16 @@ Only an active organization owner can list or mutate provider settings. Team mem
 5. The final publishing task is a manual confirmation until a verified Meta/platform integration is added.
 
 Telegram remains the raw-material inbox for now: paste the direct message/file link with the request. Direct uploads are deliberately deferred to the private Storage phase documented in `docs/roadmap.md`.
+
+## Personal quarterly-planning test
+
+1. Open `/planning` and create a draft covering roughly one quarter with one commercial objective, audience, and optional offer/primary metric.
+2. Add two or three real content pillars with target quantities. Add only the first week to the calendar so capacity is tested before the quarter is filled.
+3. Give every calendar item a format, owner, publish time in Cairo, objective, platforms, and optional hook/CTA direction. Saving a plan item does not create tasks.
+4. Create or review the execution brief in `/content`, then link it from the calendar item. From that point, the calendar status follows the canonical content item instead of becoming a second workflow.
+5. Activate the plan only after its first four items exist. Open `/` and use the readiness panel to see which operating prerequisites are still missing.
+
+The database creates deduplicated in-app due-soon, overdue, and leadership-escalation notifications every ten minutes. The job remains silent while the workspace has only one active member, so owner testing does not generate fake team alerts.
 
 ## Personal launch test
 
