@@ -1,7 +1,6 @@
 "use client";
 
 import { Bell, CheckCheck, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
@@ -13,7 +12,6 @@ function formatNotificationTime(value: string) {
 }
 
 export function NotificationCenter() {
-  const router = useRouter();
   const configured = isSupabaseConfigured();
   const [open, setOpen] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -101,7 +99,7 @@ export function NotificationCenter() {
     await markRead(notification);
     setLiveAlert(null);
     setOpen(false);
-    router.push(notification.url);
+    window.location.assign(notification.url);
   }
 
   if (!userId) return null;

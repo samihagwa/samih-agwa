@@ -58,6 +58,9 @@ type ContentBrandReference = Tables<"content_brand_references">;
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
+type CaptionOption = { label: string; caption: string; hashtags: string[] };
+type ThumbnailOption = { label: string; cover_text: string; visual_direction: string; script_connection: string };
+type AiChoiceSet<T> = { version: number; options: T[] };
 
 type TeamPerson = { id: string; name: string; role: Membership["role"] };
 type Workspace = { organization: Organization; membership: Membership; people: TeamPerson[] };
@@ -83,6 +86,16 @@ function toLocalDateTimeInput(date: Date) {
 
 function formText(form: FormData, name: string) {
   return String(form.get(name) ?? "").trim();
+}
+
+function captionOptionText(option: CaptionOption) {
+  const hashtags = option.hashtags.map((tag) => tag.trim()).filter(Boolean)
+    .map((tag) => tag.startsWith("#") ? tag : `#${tag}`);
+  return [option.caption.trim(), hashtags.join(" ")].filter(Boolean).join("\n\n");
+}
+
+function thumbnailOptionText(option: ThumbnailOption) {
+  return `النص على الغلاف: ${option.cover_text}\nالاتجاه البصري: ${option.visual_direction}\nصلته بالاسكريبت: ${option.script_connection}`;
 }
 
 function BrandReferenceSelector({ articles }: { articles: BrandArticle[] }) {
@@ -113,6 +126,9 @@ export function ContentWorkspace() {
   const [reviewFormTaskId, setReviewFormTaskId] = useState<string | null>(null);
   const [deliveryFormTaskId, setDeliveryFormTaskId] = useState<string | null>(null);
   const [contentFilter, setContentFilter] = useState<ContentFilter>("active");
+  const [captionChoices, setCaptionChoices] = useState<Record<string, AiChoiceSet<CaptionOption>>>({});
+  const [thumbnailChoices, setThumbnailChoices] = useState<Record<string, AiChoiceSet<ThumbnailOption>>>({});
+  const [aiWorking, setAiWorking] = useState<string | null>(null);
   const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
@@ -133,6 +149,9 @@ export function ContentWorkspace() {
     setRevisionFormId(null);
     setReviewFormTaskId(null);
     setDeliveryFormTaskId(null);
+    setCaptionChoices({});
+    setThumbnailChoices({});
+    setAiWorking(null);
     setExpandedContentIds(new Set());
   }, []);
 
@@ -306,6 +325,54 @@ export function ContentWorkspace() {
     setNotice(successMessage);
     await refreshContent(workspace.organization.id);
     return true;
+  }
+
+  async function generateContentAiChoices(item: ContentItem, scope: "caption" | "thumbnail") {
+    const workingKey = `${item.id}:${scope}`;
+    setAiWorking(workingKey);
+    setError(null);
+    setNotice(null);
+    const { data, error: functionError } = await getSupabaseBrowserClient().functions.invoke("script-ai", {
+      body: {
+        content_id: item.id,
+        expected_edit_version: item.version,
+        mode: "improve",
+        scope,
+      },
+    });
+    setAiWorking(null);
+    if (functionError) {
+      setError(await getSupabaseFunctionErrorMessage(functionError, `تعذّر توليد اقتراحات ${scope === "caption" ? "الكابشن" : "الغلاف"}.`));
+      return;
+    }
+    const generated = (data as { generated?: { caption_options?: CaptionOption[]; thumbnail_options?: ThumbnailOption[] } } | null)?.generated;
+    const quality = (data as { quality?: { removed_options?: number } } | null)?.quality;
+    const removed = Number(quality?.removed_options ?? 0);
+    const guardNote = removed ? ` الحارس أخفى ${removed} اقتراح غير مطابق من غير استهلاك طلب إضافي.` : "";
+    if (scope === "caption") {
+      const options = Array.isArray(generated?.caption_options) ? generated.caption_options : [];
+      setCaptionChoices((current) => ({ ...current, [item.id]: { version: item.version, options } }));
+      setNotice(`ظهر ${options.length} اقتراحات كابشن. لم يُحفظ شيء؛ صاحب المهمة يختار واحدًا بعلامة صح.${guardNote}`);
+    } else {
+      const options = Array.isArray(generated?.thumbnail_options) ? generated.thumbnail_options : [];
+      setThumbnailChoices((current) => ({ ...current, [item.id]: { version: item.version, options } }));
+      setNotice(`ظهر ${options.length} اقتراحات غلاف مبنية على الاسكريبت النهائي. لم يُحفظ شيء؛ المصمم يختار واحدًا بعلامة صح.${guardNote}`);
+    }
+  }
+
+  async function applyContentAiChoice(item: ContentItem, scope: "caption" | "thumbnail", version: number, selectedText: string) {
+    const applied = await runCommand({
+      action: "apply_ai_choice",
+      content_item_id: item.id,
+      scope,
+      expected_content_version: version,
+      selected_text: selectedText,
+    }, scope === "caption"
+      ? "تم اعتماد الكابشن المختار داخل ملف الريلز. راجعه قبل إغلاق خطوة الكتابة."
+      : "تم اعتماد تعليمات الغلاف داخل ملف الريلز، وسيجدها المصمم عند فتح المهمة.");
+    if (!applied) return;
+    if (scope === "caption") setCaptionChoices((current) => { const next = { ...current }; delete next[item.id]; return next; });
+    else setThumbnailChoices((current) => { const next = { ...current }; delete next[item.id]; return next; });
   }
 
   async function createWorkflow(event: FormEvent<HTMLFormElement>) {
@@ -561,6 +628,7 @@ export function ContentWorkspace() {
         const progress = workTasks.length ? Math.round((doneCount / workTasks.length) * 100) : 0;
         const openRevisions = itemRevisions.filter((revision) => ["requested", "in_progress"].includes(revision.status));
         const editingTask = itemTasks.find((task) => task.content_step === "editing");
+        const thumbnailTask = itemTasks.find((task) => task.content_step === "thumbnail");
         const captionTask = itemTasks.find((task) => task.content_step === "caption");
         const captionDelivery = captionTask ? deliveriesByTask.get(captionTask.id) : undefined;
         const workflowOwner = itemTasks.some((task) => task.owner_id === session.user.id);
@@ -582,6 +650,14 @@ export function ContentWorkspace() {
           && (isSocialPost || task.content_step !== "caption"));
         const platformLabel = item.platforms.map((platform) => platform.charAt(0).toUpperCase() + platform.slice(1)).join(" + ");
         const expanded = expandedContentIds.has(item.id);
+        const canUseCaptionAi = Boolean(!isSocialPost && !captionDelivery && captionTask
+          && !["done", "cancelled"].includes(captionTask.status)
+          && (manager || captionTask.owner_id === session.user.id));
+        const canUseThumbnailAi = Boolean(!isSocialPost && thumbnailTask
+          && !["done", "cancelled"].includes(thumbnailTask.status)
+          && (manager || thumbnailTask.owner_id === session.user.id));
+        const itemCaptionChoices = captionChoices[item.id];
+        const itemThumbnailChoices = thumbnailChoices[item.id];
 
         return <article className="panel content-card" id={`content-${item.id}`} key={item.id}>
           <header>
@@ -618,6 +694,11 @@ export function ContentWorkspace() {
             {item.brand_notes ? <div><small>استثناءات أو ملاحظات خاصة</small><p>{item.brand_notes}</p></div> : null}
           </div>}
 
+          {canUseThumbnailAi ? <section className="content-ai-choice-panel">
+            <div className="content-ai-choice-heading"><div><Sparkles size={16} /><div><strong>مساعد الغلاف للمصمم</strong><small>يقرأ الاسكريبت والفكرة ثم يعرض بدائل فقط؛ لا يعتمد شيئًا تلقائيًا.</small></div></div><Button type="button" variant="secondary" disabled={Boolean(aiWorking) || working} onClick={() => void generateContentAiChoices(item, "thumbnail")}>{aiWorking === `${item.id}:thumbnail` ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} 3 اقتراحات غلاف</Button></div>
+            {itemThumbnailChoices?.options.length ? <div className="script-variants-grid" aria-label="اقتراحات الغلاف داخل مصنع المحتوى">{itemThumbnailChoices.options.map((option, index) => <article key={`${option.label}-${index}`}><header><span>غلاف {index + 1}</span><strong>{option.label}</strong></header><p><strong>النص:</strong> {option.cover_text}</p><p><strong>الاتجاه البصري:</strong> {option.visual_direction}</p><p><strong>صلته بالنص:</strong> {option.script_connection}</p><Button type="button" disabled={working} onClick={() => void applyContentAiChoice(item, "thumbnail", itemThumbnailChoices.version, thumbnailOptionText(option))}><CheckCircle2 size={14} /> اختيار واعتماد للمهمة</Button></article>)}</div> : <small className="content-ai-cost-note">الضغط يستهلك طلب API واحد. الاختيار فقط هو الذي يُحفظ ويُرسل لمهمة الغلاف.</small>}
+          </section> : null}
+
           {!isSocialPost && captionTask ? <section className="reel-caption-panel">
             <div className="reel-caption-heading">
               <div><MessageSquareText size={17} /><div><p className="overline">داخل ملف الريلز</p><h4>الكابشن النهائي</h4></div></div>
@@ -626,9 +707,11 @@ export function ContentWorkspace() {
             {captionDelivery ? <div className="saved-reel-caption"><span>آخر حفظ: إصدار {captionDelivery.version} · {formatDate(captionDelivery.submitted_at)}</span><p>{captionDelivery.result_note}</p></div>
               : item.caption_brief ? <div className="saved-reel-caption"><span>مسودة مختارة من استوديو الاسكريبتات — راجعها قبل الإغلاق</span><p>{item.caption_brief}</p></div>
                 : <p className="reel-caption-empty">صانع المحتوى يكتب الكابشن هنا بعد تثبيت الفكرة. لا تُنشأ له مهمة ثانية في البورد، وسيُراجع الكابشن مع الفيديو والغلاف مرة واحدة.</p>}
+            {canUseCaptionAi ? <div className="content-caption-ai-actions"><Button type="button" variant="secondary" disabled={Boolean(aiWorking) || working} onClick={() => void generateContentAiChoices(item, "caption")}>{aiWorking === `${item.id}:caption` ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />} 3 اقتراحات كابشن بالـAI</Button><small>طلب API واحد، ولا يُحفظ اقتراح قبل اختيارك.</small></div> : null}
+            {canUseCaptionAi && itemCaptionChoices?.options.length ? <div className="script-variants-grid" aria-label="اقتراحات الكابشن داخل مصنع المحتوى">{itemCaptionChoices.options.map((option, index) => <article key={`${option.label}-${index}`}><header><span>كابشن {index + 1}</span><strong>{option.label}</strong></header><p>{option.caption}</p><small>{option.hashtags.join(" ")}</small><Button type="button" disabled={working} onClick={() => void applyContentAiChoice(item, "caption", itemCaptionChoices.version, captionOptionText(option))}><CheckCircle2 size={14} /> اختيار ووضعه في الملف</Button></article>)}</div> : null}
             {(manager || captionTask.owner_id === session.user.id) && ["ready", "in_progress", "review", "done"].includes(captionTask.status) ? <>
               {captionDelivery && deliveryFormTaskId !== captionTask.id ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(captionTask.id)}><Pencil size={12} /> تعديل الكابشن</button> : null}
-              {(!captionDelivery || deliveryFormTaskId === captionTask.id) ? <form className="reel-caption-form" onSubmit={(event) => void submitStepDelivery(event, captionTask)}>
+              {(!captionDelivery || deliveryFormTaskId === captionTask.id) ? <form className="reel-caption-form" key={`caption-form-${item.id}-${item.version}`} onSubmit={(event) => void submitStepDelivery(event, captionTask)}>
                 <label><span>نص الكابشن والهاشتاجات</span><textarea name="result_note" minLength={3} maxLength={10000} rows={6} required defaultValue={captionDelivery?.result_note ?? item.caption_brief} placeholder={`اكتب الكابشن النهائي، ثم CTA واضح مثل: ${item.cta}\nوأضف الهاشتاجات المناسبة في النهاية.`} /></label>
                 <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ الكابشن وإغلاق الخطوة</Button>{captionDelivery ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button> : null}<small>الحفظ يغلق خطوة الكتابة ويفتح ما يليها تلقائيًا.</small></div>
               </form> : null}

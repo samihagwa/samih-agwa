@@ -152,7 +152,16 @@ function scriptInput(rawScript: Record<string, unknown>, mode: string, scope: st
     content_pillar: rawScript.content_pillar, edit_version: rawScript.edit_version,
   };
   if (productionScopes.has(scope) || mode === "improve") {
-    return { ...base, hook_variants: rawScript.hook_variants, spoken_script: rawScript.spoken_script };
+    return {
+      ...base,
+      hook_variants: rawScript.hook_variants,
+      spoken_script: rawScript.spoken_script,
+      cta: rawScript.cta,
+      caption: rawScript.caption,
+      hashtags: rawScript.hashtags,
+      thumbnail_notes: rawScript.thumbnail_notes,
+      brand_notes: rawScript.brand_notes,
+    };
   }
   return base;
 }
@@ -365,13 +374,15 @@ export default {
 
     let body: Record<string, unknown>;
     try { body = await request.json(); } catch { return jsonResponse({ message: "بيانات الطلب غير صالحة." }, 400); }
-    const scriptId = text(body.script_id); const researchId = text(body.research_id);
+    const scriptId = text(body.script_id); const researchId = text(body.research_id); const contentId = text(body.content_id);
     const mode = text(body.mode) || "idea"; const scope = text(body.scope) || "script_variants";
     const selectedStory = text(body.selected_story); const generationDirection = text(body.generation_direction);
     const expectedVersion = Number(body.expected_edit_version);
-    if ((!scriptId && !researchId) || (scriptId && researchId) || !modes.has(mode) || !scopes.has(scope)) return jsonResponse({ message: "حدد الفكرة ونوع مساعدة AI المطلوب." }, 400);
+    const targetCount = [scriptId, researchId, contentId].filter(Boolean).length;
+    if (targetCount !== 1 || !modes.has(mode) || !scopes.has(scope)) return jsonResponse({ message: "حدد الفكرة ونوع مساعدة AI المطلوب." }, 400);
     if (researchId && !writingScopes.has(scope)) return jsonResponse({ message: "تعليمات التنفيذ لا تبدأ إلا بعد حفظ واعتماد الاسكريبت." }, 400);
-    if (scriptId && (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1)) return jsonResponse({ message: "حدّث الاسكريبت قبل استخدام AI." }, 400);
+    if (contentId && !selectableProductionScopes.has(scope)) return jsonResponse({ message: "داخل مصنع المحتوى يتاح توليد بدائل الكابشن أو الغلاف فقط." }, 400);
+    if ((scriptId || contentId) && (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1)) return jsonResponse({ message: "حدّث العنصر قبل استخدام AI." }, 400);
     if (selectedStory.length > 2000 || generationDirection.length > 1500) return jsonResponse({ message: "اختيار القصة أو توجيه الكتابة أطول من المسموح." }, 400);
 
     const { count } = await context.supabaseAdmin.from("audit_events").select("id", { count: "exact", head: true })
@@ -379,17 +390,18 @@ export default {
       .gte("occurred_at", new Date(Date.now() - 60_000).toISOString());
     if ((count ?? 0) >= 5) return jsonResponse({ message: "استنى دقيقة قبل طلب توليد جديد لحماية الميزانية." }, 429);
 
-    const contextRpc = researchId ? "get_script_research_ai_context" : "get_script_ai_context";
+    const contextRpc = researchId ? "get_script_research_ai_context" : contentId ? "get_content_ai_context" : "get_script_ai_context";
     const contextArgs = researchId ? { target_user_id: context.userClaims.id, target_research_id: researchId }
-      : { target_user_id: context.userClaims.id, target_script_id: scriptId };
+      : contentId ? { target_user_id: context.userClaims.id, target_content_item_id: contentId, target_scope: scope }
+        : { target_user_id: context.userClaims.id, target_script_id: scriptId };
     const { data: aiContext, error: contextError } = await context.supabaseAdmin.rpc(contextRpc, contextArgs);
     if (contextError || !aiContext) return jsonResponse({ message: "ليس لديك صلاحية للتوليد أو العنصر لم يعد قابلًا للتعديل." }, 403);
 
     const contextObject = aiContext as Record<string, unknown>; const contextScript = record(contextObject.script);
-    if (scriptId && Number(contextScript.edit_version) !== expectedVersion) return jsonResponse({ message: "الاسكريبت اتعدل. حدّث الصفحة قبل استخدام AI." }, 409);
-    if (productionScopes.has(scope) && contextScript.status !== "ready_to_record") return jsonResponse({ message: "اعتمد النص النهائي «جاهز للتصوير» أولًا، وبعدها أنشئ تعليمات التنفيذ." }, 400);
+    if ((scriptId || contentId) && Number(contextScript.edit_version) !== expectedVersion) return jsonResponse({ message: `${contentId ? "ملف المحتوى" : "الاسكريبت"} اتعدل. حدّث الصفحة قبل استخدام AI.` }, 409);
+    if (!contentId && productionScopes.has(scope) && contextScript.status !== "ready_to_record") return jsonResponse({ message: "اعتمد النص النهائي «جاهز للتصوير» أولًا، وبعدها أنشئ تعليمات التنفيذ." }, 400);
 
-    const providerRpc = researchId ? "get_script_research_ai_provider_runtime" : "get_script_ai_provider_runtime";
+    const providerRpc = researchId ? "get_script_research_ai_provider_runtime" : contentId ? "get_content_ai_provider_runtime" : "get_script_ai_provider_runtime";
     const { data: providerData, error: providerError } = await context.supabaseAdmin.rpc(providerRpc, contextArgs);
     const provider = parseProviderRuntime(providerData);
     if (providerError || !provider) return jsonResponse({ message: "أضف مزوّد AI من الإعدادات واجعله افتراضيًا قبل التوليد." }, 503);
@@ -398,8 +410,8 @@ export default {
     if ("error" in prepared) return jsonResponse({ message: prepared.error }, 400);
     const { error: requestAuditError } = await context.supabaseAdmin.from("audit_events").insert({
       organization_id: text(contextScript.organization_id), actor_id: context.userClaims.id,
-      action: "script.ai_request_started", entity_type: researchId ? "script_research" : "script",
-      entity_id: researchId || scriptId, after_data: { scope, mode, provider_id: provider.id },
+      action: "script.ai_request_started", entity_type: researchId ? "script_research" : contentId ? "content_item" : "script",
+      entity_id: researchId || contentId || scriptId, after_data: { scope, mode, provider_id: provider.id },
     });
     if (requestAuditError) return jsonResponse({ message: "تعذّر تسجيل طلب التوليد، لذلك أوقفناه قبل استهلاك الرصيد." }, 503);
     let providerResult;
@@ -459,8 +471,8 @@ export default {
     } else {
       await context.supabaseAdmin.from("audit_events").insert({
         organization_id: text(contextScript.organization_id), actor_id: context.userClaims.id,
-        action: "script.ai_preview_generated", entity_type: researchId ? "script_research" : "script",
-        entity_id: researchId || scriptId, after_data: { scope, mode, provider_id: provider.id },
+        action: "script.ai_preview_generated", entity_type: researchId ? "script_research" : contentId ? "content_item" : "script",
+        entity_id: researchId || contentId || scriptId, after_data: { scope, mode, provider_id: provider.id },
       });
     }
     return jsonResponse({ generated, editVersion, saved: savesProduction,

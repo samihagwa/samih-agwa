@@ -381,6 +381,15 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .reel-caption-form label > span { color: var(--ink-800); font-size: 12px; font-weight: 900; }
 .reel-caption-form textarea { min-height: 130px; background: var(--paper); }
 .reel-caption-form .form-actions { margin-top: 0; }
+.content-ai-choice-panel { margin-top: 12px; padding: 14px; display: grid; gap: 12px; border: 1px dashed #9ac9bd; border-radius: 13px; background: #f3faf7; }
+.content-ai-choice-heading, .content-ai-choice-heading > div, .content-caption-ai-actions { display: flex; align-items: center; gap: 9px; }
+.content-ai-choice-heading { justify-content: space-between; }
+.content-ai-choice-heading > div > svg { flex: 0 0 auto; color: var(--teal-700); }
+.content-ai-choice-heading > div > div { display: grid; gap: 2px; }
+.content-ai-choice-heading strong { font-size: 12px; }
+.content-ai-choice-heading small, .content-ai-cost-note, .content-caption-ai-actions small { color: var(--ink-500); font-size: 10px; line-height: 1.6; }
+.content-caption-ai-actions { margin-top: 11px; flex-wrap: wrap; }
+.content-ai-choice-panel .script-variants-grid, .reel-caption-panel .script-variants-grid { margin-top: 0; }
 .reel-approval-panel { margin-top: 12px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas); }
 .reel-approval-panel > div:first-child { display: flex; align-items: flex-start; gap: 9px; }
 .reel-approval-panel > div:first-child > svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal-700); }

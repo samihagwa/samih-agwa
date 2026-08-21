@@ -2783,6 +2783,16 @@ export type Database = {
         }
         Returns: string
       }
+      apply_content_ai_choice: {
+        Args: {
+          expected_content_version: number
+          selected_text: string
+          target_content_item_id: string
+          target_scope: string
+          target_user_id: string
+        }
+        Returns: number
+      }
       add_crm_identity: {
         Args: {
           identity_kind: Database["public"]["Enums"]["crm_identity_kind"]
@@ -3382,6 +3392,22 @@ export type Database = {
           won_contacts: number
           won_in_period: number
         }[]
+      }
+      get_content_ai_context: {
+        Args: {
+          target_content_item_id: string
+          target_scope: string
+          target_user_id: string
+        }
+        Returns: Json
+      }
+      get_content_ai_provider_runtime: {
+        Args: {
+          target_content_item_id: string
+          target_scope: string
+          target_user_id: string
+        }
+        Returns: Json
       }
       get_script_ai_context: {
         Args: { target_script_id: string; target_user_id: string }

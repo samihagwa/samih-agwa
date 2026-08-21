@@ -765,6 +765,8 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
   assert.match(notificationCenter, /30_000/);
   assert.match(notificationCenter, /visibilitychange/);
   assert.match(notificationCenter, /notification-toast/);
+  assert.match(notificationCenter, /window\.location\.assign\(notification\.url\)/);
+  assert.doesNotMatch(notificationCenter, /useRouter|router\.push/);
   assert.match(presenceReporter, /60_000/);
   assert.match(presenceReporter, /\["\/publishing", "publishing"\]/);
   assert.match(presenceReporter, /addEventListener\("focus"/);
@@ -776,4 +778,39 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
   assert.match(teamWorkspace, /آخر 30 يوم/);
   assert.match(teamWorkspace, /مدة محددة/);
   assert.match(teamPage, /أداء واضح من غير مراقبة عشوائية/);
+});
+
+test("content team AI choices remain explicit, version fenced, role scoped, and non-moving", async () => {
+  const [migration, aiFunction, commandFunction, workspace, config] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260821132327_content_team_ai_choices_and_research_notifications.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /private\.can_use_content_ai_actor/);
+  assert.match(migration, /task\.owner_id = target_user_id/);
+  assert.match(migration, /membership\.role in \('owner', 'admin', 'manager'\)/);
+  assert.match(migration, /item_record\.version <> expected_content_version/);
+  assert.match(migration, /content\.ai_choice_selected/);
+  assert.match(migration, /content_brief_updated/);
+  assert.match(migration, /get_content_ai_provider_runtime/);
+  assert.match(migration, /vault\.decrypted_secrets/);
+  assert.match(migration, /to service_role/);
+  assert.doesNotMatch(migration, /grant execute on function public\.apply_content_ai_choice[^;]+authenticated/s);
+  assert.match(aiFunction, /content_id/);
+  assert.match(aiFunction, /get_content_ai_context/);
+  assert.match(aiFunction, /get_content_ai_provider_runtime/);
+  assert.match(aiFunction, /selectableProductionScopes\.has\(scope\)/);
+  assert.match(aiFunction, /cta: rawScript\.cta/);
+  assert.match(aiFunction, /brand_notes: rawScript\.brand_notes/);
+  assert.match(commandFunction, /apply_ai_choice/);
+  assert.match(commandFunction, /apply_content_ai_choice/);
+  assert.match(workspace, /3 اقتراحات كابشن بالـAI/);
+  assert.match(workspace, /3 اقتراحات غلاف/);
+  assert.match(workspace, /لا يُحفظ اقتراح قبل اختيارك/);
+  assert.match(workspace, /expected_content_version/);
+  assert.match(config, /\[functions\.script-ai\][\s\S]*verify_jwt = true/);
+  assert.doesNotMatch(migration, /status\s*=\s*'done'/);
 });

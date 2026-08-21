@@ -186,6 +186,27 @@ async function changeReelApproval(body: Record<string, unknown>, context: Contex
   return commandError(error, "تعذّر تحديث الاعتماد النهائي.") ?? jsonResponse({ changed: data });
 }
 
+async function applyAiChoice(body: Record<string, unknown>, context: Context) {
+  const contentId = text(body.content_item_id);
+  const scope = text(body.scope);
+  const selectedText = text(body.selected_text);
+  const expectedVersion = Number(body.expected_content_version);
+  if (!contentId || !["caption", "thumbnail"].includes(scope)
+    || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+    || (scope === "caption" && (selectedText.length < 3 || selectedText.length > 10000))
+    || (scope === "thumbnail" && (selectedText.length < 10 || selectedText.length > 4000))) {
+    return jsonResponse({ message: "اختيار AI أو نسخة ملف المحتوى غير صالحة." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("apply_content_ai_choice", {
+    target_user_id: context!.userClaims!.id,
+    target_content_item_id: contentId,
+    target_scope: scope,
+    expected_content_version: expectedVersion,
+    selected_text: selectedText,
+  });
+  return commandError(error, "تعذّر حفظ اختيار AI.") ?? jsonResponse({ version: data });
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -212,6 +233,7 @@ export default {
     if (body.action === "cancel_revision") return changeRevision(body, context, "cancel");
     if (body.action === "change_timeline_cue") return changeTimelineCue(body, context);
     if (body.action === "change_reel_approval") return changeReelApproval(body, context);
+    if (body.action === "apply_ai_choice") return applyAiChoice(body, context);
     return jsonResponse({ message: "أمر المحتوى غير معروف." }, 400);
   },
 };
