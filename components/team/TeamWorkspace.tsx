@@ -20,7 +20,7 @@ type RangePreset = "week" | "month" | "custom";
 
 const sectionLabels: Record<string, string> = {
   dashboard: "مركز القيادة", tasks: "مهام الفريق", content: "مصنع المحتوى",
-  publishing: "النشر التلقائي", brand: "مركز البراند", campaigns: "الحملات", crm: "العملاء",
+  scripts: "استوديو الاسكريبتات", publishing: "النشر التلقائي", brand: "مركز البراند", campaigns: "الحملات", crm: "العملاء",
   analytics: "التحليلات", team: "الفريق", settings: "الإعدادات",
 };
 

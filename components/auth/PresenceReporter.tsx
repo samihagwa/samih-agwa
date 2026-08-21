@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 
 const sectionByPrefix: Array<[string, string]> = [
-  ["/tasks", "tasks"], ["/content", "content"], ["/publishing", "publishing"], ["/brand", "brand"],
+  ["/tasks", "tasks"], ["/content", "content"], ["/scripts", "scripts"], ["/publishing", "publishing"], ["/brand", "brand"],
   ["/campaigns", "campaigns"], ["/crm", "crm"], ["/analytics", "analytics"],
   ["/team", "team"], ["/settings", "settings"],
 ];

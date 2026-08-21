@@ -2096,6 +2096,386 @@ export type Database = {
           },
         ]
       }
+      script_research_items: {
+        Row: {
+          assigned_to: string
+          brand_fit: number | null
+          created_at: string
+          created_by: string
+          freshness: number | null
+          hook: string
+          id: string
+          kind: Database["public"]["Enums"]["script_research_kind"]
+          linked_script_id: string | null
+          organization_id: string
+          original_angles: string[]
+          performance_signal: number | null
+          raw_notes: string
+          source_url: string | null
+          status: Database["public"]["Enums"]["script_research_status"]
+          title: string
+          transcript: string
+          transferable_principle: string
+          updated_at: string
+          used_at: string | null
+          why_it_works: string
+        }
+        Insert: {
+          assigned_to: string
+          brand_fit?: number | null
+          created_at?: string
+          created_by: string
+          freshness?: number | null
+          hook?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["script_research_kind"]
+          linked_script_id?: string | null
+          organization_id: string
+          original_angles?: string[]
+          performance_signal?: number | null
+          raw_notes?: string
+          source_url?: string | null
+          status?: Database["public"]["Enums"]["script_research_status"]
+          title: string
+          transcript?: string
+          transferable_principle?: string
+          updated_at?: string
+          used_at?: string | null
+          why_it_works?: string
+        }
+        Update: {
+          assigned_to?: string
+          brand_fit?: number | null
+          created_at?: string
+          created_by?: string
+          freshness?: number | null
+          hook?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["script_research_kind"]
+          linked_script_id?: string | null
+          organization_id?: string
+          original_angles?: string[]
+          performance_signal?: number | null
+          raw_notes?: string
+          source_url?: string | null
+          status?: Database["public"]["Enums"]["script_research_status"]
+          title?: string
+          transcript?: string
+          transferable_principle?: string
+          updated_at?: string
+          used_at?: string | null
+          why_it_works?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "script_research_items_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "script_research_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "script_research_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "script_research_script_org_fkey"
+            columns: ["linked_script_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "scripts"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      script_versions: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          note: string | null
+          organization_id: string
+          script_id: string
+          snapshot: Json
+          source: Database["public"]["Enums"]["script_version_source"]
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          note?: string | null
+          organization_id: string
+          script_id: string
+          snapshot: Json
+          source: Database["public"]["Enums"]["script_version_source"]
+          version_number: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          note?: string | null
+          organization_id?: string
+          script_id?: string
+          snapshot?: Json
+          source?: Database["public"]["Enums"]["script_version_source"]
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "script_versions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "script_versions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "script_versions_script_org_fkey"
+            columns: ["script_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "scripts"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      script_voice_profiles: {
+        Row: {
+          approved_examples: string
+          banned_phrases: string[]
+          created_at: string
+          edit_version: number
+          organization_id: string
+          source_notes: string
+          story_bank: string[]
+          updated_at: string
+          updated_by: string
+          voice_summary: string
+          writing_rules: string[]
+        }
+        Insert: {
+          approved_examples?: string
+          banned_phrases?: string[]
+          created_at?: string
+          edit_version?: number
+          organization_id: string
+          source_notes?: string
+          story_bank?: string[]
+          updated_at?: string
+          updated_by: string
+          voice_summary?: string
+          writing_rules?: string[]
+        }
+        Update: {
+          approved_examples?: string
+          banned_phrases?: string[]
+          created_at?: string
+          edit_version?: number
+          organization_id?: string
+          source_notes?: string
+          story_bank?: string[]
+          updated_at?: string
+          updated_by?: string
+          voice_summary?: string
+          writing_rules?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "script_voice_profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "script_voice_profiles_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scripts: {
+        Row: {
+          ai_last_generated_at: string | null
+          ai_last_generated_by: string | null
+          archived_at: string | null
+          archived_by: string | null
+          assigned_to: string
+          audience: string
+          b_roll_notes: string
+          caption: string
+          claims_notes: string
+          content_item_id: string | null
+          content_pillar: string | null
+          created_at: string
+          created_by: string
+          cta: string
+          duration_seconds: number
+          edit_version: number
+          editing_notes: string
+          handed_off_at: string | null
+          handed_off_by: string | null
+          hashtags: string[]
+          hook_variants: string[]
+          id: string
+          input_mode: Database["public"]["Enums"]["script_input_mode"]
+          objective: string
+          on_screen_text: string
+          organization_id: string
+          platform: string
+          recording_notes: string
+          source_text: string | null
+          source_url: string | null
+          spoken_script: string
+          status: Database["public"]["Enums"]["script_status"]
+          thumbnail_notes: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          ai_last_generated_at?: string | null
+          ai_last_generated_by?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          assigned_to: string
+          audience?: string
+          b_roll_notes?: string
+          caption?: string
+          claims_notes?: string
+          content_item_id?: string | null
+          content_pillar?: string | null
+          created_at?: string
+          created_by: string
+          cta?: string
+          duration_seconds?: number
+          edit_version?: number
+          editing_notes?: string
+          handed_off_at?: string | null
+          handed_off_by?: string | null
+          hashtags?: string[]
+          hook_variants?: string[]
+          id?: string
+          input_mode?: Database["public"]["Enums"]["script_input_mode"]
+          objective: string
+          on_screen_text?: string
+          organization_id: string
+          platform?: string
+          recording_notes?: string
+          source_text?: string | null
+          source_url?: string | null
+          spoken_script?: string
+          status?: Database["public"]["Enums"]["script_status"]
+          thumbnail_notes?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          ai_last_generated_at?: string | null
+          ai_last_generated_by?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          assigned_to?: string
+          audience?: string
+          b_roll_notes?: string
+          caption?: string
+          claims_notes?: string
+          content_item_id?: string | null
+          content_pillar?: string | null
+          created_at?: string
+          created_by?: string
+          cta?: string
+          duration_seconds?: number
+          edit_version?: number
+          editing_notes?: string
+          handed_off_at?: string | null
+          handed_off_by?: string | null
+          hashtags?: string[]
+          hook_variants?: string[]
+          id?: string
+          input_mode?: Database["public"]["Enums"]["script_input_mode"]
+          objective?: string
+          on_screen_text?: string
+          organization_id?: string
+          platform?: string
+          recording_notes?: string
+          source_text?: string | null
+          source_url?: string | null
+          spoken_script?: string
+          status?: Database["public"]["Enums"]["script_status"]
+          thumbnail_notes?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scripts_ai_last_generated_by_fkey"
+            columns: ["ai_last_generated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scripts_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scripts_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scripts_content_org_fkey"
+            columns: ["content_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "scripts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scripts_handed_off_by_fkey"
+            columns: ["handed_off_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scripts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_dependencies: {
         Row: {
           created_at: string
@@ -2378,6 +2758,15 @@ export type Database = {
           target_user_id: string
         }
         Returns: boolean
+      }
+      change_script_status: {
+        Args: {
+          expected_edit_version: number
+          next_status: Database["public"]["Enums"]["script_status"]
+          target_script_id: string
+          target_user_id: string
+        }
+        Returns: number
       }
       change_timeline_cue: {
         Args: {
@@ -2785,6 +3174,47 @@ export type Database = {
         }
         Returns: string
       }
+      create_script_draft: {
+        Args: {
+          script_audience: string
+          script_content_pillar: string
+          script_duration_seconds: number
+          script_input_mode: Database["public"]["Enums"]["script_input_mode"]
+          script_objective: string
+          script_platform: string
+          script_source_text: string
+          script_source_url: string
+          script_title: string
+          target_assigned_to: string
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
+      create_script_from_research: {
+        Args: { target_research_id: string; target_user_id: string }
+        Returns: string
+      }
+      create_script_research_item: {
+        Args: {
+          research_brand_fit: number
+          research_freshness: number
+          research_hook: string
+          research_kind: Database["public"]["Enums"]["script_research_kind"]
+          research_original_angles: string[]
+          research_performance_signal: number
+          research_raw_notes: string
+          research_source_url: string
+          research_title: string
+          research_transcript: string
+          research_transferable_principle: string
+          research_why_it_works: string
+          target_assigned_to: string
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       create_social_post_deliverable: {
         Args: {
           approval_owner_id: string
@@ -2869,6 +3299,10 @@ export type Database = {
           won_in_period: number
         }[]
       }
+      get_script_ai_context: {
+        Args: { target_script_id: string; target_user_id: string }
+        Returns: Json
+      }
       get_team_task_performance: {
         Args: {
           range_ends_at: string
@@ -2902,6 +3336,19 @@ export type Database = {
           organization_id: string
         }[]
       }
+      handoff_script_to_content: {
+        Args: {
+          content_creator_id: string
+          editing_owner_id: string
+          expected_edit_version: number
+          publishing_owner_id: string
+          target_publish_at: string
+          target_script_id: string
+          target_user_id: string
+          thumbnail_owner_id: string
+        }
+        Returns: string
+      }
       mark_all_notifications_read: {
         Args: { target_organization_id: string }
         Returns: number
@@ -2933,6 +3380,27 @@ export type Database = {
         Args: { target_organization_id: string; target_section: string }
         Returns: boolean
       }
+      remove_content_asset: {
+        Args: { target_asset_id: string; target_user_id: string }
+        Returns: boolean
+      }
+      request_content_revision: {
+        Args: {
+          revision_instructions: string
+          target_content_item_id: string
+          target_stage: Database["public"]["Enums"]["content_step"]
+          target_user_id: string
+        }
+        Returns: string
+      }
+      revise_brand_article: {
+        Args: {
+          revision_change_note: string
+          target_article_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       revise_telegram_publication: {
         Args: {
           post_disable_link_preview: boolean
@@ -2957,26 +3425,24 @@ export type Database = {
         }
         Returns: string
       }
-      remove_content_asset: {
-        Args: { target_asset_id: string; target_user_id: string }
-        Returns: boolean
-      }
-      request_content_revision: {
+      save_ai_script_generation: {
         Args: {
-          revision_instructions: string
-          target_content_item_id: string
-          target_stage: Database["public"]["Enums"]["content_step"]
+          expected_edit_version: number
+          script_b_roll_notes: string
+          script_caption: string
+          script_claims_notes: string
+          script_cta: string
+          script_editing_notes: string
+          script_hashtags: string[]
+          script_hook_variants: string[]
+          script_on_screen_text: string
+          script_recording_notes: string
+          script_spoken_script: string
+          script_thumbnail_notes: string
+          target_script_id: string
           target_user_id: string
         }
-        Returns: string
-      }
-      revise_brand_article: {
-        Args: {
-          revision_change_note: string
-          target_article_id: string
-          target_user_id: string
-        }
-        Returns: string
+        Returns: number
       }
       save_launch_gate_document: {
         Args: {
@@ -2989,6 +3455,49 @@ export type Database = {
           target_user_id: string
         }
         Returns: string
+      }
+      save_script_draft: {
+        Args: {
+          expected_edit_version: number
+          script_audience: string
+          script_b_roll_notes: string
+          script_caption: string
+          script_claims_notes: string
+          script_content_pillar: string
+          script_cta: string
+          script_duration_seconds: number
+          script_editing_notes: string
+          script_hashtags: string[]
+          script_hook_variants: string[]
+          script_input_mode: Database["public"]["Enums"]["script_input_mode"]
+          script_objective: string
+          script_on_screen_text: string
+          script_platform: string
+          script_recording_notes: string
+          script_source_text: string
+          script_source_url: string
+          script_spoken_script: string
+          script_thumbnail_notes: string
+          script_title: string
+          target_script_id: string
+          target_user_id: string
+          version_note: string
+        }
+        Returns: number
+      }
+      save_script_voice_profile: {
+        Args: {
+          expected_edit_version: number
+          profile_approved_examples: string
+          profile_banned_phrases: string[]
+          profile_source_notes: string
+          profile_story_bank: string[]
+          profile_voice_summary: string
+          profile_writing_rules: string[]
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: number
       }
       search_crm_contacts: {
         Args: {
@@ -3229,6 +3738,11 @@ export type Database = {
         | "cancelled"
       launch_type: "webinar" | "course" | "service" | "book" | "indicator"
       membership_status: "invited" | "active" | "suspended"
+      script_input_mode: "idea" | "reference" | "manual"
+      script_research_kind: "idea" | "reference" | "competitor"
+      script_research_status: "inbox" | "selected" | "used" | "archived"
+      script_status: "draft" | "ready_to_record" | "handed_off" | "archived"
+      script_version_source: "manual_save" | "ai_generation" | "handoff"
       task_priority: "low" | "normal" | "high" | "urgent"
       task_status:
         | "backlog"
@@ -3516,6 +4030,11 @@ export const Constants = {
       ],
       launch_type: ["webinar", "course", "service", "book", "indicator"],
       membership_status: ["invited", "active", "suspended"],
+      script_input_mode: ["idea", "reference", "manual"],
+      script_research_kind: ["idea", "reference", "competitor"],
+      script_research_status: ["inbox", "selected", "used", "archived"],
+      script_status: ["draft", "ready_to_record", "handed_off", "archived"],
+      script_version_source: ["manual_save", "ai_generation", "handoff"],
       task_priority: ["low", "normal", "high", "urgent"],
       task_status: [
         "backlog",

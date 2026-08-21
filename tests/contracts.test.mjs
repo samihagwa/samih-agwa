@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("shared navigation covers every primary route", async () => {
   const source = await readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8");
-  for (const route of ["/tasks", "/content", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/team", "/settings"]) {
+  for (const route of ["/tasks", "/content", "/scripts", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/team", "/settings"]) {
     assert.match(source, new RegExp(`href(?::|=)\\s*["']${route}`));
   }
 });
@@ -28,6 +28,72 @@ test("status badges never rely on color alone", async () => {
   assert.match(source, /const marks/);
   assert.match(source, /aria-hidden/);
   assert.match(source, /children/);
+});
+
+test("script studio is private by assignee, owner-visible, versioned, AI-assisted, and handed off atomically", async () => {
+  const [migration, commands, ai, workspace, editor, contract, navigation, presence, team, types, config] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260821010000_content_script_studio.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/script-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/scripts.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/PresenceReporter.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/team/TeamWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
+  ]);
+
+  for (const table of ["scripts", "script_versions", "script_research_items", "script_voice_profiles"]) {
+    assert.match(migration, new RegExp(`create table public\\.${table}`));
+    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(migration, new RegExp(`grant select on table public\\.${table} to authenticated`));
+    assert.match(types, new RegExp(`${table}:`));
+  }
+  assert.match(migration, /scripts_select_assignee_or_owner/);
+  assert.match(migration, /assigned_to = \(select auth\.uid\(\)\)/);
+  assert.match(migration, /array\['owner'\]::public\.app_role\[\]/);
+  assert.doesNotMatch(migration, /array\['owner', 'admin', 'manager'\].*scripts_select/i);
+  assert.doesNotMatch(migration, /grant (insert|update|delete) on table public\.(scripts|script_versions|script_research_items|script_voice_profiles) to authenticated/i);
+  for (const rpc of ["create_script_draft", "save_script_draft", "save_ai_script_generation", "change_script_status", "create_script_from_research", "save_script_voice_profile", "handoff_script_to_content"]) {
+    assert.match(migration, new RegExp(`function public\\.${rpc}`));
+    assert.match(migration, new RegExp(`grant execute on function public\\.${rpc}`));
+    assert.match(types, new RegExp(`${rpc}:`));
+  }
+  assert.match(migration, /to service_role/);
+  assert.match(migration, /from public, anon, authenticated/);
+  assert.match(migration, /private\.add_script_version/);
+  assert.match(migration, /create_reel_production_workflow_v3/);
+  assert.match(migration, /script\.handed_off/);
+  assert.match(migration, /script_assigned/);
+  assert.match(migration, /script_ready/);
+  for (const status of ["draft", "ready_to_record", "handed_off", "archived"]) {
+    assert.match(contract, new RegExp(`\\b${status}\\b`));
+    assert.match(migration, new RegExp(`'${status}'`));
+  }
+  assert.match(commands, /createSupabaseContext/);
+  assert.match(commands, /auth: "user"/);
+  assert.match(commands, /handoff_script_to_content/);
+  assert.match(ai, /https:\/\/api\.openai\.com\/v1\/responses/);
+  assert.match(ai, /gpt-5\.4-mini/);
+  assert.match(ai, /json_schema/);
+  assert.match(ai, /store: false/);
+  assert.match(ai, /OPENAI_API_KEY/);
+  assert.match(ai, /مفتاح OpenAI غير مضبوط/);
+  assert.doesNotMatch(ai, /apify|notion/i);
+  assert.match(workspace, /اسكريبتاتي/);
+  assert.match(workspace, /الأفكار والرادار/);
+  assert.match(workspace, /بصمتي/);
+  assert.match(workspace, /Apify/);
+  assert.match(editor, /تسليم لمصنع المحتوى/);
+  assert.match(editor, /إما يُنشأ أصل المحتوى/);
+  assert.match(editor, /functions\.invoke/);
+  assert.match(navigation, /href: "\/scripts"/);
+  assert.match(presence, /\["\/scripts", "scripts"\]/);
+  assert.match(team, /scripts: "استوديو الاسكريبتات"/);
+  assert.match(config, /\[functions\.script-commands\][\s\S]*verify_jwt = true/);
+  assert.match(config, /\[functions\.script-ai\][\s\S]*verify_jwt = true/);
 });
 
 test("browser configuration cannot declare a service role variable", async () => {
@@ -61,6 +127,8 @@ test("background auth events do not reload the active workspace", async () => {
   const workspaces = await Promise.all([
     "../components/tasks/TasksWorkspace.tsx",
     "../components/content/ContentWorkspace.tsx",
+    "../components/scripts/ScriptsWorkspace.tsx",
+    "../components/scripts/ScriptEditor.tsx",
     "../components/publishing/PublishingWorkspace.tsx",
     "../components/brand/BrandWorkspace.tsx",
     "../components/campaigns/CampaignsWorkspace.tsx",
