@@ -44,6 +44,10 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/Only the organization owner can assign scripts/i, "المالك فقط يقدر يسند اسكريبت لعضو آخر."],
     [/Only the organization owner can assign research/i, "المالك فقط يقدر يسند فكرة لعضو آخر."],
     [/Only the organization owner can edit the writing voice/i, "تعديل بصمة الكتابة متاح للمالك فقط."],
+    [/Only the organization owner can approve writing voice samples/i, "المالك فقط يقدر يعتمد نصًا كعينة لصوت سميح."],
+    [/Save a manual edit before approving a writing voice sample/i, "عدّل النص بطريقتك واحفظه يدويًا أولًا، وبعدها اعتمده كعينة لصوتك."],
+    [/Script already approved as a writing voice sample/i, "الاسكريبت ده معتمد بالفعل كعينة لصوتك."],
+    [/Writing voice examples are full/i, "مساحة أمثلة الصوت امتلأت؛ احذف عينة قديمة من «بصمتي» ثم حاول تاني."],
     [/Only the organization owner can hand off scripts/i, "تسليم الاسكريبت لمصنع المحتوى متاح للمالك فقط."],
     [/changed in another session/i, "الاسكريبت اتعدل من جلسة أخرى. حدّث الصفحة قبل الحفظ."],
     [/Handed-off or archived scripts are read-only/i, "الاسكريبت المُسلّم أو المؤرشف للقراءة فقط."],
@@ -224,6 +228,20 @@ async function saveVoice(body: Record<string, unknown>, context: Context) {
   return commandError(error, "تعذّر حفظ بصمة الكتابة.") ?? jsonResponse({ editVersion: data });
 }
 
+async function approveVoiceSample(body: Record<string, unknown>, context: Context) {
+  const scriptId = text(body.script_id);
+  const expectedVersion = Number(body.expected_edit_version);
+  if (!scriptId || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+    return jsonResponse({ message: "الاسكريبت أو رقم نسخته غير صالح." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("approve_script_as_voice_sample", {
+    target_user_id: context!.userClaims!.id,
+    target_script_id: scriptId,
+    expected_script_version: expectedVersion,
+  });
+  return commandError(error, "تعذّر اعتماد الاسكريبت كعينة لصوتك.") ?? jsonResponse({ voiceProfileEditVersion: data });
+}
+
 async function handoff(body: Record<string, unknown>, context: Context) {
   const scriptId = text(body.script_id);
   const expectedVersion = Number(body.expected_edit_version);
@@ -262,6 +280,7 @@ export default {
     if (body.action === "create_research") return createResearch(body, context);
     if (body.action === "research_to_script") return researchToScript(body, context);
     if (body.action === "save_voice") return saveVoice(body, context);
+    if (body.action === "approve_voice_sample") return approveVoiceSample(body, context);
     if (body.action === "handoff") return handoff(body, context);
     return jsonResponse({ message: "أمر قسم الاسكريبتات غير معروف." }, 400);
   },

@@ -15,7 +15,7 @@ type Organization = Tables<"organizations">;
 type Script = Tables<"scripts">;
 type ScriptVersion = Tables<"script_versions">;
 type Person = { id: string; name: string; role: Membership["role"] };
-type Workspace = { organization: Organization; membership: Membership; people: Person[]; script: Script; versions: ScriptVersion[] };
+type Workspace = { organization: Organization; membership: Membership; people: Person[]; storyBank: string[]; script: Script; versions: ScriptVersion[] };
 type AiMode = "idea" | "reference" | "improve";
 type EditorForm = {
   title: string; input_mode: Script["input_mode"]; source_url: string; source_text: string;
@@ -64,6 +64,8 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   const [loading, setLoading] = useState(configured);
   const [saving, setSaving] = useState(false);
   const [aiMode, setAiMode] = useState<AiMode | null>(null);
+  const [generationDirection, setGenerationDirection] = useState("");
+  const [selectedStory, setSelectedStory] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [versionNote, setVersionNote] = useState("حفظ يدوي");
@@ -103,17 +105,19 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
       const { data: membership, error: membershipError } = await supabase.from("memberships").select("*").eq("user_id", activeSession.user.id).eq("status", "active").limit(1).maybeSingle();
       if (membershipError) throw membershipError;
       if (!membership) { clearWorkspace(); return; }
-      const [organizationResult, membershipsResult] = await Promise.all([
+      const [organizationResult, membershipsResult, voiceProfileResult] = await Promise.all([
         supabase.from("organizations").select("*").eq("id", membership.organization_id).single(),
         supabase.from("memberships").select("*").eq("organization_id", membership.organization_id).eq("status", "active"),
+        supabase.from("script_voice_profiles").select("story_bank").eq("organization_id", membership.organization_id).maybeSingle(),
       ]);
       if (organizationResult.error) throw organizationResult.error;
       if (membershipsResult.error) throw membershipsResult.error;
+      if (voiceProfileResult.error) throw voiceProfileResult.error;
       const ids = (membershipsResult.data ?? []).map((row) => row.user_id);
       const { data: profiles, error: profilesError } = ids.length ? await supabase.from("profiles").select("id, full_name").in("id", ids) : { data: [], error: null };
       if (profilesError) throw profilesError;
       const people = (membershipsResult.data ?? []).map((row) => ({ id: row.user_id, role: row.role, name: profiles?.find((profile) => profile.id === row.user_id)?.full_name ?? (row.user_id === activeSession.user.id ? activeSession.user.email : null) ?? "عضو فريق" }));
-      await loadScriptRows({ organization: organizationResult.data, membership, people });
+      await loadScriptRows({ organization: organizationResult.data, membership, people, storyBank: voiceProfileResult.data?.story_bank ?? [] });
     } catch (loadError) { setError(loadError instanceof Error ? loadError.message : "تعذّر تحميل الاسكريبت."); }
     finally { setLoading(false); }
   }, [clearWorkspace, loadScriptRows]);
@@ -121,7 +125,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading, clearTransientState });
   const refresh = useCallback(async () => {
     if (!workspace) return;
-    await loadScriptRows({ organization: workspace.organization, membership: workspace.membership, people: workspace.people });
+    await loadScriptRows({ organization: workspace.organization, membership: workspace.membership, people: workspace.people, storyBank: workspace.storyBank });
   }, [loadScriptRows, workspace]);
 
   const update = useCallback(<K extends keyof EditorForm>(key: K, value: EditorForm[K]) => {
@@ -163,7 +167,13 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     if (!workspace || !form || readOnly) return;
     setAiMode(mode); setError(null); setNotice(null);
     try {
-      const result = await invokeFunction("script-ai", { script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version, mode });
+      const result = await invokeFunction("script-ai", {
+        script_id: workspace.script.id,
+        expected_edit_version: workspace.script.edit_version,
+        mode,
+        generation_direction: generationDirection,
+        selected_story: selectedStory,
+      });
       const generated = result.generated as Partial<EditorForm> | undefined;
       if (generated) {
         setForm((current) => current ? {
@@ -185,6 +195,20 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
       await refresh();
     } catch (generateError) { setError(generateError instanceof Error ? generateError.message : "تعذّر توليد الاسكريبت."); }
     finally { setAiMode(null); }
+  }
+
+  async function approveVoiceSample() {
+    if (!workspace || !form || workspace.membership.role !== "owner") return;
+    setSaving(true); setError(null); setNotice(null);
+    try {
+      await invokeFunction("script-commands", {
+        action: "approve_voice_sample",
+        script_id: workspace.script.id,
+        expected_edit_version: workspace.script.edit_version,
+      });
+      setNotice("تم اعتماد النص الحالي كعينة حقيقية لصوتك. التوليد القادم سيستخدمه للإيقاع فقط، بدون نسخ قصته أو جمله.");
+    } catch (approveError) { setError(approveError instanceof Error ? approveError.message : "تعذّر اعتماد النص كعينة لصوتك."); }
+    finally { setSaving(false); }
   }
 
   async function handoff(event: FormEvent) {
@@ -211,6 +235,8 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   const owner = workspace.membership.role === "owner";
   const status = scriptStatusConfig[workspace.script.status];
   const assignee = workspace.people.find((person) => person.id === workspace.script.assigned_to)?.name ?? "عضو فريق";
+  const latestVersionIsManual = workspace.versions[0]?.source === "manual_save";
+  const spokenScriptHasUnsavedChanges = form.spoken_script !== workspace.script.spoken_script;
 
   return <section className="script-editor-workspace">
     <div className="script-editor-topbar"><Button href="/scripts" variant="ghost"><ArrowRight size={15} /> العودة للاستوديو</Button><div><StatusBadge tone={status.tone}>{status.label}</StatusBadge><span><UserRound size={13} /> {assignee}</span><span><FileClock size={13} /> النسخة {workspace.script.edit_version.toLocaleString("ar-EG")}</span></div></div>
@@ -236,7 +262,11 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
       </section>
 
       {!readOnly ? <section className="panel script-ai-panel">
-        <div><span className="script-ai-icon"><WandSparkles size={21} /></span><div><p className="overline">مساعد الكتابة</p><h2>AI يكتب داخل حدود بصمتك</h2><p>يرسل بيانات هذا الاسكريبت وبصمتك ومراجع البراند المعتمدة إلى مزوّد AI الافتراضي الذي اخترته في الإعدادات، وفقط عند ضغط زر. لا يتصفح المنافسين ولا ينشر شيئًا.</p></div></div>
+        <div className="script-ai-copy"><span className="script-ai-icon"><WandSparkles size={21} /></span><div><p className="overline">مساعد الكتابة</p><h2>AI يكتب داخل حدود بصمتك</h2><p>القصص مقفولة افتراضيًا، والأمثلة القديمة لا تدخل في التوليد. النظام يستخدم فقط العينات التي تعدّلها وتحفظها ثم تعتمدها بنفسك.</p></div></div>
+        <div className="script-ai-guardrails">
+          <label><span>القصة الشخصية</span><select value={selectedStory} onChange={(event) => setSelectedStory(event.target.value)}><option value="">بدون قصة شخصية — الافتراضي</option>{workspace.storyBank.map((story) => <option key={story} value={story}>{story}</option>)}</select><small>{selectedStory ? "سيُسمح بهذه القصة وحدها، بدون اختراع تفاصيل." : "لن تُستخدم قصة ترامب أو أي واقعة من البنك."}</small></label>
+          <label><span>قولها بطريقتك — اختياري</span><textarea maxLength={1500} value={generationDirection} onChange={(event) => setGenerationDirection(event.target.value)} placeholder="اكتب حتى لو جملة ملخبطة: أنا عايز أوصل له إن... ومتقولش..." /><small>جملة منك أقوى من عشر قواعد مكتوبة.</small></label>
+        </div>
         <div className="script-ai-actions"><Button type="button" disabled={Boolean(aiMode) || saving} onClick={() => void generate("idea")}>{aiMode === "idea" ? <LoaderCircle className="spin" size={15} /> : <Lightbulb size={15} />} اكتب من الفكرة</Button><Button type="button" variant="secondary" disabled={Boolean(aiMode) || saving || !form.source_url} onClick={() => void generate("reference")}>{aiMode === "reference" ? <LoaderCircle className="spin" size={15} /> : <Bot size={15} />} أعد بناء المرجع بطريقتي</Button><Button type="button" variant="secondary" disabled={Boolean(aiMode) || saving || form.spoken_script.length < 20} onClick={() => void generate("improve")}>{aiMode === "improve" ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />} حسّن مسودتي</Button></div>
       </section> : null}
 
@@ -247,6 +277,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
           <label><span>الدعوة للإجراء CTA</span><textarea disabled={readOnly} value={form.cta} onChange={(event) => update("cta", event.target.value)} /></label>
           <label className="span-2"><span>نص الكلام النهائي</span><textarea className="spoken-script-textarea" disabled={readOnly} value={form.spoken_script} onChange={(event) => update("spoken_script", event.target.value)} placeholder="اكتب الكلام كما سيُقال فعلًا..." /></label>
         </div>
+        {owner ? <aside className="script-calibration-note"><CheckCircle2 size={18} /><div><strong>هل النص بقى أنت فعلًا بعد تعديلك؟</strong><p>احفظ تعديلك اليدوي أولًا، ثم اعتمده. التوليد القادم يتعلم من النصوص التي وافقت عليها أنت فقط، وليس من كل ريل منشور.</p></div><Button type="button" variant="secondary" disabled={saving || Boolean(aiMode) || form.spoken_script.trim().length < 20 || spokenScriptHasUnsavedChanges || !latestVersionIsManual} onClick={() => void approveVoiceSample()}>{spokenScriptHasUnsavedChanges || !latestVersionIsManual ? "احفظ تعديلك أولًا" : "اعتمد النص كعينة لصوتي"}</Button></aside> : null}
       </section>
 
       <section className="panel script-editor-section">

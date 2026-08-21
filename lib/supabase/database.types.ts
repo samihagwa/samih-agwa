@@ -3564,6 +3564,14 @@ export type Database = {
         }
         Returns: number
       }
+      approve_script_as_voice_sample: {
+        Args: {
+          expected_script_version: number
+          target_script_id: string
+          target_user_id: string
+        }
+        Returns: number
+      }
       search_crm_contacts: {
         Args: {
           result_limit: number

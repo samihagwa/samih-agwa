@@ -31,8 +31,9 @@ test("status badges never rely on color alone", async () => {
 });
 
 test("script studio is private by assignee, owner-visible, versioned, AI-assisted, and handed off atomically", async () => {
-  const [migration, commands, ai, workspace, editor, contract, navigation, presence, team, types, config] = await Promise.all([
+  const [migration, calibration, commands, ai, workspace, editor, contract, navigation, presence, team, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821010000_content_script_studio.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260821023326_script_voice_calibration.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
@@ -81,6 +82,12 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(ai, /json_schema/);
   assert.match(ai, /store: false/);
   assert.match(ai, /أضف مزوّد AI من الإعدادات/);
+  assert.match(ai, /extractCalibratedSamples/);
+  assert.match(ai, /selected_story/);
+  assert.match(ai, /generation_direction/);
+  assert.match(ai, /story_use/);
+  assert.match(ai, /السؤال \(ده\|دا\) \(بيوصلني\|بيجيلي\) كتير/);
+  assert.doesNotMatch(ai, /providerBody\(provider, mode, aiContext\)/);
   assert.doesNotMatch(ai, /OPENAI_API_KEY|OPENAI_SCRIPT_MODEL/);
   assert.doesNotMatch(ai, /https:\/\/api\.openai\.com/);
   assert.doesNotMatch(ai, /apify|notion/i);
@@ -91,6 +98,18 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(editor, /تسليم لمصنع المحتوى/);
   assert.match(editor, /إما يُنشأ أصل المحتوى/);
   assert.match(editor, /functions\.invoke/);
+  assert.match(editor, /بدون قصة شخصية — الافتراضي/);
+  assert.match(editor, /generation_direction/);
+  assert.match(editor, /selected_story/);
+  assert.match(editor, /اعتمد النص كعينة لصوتي/);
+  assert.match(commands, /approve_voice_sample/);
+  assert.match(commands, /approve_script_as_voice_sample/);
+  assert.match(calibration, /function public\.approve_script_as_voice_sample/);
+  assert.match(calibration, /latest_source is distinct from 'manual_save'/);
+  assert.match(calibration, /script_voice\.sample_approved/);
+  assert.match(calibration, /from public, anon, authenticated/);
+  assert.match(calibration, /to service_role/);
+  assert.match(types, /approve_script_as_voice_sample:/);
   assert.match(navigation, /href: "\/scripts"/);
   assert.match(presence, /\["\/scripts", "scripts"\]/);
   assert.match(team, /scripts: "استوديو الاسكريبتات"/);
@@ -138,7 +157,7 @@ test("AI providers are owner-managed, Vault-backed, testable, and provider-agnos
   assert.match(settings, /API مخصص/);
   assert.match(settings, /اتركه فارغًا للاحتفاظ بالمفتاح الحالي/);
   assert.doesNotMatch(settings, /service_role/i);
-  assert.match(editor, /مزوّد AI الافتراضي/);
+  assert.match(editor, /القصص مقفولة افتراضيًا/);
   assert.match(types, /ai_providers:/);
   assert.match(types, /ai_api_protocol/);
   assert.match(config, /\[functions\.ai-provider-commands\][\s\S]*verify_jwt = true/);
