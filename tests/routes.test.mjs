@@ -12,7 +12,8 @@ const routes = [
   ["/campaigns", "خطة إطلاق تُدار"],
   ["/crm", "كل عميل له مالك"],
   ["/analytics", "الأرقام تقود القرار"],
-  ["/team", "أداء واضح"],
+  ["/team", "دخول واضح"],
+  ["/join", "تفعيل حسابك"],
   ["/settings", "مركز تحكم واحد"],
 ];
 
@@ -44,8 +45,8 @@ for (const [pathname, expectedHeading] of routes) {
 test("dashboard reports onboarding truth without invented operational data", async () => {
   const response = await render("/");
   const html = await response.text();
-  assert.match(html, /الفريق لم يبدأ onboarding/);
+  assert.match(html, /دعوة محددة بالبريد/);
   assert.match(html, /لن نعرض أرقامًا وهمية/);
-  assert.match(html, /أعضاء فعّالون/);
-  assert.match(html, />0</);
+  assert.match(html, /دخول الفريق/);
+  assert.match(html, /بالدعوة/);
 });

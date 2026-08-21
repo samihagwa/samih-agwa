@@ -1357,6 +1357,8 @@ export type Database = {
           id: string
           invited_by: string | null
           joined_at: string | null
+          onboarding_acknowledgements: Json
+          onboarding_completed_at: string | null
           organization_id: string
           role: Database["public"]["Enums"]["app_role"]
           status: Database["public"]["Enums"]["membership_status"]
@@ -1368,6 +1370,8 @@ export type Database = {
           id?: string
           invited_by?: string | null
           joined_at?: string | null
+          onboarding_acknowledgements?: Json
+          onboarding_completed_at?: string | null
           organization_id: string
           role?: Database["public"]["Enums"]["app_role"]
           status?: Database["public"]["Enums"]["membership_status"]
@@ -1379,6 +1383,8 @@ export type Database = {
           id?: string
           invited_by?: string | null
           joined_at?: string | null
+          onboarding_acknowledgements?: Json
+          onboarding_completed_at?: string | null
           organization_id?: string
           role?: Database["public"]["Enums"]["app_role"]
           status?: Database["public"]["Enums"]["membership_status"]
@@ -2641,6 +2647,89 @@ export type Database = {
           },
         ]
       }
+      team_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          full_name: string
+          id: string
+          invited_by: string
+          organization_id: string
+          revoked_at: string | null
+          revoked_by: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          status: Database["public"]["Enums"]["team_invitation_status"]
+          token_hash: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email: string
+          expires_at: string
+          full_name: string
+          id?: string
+          invited_by: string
+          organization_id: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: Database["public"]["Enums"]["team_invitation_status"]
+          token_hash: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          full_name?: string
+          id?: string
+          invited_by?: string
+          organization_id?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: Database["public"]["Enums"]["team_invitation_status"]
+          token_hash?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_invitations_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_invitations_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_invitations_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           acceptance_criteria: string
@@ -2771,6 +2860,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_team_invitation: {
+        Args: { plain_token: string; target_email: string; target_user_id: string }
+        Returns: string
+      }
+      acknowledge_team_onboarding: {
+        Args: {
+          target_organization_id: string
+          target_step: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
       add_content_asset: {
         Args: {
           asset_kind: Database["public"]["Enums"]["content_asset_kind"]
@@ -3275,6 +3376,18 @@ export type Database = {
         }
         Returns: string
       }
+      create_team_invitation: {
+        Args: {
+          plain_token: string
+          target_actor_id: string
+          target_email: string
+          target_expires_at: string
+          target_full_name: string
+          target_organization_id: string
+          target_role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: string
+      }
       create_script_from_research: {
         Args: { target_research_id: string; target_user_id: string }
         Returns: string
@@ -3475,6 +3588,16 @@ export type Database = {
         Args: { target_notification_id: number }
         Returns: boolean
       }
+      manage_team_membership: {
+        Args: {
+          target_actor_id: string
+          target_organization_id: string
+          target_role: Database["public"]["Enums"]["app_role"]
+          target_status: Database["public"]["Enums"]["membership_status"]
+          target_user_id: string
+        }
+        Returns: boolean
+      }
       mark_publication_network_started: {
         Args: {
           target_claim_generation: number
@@ -3496,6 +3619,10 @@ export type Database = {
       }
       record_member_presence: {
         Args: { target_organization_id: string; target_section: string }
+        Returns: boolean
+      }
+      revoke_team_invitation: {
+        Args: { target_actor_id: string; target_invitation_id: string }
         Returns: boolean
       }
       remove_content_asset: {
@@ -3864,6 +3991,7 @@ export type Database = {
         | "cancelled"
       launch_type: "webinar" | "course" | "service" | "book" | "indicator"
       membership_status: "invited" | "active" | "suspended"
+      team_invitation_status: "pending" | "accepted" | "revoked"
       script_input_mode: "idea" | "reference" | "manual"
       script_research_kind: "idea" | "reference" | "competitor"
       script_research_status: "inbox" | "selected" | "used" | "archived"
@@ -4157,6 +4285,7 @@ export const Constants = {
       ],
       launch_type: ["webinar", "course", "service", "book", "indicator"],
       membership_status: ["invited", "active", "suspended"],
+      team_invitation_status: ["pending", "accepted", "revoked"],
       script_input_mode: ["idea", "reference", "manual"],
       script_research_kind: ["idea", "reference", "competitor"],
       script_research_status: ["inbox", "selected", "used", "archived"],

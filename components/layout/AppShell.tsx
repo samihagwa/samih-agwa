@@ -17,13 +17,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarNav />
         <div className="sidebar-note">
           <span className="signal-dot" aria-hidden="true" />
-          <div><strong>نسخة تشغيل آمنة</strong><small>الفريق لم يبدأ onboarding بعد</small></div>
+          <div><strong>عضوية بالدعوة فقط</strong><small>لا إرسال أو تفعيل تلقائي لأي عضو</small></div>
         </div>
       </aside>
 
       <div className="workspace">
         <header className="topbar">
-          <div className="topbar-status"><ShieldCheck size={17} /><span>وضع الاختبار الشخصي</span></div>
+          <div className="topbar-status"><ShieldCheck size={17} /><span>وصول خاص محكوم بالصلاحيات</span></div>
           <div className="topbar-actions">
             <NotificationCenter />
             <SessionChip />

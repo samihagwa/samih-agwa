@@ -6,5 +6,5 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 export const metadata: Metadata = { title: "الفريق والأداء" };
 
 export default function TeamPage() {
-  return <main className="page-stack"><PageHeader eyebrow="الفريق والصلاحيات" title="أداء واضح من غير مراقبة عشوائية" description="الحضور التشغيلي، المهام المطلوبة والمنفذة، الالتزام بالمواعيد وجولات التعديل في تقرير واحد قابل للتحديد بالأسبوع أو الشهر أو أي مدة." actions={<StatusBadge tone="success">مبني على سجل حقيقي</StatusBadge>} /><TeamWorkspace /></main>;
+  return <main className="page-stack"><PageHeader eyebrow="الفريق والصلاحيات" title="دخول واضح، صلاحية محددة، وأداء مبني على السجل" description="المالك يجهّز رابط دخول يدويًا من غير إرسال تلقائي، والعضو يبدأ بتعريف قصير ثم يستلم شغله. الحضور والإنجاز والتأخير تُقاس من الأحداث الفعلية فقط." actions={<StatusBadge tone="success">دعوة آمنة + سجل تدقيق</StatusBadge>} /><TeamWorkspace /></main>;
 }

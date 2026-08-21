@@ -31,7 +31,7 @@ export const sections: Record<string, SectionConfig> = {
     { title: "تعلم المحتوى", description: "ربط hook والموضوع والصيغة بنتيجة المحتوى." },
     { title: "قرارات موثقة", description: "كل مراجعة أسبوعية تنتهي بقرار ومالك وموعد." },
   ]},
-  team: { eyebrow: "الفريق والصلاحيات", title: "وضوح الدور قبل متابعة الأداء", description: "كل عضو يعرف مسؤولياته وما يملكه وما يحتاج موافقة عليه وكيف يقاس عمله.", status: "مطلوب قبل onboarding", statusTone: "success", nextStep: "تثبيت الأدوار وأسماء الأعضاء", capabilities: [
+  team: { eyebrow: "الفريق والصلاحيات", title: "وضوح الدور قبل متابعة الأداء", description: "كل عضو يعرف مسؤولياته وما يملكه وما يحتاج موافقة عليه وكيف يقاس عمله.", status: "جاهز للاختبار بحساب تجريبي", statusTone: "success", nextStep: "اختبار رابط دعوة واحد قبل فتح الوصول", capabilities: [
     { title: "أدوار وصلاحيات", description: "أقل صلاحية لازمة لكل وظيفة مع منع الوصول العشوائي." },
     { title: "بطاقة دور", description: "النتائج المتوقعة والمهام المتكررة وحدود القرار." },
     { title: "Onboarding", description: "مسار دخول قصير يشرح الشركة والأدوات وقواعد التسليم." },

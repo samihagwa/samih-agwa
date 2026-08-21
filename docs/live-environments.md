@@ -33,6 +33,7 @@ Applied migrations:
 19. `crm_search_multi_identity_owner_performance`: RLS-aware paginated search, trigram indexes, atomic multi-identity lead creation, controlled identity additions, and evidence-based owner performance metrics.
 20. `launch_execution_plan`: versioned gate outputs, quantified/budgeted launch deliverables, canonical linked tasks, dependency mirroring, delivery evidence guards, RLS, audit events, and Realtime state.
 21. `launch_execution_fk_indexes`: exact-order covering indexes for all new composite launch-execution foreign keys reported by the performance advisor.
+22. `team_onboarding_and_access_control`: owner-only, email-bound one-time claim links, first-day acknowledgements, role/status management, safe suspension guards, RLS, and immutable audit evidence. Existing owner access was backfilled as complete and no invitation row was created.
 
 Deployed Edge Functions:
 
@@ -42,6 +43,7 @@ Deployed Edge Functions:
 4. `content-commands` v2: JWT-protected content brief, asset, revision, and timeline commands. Timeline completion is restricted to the assigned editor or organization leadership.
 5. `crm-commands` v3: JWT-protected manual lead creation with one to three deduplicated contact methods, optional direct chat link and custom acquisition context, controlled identity additions, plus follow-up recording. It sends no message, performs no import, and rejects unauthenticated requests with `401`.
 6. `brand-commands` v1: JWT-protected brand draft, edit, revision, owner approval, and archive commands. The browser has no direct table-write or database-command privilege.
+7. `team-commands` v1: JWT-protected invitation-link creation/revocation, exact-email acceptance, member role/status changes, and onboarding acknowledgements. It sends no email, Telegram message, or external request.
 
 Verification on 2026-08-17:
 
@@ -62,5 +64,6 @@ Verification on 2026-08-17:
 - Rollback-only database tests verified creation, custom source/reason storage, one primary conversation link, one-open-task enforcement, guarded task movement, follow-up rollover, and `do_not_contact` consent closure without leaving test data.
 - Brand commands and content-reference wrappers are service-role only; authenticated users receive audience-aware, organization-filtered reads through RLS and no direct table writes.
 - A rollback-only brand test verified draft creation, optimistic editing, owner approval, atomic content linking, revision history, previous-version archiving, and preserved exact content references without leaving test data.
+- Team invitation and access commands are executable only by `service_role`; `anon` and direct authenticated RPC access are denied. The invitation table is owner-readable through RLS, contains only token hashes, and remained empty after deployment verification.
 
 Never commit `.env.local`, secret keys, legacy service-role keys, or production customer data.

@@ -777,7 +777,52 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
   assert.match(teamWorkspace, /آخر أسبوع/);
   assert.match(teamWorkspace, /آخر 30 يوم/);
   assert.match(teamWorkspace, /مدة محددة/);
-  assert.match(teamPage, /أداء واضح من غير مراقبة عشوائية/);
+  assert.match(teamPage, /دخول واضح، صلاحية محددة/);
+});
+
+test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {
+  const [migration, commands, teamWorkspace, joinWorkspace, joinPage, config, readme] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260821220304_team_onboarding_and_access_control.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/team-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/team/TeamWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/team/JoinWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/join/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /create table public\.team_invitations/);
+  assert.match(migration, /alter table public\.team_invitations enable row level security/);
+  assert.match(migration, /team_invitations_select_owner/);
+  assert.match(migration, /extensions\.digest\(plain_token, 'sha256'\)/);
+  assert.doesNotMatch(migration, /plain_token\s+text[^]*create table public\.team_invitations/i);
+  assert.match(migration, /email <> normalized_email/);
+  assert.match(migration, /memberships_one_active_organization_per_user_idx/);
+  assert.match(migration, /target_role = 'owner'/);
+  assert.match(migration, /Reassign or close this member''s open tasks/);
+  assert.match(migration, /Reassign or archive this member''s open scripts/);
+  assert.match(migration, /team\.invitation_created/);
+  assert.match(migration, /team\.invitation_accepted/);
+  assert.match(migration, /team\.membership_updated/);
+  for (const rpc of ["create_team_invitation", "revoke_team_invitation", "accept_team_invitation", "manage_team_membership", "acknowledge_team_onboarding"]) {
+    assert.match(migration, new RegExp(`function public\\.${rpc}`));
+    assert.match(migration, new RegExp(`grant execute on function public\\.${rpc}`));
+  }
+  assert.doesNotMatch(migration, /grant execute on function public\.(create_team_invitation|revoke_team_invitation|accept_team_invitation|manage_team_membership|acknowledge_team_onboarding)[^;]+to authenticated/s);
+  assert.match(commands, /createSupabaseContext/);
+  assert.match(commands, /auth: "user"/);
+  assert.match(commands, /randomToken/);
+  assert.doesNotMatch(commands, /inviteUserByEmail|sendMessage|telegram|smtp|await\s+fetch|globalThis\.fetch/i);
+  assert.match(teamWorkspace, /إنشاء رابط فقط/);
+  assert.match(teamWorkspace, /لم نرسل بريدًا أو رسالة/);
+  assert.match(teamWorkspace, /إيقاف الوصول/);
+  assert.match(teamWorkspace, /3 اتفاقات قبل استلام الشغل/);
+  assert.match(joinWorkspace, /shouldCreateUser: true/);
+  assert.match(joinWorkspace, /accept_invitation/);
+  assert.match(joinWorkspace, /نفس البريد/);
+  assert.match(joinPage, /دعوة من المالك/);
+  assert.match(config, /\[functions\.team-commands\][\s\S]*verify_jwt = true/);
+  assert.match(readme, /never sent automatically|never sends email/i);
 });
 
 test("content team AI choices remain explicit, version fenced, role scoped, and non-moving", async () => {

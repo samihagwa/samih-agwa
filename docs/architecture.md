@@ -106,7 +106,7 @@ Existing Market Whales application
 
 ## Initial domains
 
-1. Identity, organizations, memberships, and roles — foundation live; team onboarding pending.
+1. Identity, organizations, memberships, roles, one-time email-bound claim links, onboarding acknowledgements, and safe suspension — foundation live; real team rollout pending owner approval.
 2. Tasks, transitions, ownership, deadlines, acceptance criteria, Realtime, and activity — foundation live.
 3. Content assets, briefs, dependency-based production stages, and manual publish confirmation — foundation live; external publishing and metrics pending.
 4. Campaigns, launches, assets, readiness gates, and Go / No-Go — foundation live; external performance ingestion pending.

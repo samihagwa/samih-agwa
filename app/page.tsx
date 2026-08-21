@@ -9,7 +9,7 @@ import { contentStepConfig, contentSteps, type ContentStep } from "../lib/conten
 export const metadata: Metadata = { title: "مركز القيادة" };
 
 const foundations = [
-  { label: "هوية وصلاحيات الفريق", state: "جاهزة تقنيًا — لم يبدأ الفريق", icon: ShieldCheck },
+  { label: "هوية وصلاحيات الفريق", state: "دعوة يدوية، تفعيل بالبريد، وإيقاف آمن", icon: ShieldCheck },
   { label: "إدارة المهام والتسليم", state: "قواعد آمنة وبورد حقيقي", icon: CircleCheck },
   { label: "مصنع محتوى مترابط", state: "مسارات ريلز وبوستات باعتماديات تلقائية", icon: CircleCheck },
   { label: "مركز معرفة البراند", state: "جاهز لإدخال واعتماد المراجع الحقيقية", icon: BookOpenCheck },
@@ -33,7 +33,7 @@ export default function Home() {
       <PageHeader
         eyebrow="مركز القيادة"
         title="خلّي الشغل يمشي كنظام، مش كسلسلة رسائل"
-        description="نواة موحّدة لإدارة المحتوى والتاسكات والحملات والعملاء. الهوية وقاعدة المهام وخط إنتاج الريلز جاهزة تقنيًا، لكن الفريق لم يبدأ onboarding ولا نعرض أي بيانات على أنها حقيقية قبل إدخالها رسميًا."
+        description="نواة موحّدة لإدارة المحتوى والتاسكات والحملات والعملاء. دخول الفريق صار محكومًا بدعوة محددة بالبريد وصلاحية واضحة، ولا نعرض أي بيانات على أنها حقيقية قبل إدخالها رسميًا."
         actions={
           <>
             <StatusBadge tone="success">قاعدة المهام جاهزة</StatusBadge>
@@ -78,7 +78,7 @@ export default function Home() {
         <StatCard label="حالات مهمة محكومة" value="7" note="كل انتقال يُفحص داخل قاعدة البيانات" />
         <StatCard label="صلاحيات أساسية" value="5" note="مالك، مدير، منفّذ، مراجع، مشاهد" />
         <StatCard label="مصادر بيانات" value="0" note="لن نعرض أرقامًا وهمية" tone="warning" />
-        <StatCard label="أعضاء فعّالون" value="0" note="يبدأ بعد اعتماد onboarding" />
+        <StatCard label="دخول الفريق" value="بالدعوة" note="لا يوجد تسجيل عشوائي داخل مساحة الشركة" />
       </section>
 
       <section className="content-grid">
@@ -96,9 +96,9 @@ export default function Home() {
 
         <aside className="panel next-step-card">
           <p className="overline">القرار التالي</p>
-          <h2>اختبار المالك قبل إدخال الفريق</h2>
-          <p>سجّل الدخول بحسابك، أنشئ مساحة Market Whales، ثم جرّب مهمة وريلز تجريبيين. لن تُرسل أي دعوة ولن يُضاف أي عضو في هذه المرحلة.</p>
-          <StatusBadge tone="warning">اختبار شخصي فقط</StatusBadge>
+          <h2>اختبر مسار عضو تجريبي قبل فتح الوصول</h2>
+          <p>من قسم الفريق جهّز رابطًا لبريد تجريبي تملكه، افتحه في نافذة خاصة، ثم راجع ما يراه المنفّذ وكيف يستلم ويسلّم المهمة. إنشاء الرابط وحده لا يرسل أي شيء.</p>
+          <StatusBadge tone="warning">الوصول الخارجي ما زال بقرارك</StatusBadge>
         </aside>
       </section>
     </main>
