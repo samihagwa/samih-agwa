@@ -122,10 +122,11 @@ test("team community chat is private, realtime, command-written, and permission 
   assert.match(config, /\[functions\.chat-commands\][\s\S]*verify_jwt = true/);
 });
 
-test("workspace assistant uses the configured provider with server-side permission-scoped context", async () => {
-  const [migration, edgeFunction, component, shell, config] = await Promise.all([
+test("workspace assistant answers personal work from the current account and keeps team context separate", async () => {
+  const [migration, edgeFunction, providerHelpers, component, shell, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822171303_team_chat_workspace_assistant.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/workspace-assistant/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/_shared/ai-provider.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/assistant/WorkspaceAssistant.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
@@ -137,15 +138,31 @@ test("workspace assistant uses the configured provider with server-side permissi
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
   assert.match(edgeFunction, /allowed_sections/);
-  assert.match(edgeFunction, /if \(!leadership\) taskQuery = taskQuery\.eq\("owner_id", actorId\)/);
+  assert.match(edgeFunction, /\.eq\("organization_id", organizationId\)\.eq\("owner_id", actorId\)/);
+  assert.match(edgeFunction, /workspaceContext\.my_open_tasks = myOpenTasks/);
+  assert.match(edgeFunction, /workspaceContext\.team_open_tasks/);
+  assert.match(edgeFunction, /team_open_tasks تُستخدم فقط لما السؤال يطلب صراحة مهام التيم أو الفريق/);
+  assert.match(edgeFunction, /personalQuestionIntent\(question\)/);
+  assert.match(edgeFunction, /قاعدة المهام · حسابك فقط/);
+  assert.match(edgeFunction, /مفيش أي مهمة لعضو تاني داخلة في القائمة دي/);
   assert.match(edgeFunction, /ممنوع اختراع مهمة أو عميل أو موعد أو رابط/);
   assert.match(edgeFunction, /fetchProviderJson/);
   assert.match(edgeFunction, /assistant\.request_started/);
+  assert.match(providerHelpers, /Array\.isArray\(message\?\.content\)/);
   assert.doesNotMatch(edgeFunction, /api_key[^]*jsonResponse\(\{ answer/s);
   assert.match(component, /functions\.invoke\("workspace-assistant"/);
+  assert.match(component, /payload\.source\?\.label/);
   assert.match(component, /لا يغيّر أي بيانات/);
   assert.match(shell, /WorkspaceAssistant/);
   assert.match(config, /\[functions\.workspace-assistant\][\s\S]*verify_jwt = true/);
+});
+
+test("team workspace contains mobile overflow inside the report instead of floating the whole page", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.team-workspace \{ min-width: 0; max-width: 100%;[^}]+overflow-x: clip/);
+  assert.match(css, /\.team-report-table-wrap \{ width: 100%; min-width: 0; max-width: 100%; overflow-x: auto/);
+  assert.match(css, /\.team-workspace \.team-range-controls \.segmented-control \{ width: 100%; display: grid/);
+  assert.match(css, /\.team-workspace \.presence-grid dl > div \{ align-items: flex-start; flex-direction: column/);
 });
 
 test("script studio is private by assignee, owner-visible, versioned, AI-assisted, and handed off atomically", async () => {

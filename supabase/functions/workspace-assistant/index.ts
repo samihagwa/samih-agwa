@@ -7,6 +7,14 @@ import {
 
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const leadershipRoles = new Set(["owner", "admin", "manager"]);
+type PersonalQuestionIntent = "tasks" | "deadline";
+type TaskSummary = {
+  id: string;
+  title: string;
+  status: string;
+  due_at: string | null;
+  url: string;
+};
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: responseHeaders });
@@ -15,13 +23,87 @@ function text(value: unknown) { return typeof value === "string" ? value.trim() 
 function hasSection(role: string, sections: string[], section: string) {
   return role === "owner" || sections.includes(section);
 }
+function normalizeArabic(value: string) {
+  return value.normalize("NFKD")
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "")
+    .replace(/[إأآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ؤ/g, "و").replace(/ئ/g, "ي")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function personalQuestionIntent(question: string): PersonalQuestionIntent | null {
+  const normalized = normalizeArabic(question);
+  if (/(التيم|الفريق|كل المهام|مهام الكل|مهام عضو)/.test(normalized)) return null;
+  const personal = /(مهامي|المهام.{0,18}(عندي|عليا|مطلوب مني)|عندي.{0,12}مهام|عليا.{0,12}مهام|مطلوب مني)/.test(normalized);
+  const deadline = /(اقرب.{0,12}موعد|موعد.{0,8}تسليم|مواعيدي|الديدلاين|موعدي)/.test(normalized);
+  if (deadline && (personal || /(عندي|عليا|لي|بتاعي)/.test(normalized))) return "deadline";
+  return personal ? "tasks" : null;
+}
+function taskUrl(task: Record<string, unknown>) {
+  return task.crm_contact_id ? `/crm#lead-${task.crm_contact_id}`
+    : task.content_item_id ? `/content#content-${task.content_item_id}`
+      : task.launch_deliverable_id ? `/campaigns#deliverable-${task.launch_deliverable_id}` : `/tasks#task-${task.id}`;
+}
+function taskSummary(task: Record<string, unknown>): TaskSummary {
+  return {
+    id: text(task.id), title: text(task.title) || "مهمة بدون عنوان", status: text(task.status),
+    due_at: typeof task.due_at === "string" ? task.due_at : null, url: taskUrl(task),
+  };
+}
+function statusLabel(status: string) {
+  return status === "in_progress" ? "جاري التنفيذ" : status === "review" ? "قيد المراجعة"
+    : status === "ready" || status === "backlog" ? "شغل مطلوب تنفيذه" : status || "حالة غير محددة";
+}
+function cairoDateKey(date: Date) {
+  const parts = new Intl.DateTimeFormat("en", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+function dueDistance(value: string, now: Date) {
+  const difference = new Date(value).getTime() - now.getTime();
+  const minutes = Math.max(1, Math.ceil(Math.abs(difference) / 60_000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const remainder = minutes % 60;
+  const pieces = [days ? `${days.toLocaleString("ar-EG")} يوم` : "", hours ? `${hours.toLocaleString("ar-EG")} ساعة` : "", !days && remainder ? `${remainder.toLocaleString("ar-EG")} دقيقة` : ""].filter(Boolean);
+  return difference < 0 ? `متأخرة منذ ${pieces.join(" و")}` : `متبقي ${pieces.join(" و")}`;
+}
+function formatTask(task: TaskSummary, index: number, now: Date) {
+  const due = task.due_at
+    ? `${new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo" }).format(new Date(task.due_at))} — ${dueDistance(task.due_at, now)}`
+    : "بدون موعد تسليم مسجل";
+  return `${index + 1}. ${task.title}\nالحالة: ${statusLabel(task.status)} · الموعد: ${due}\nالرابط: ${task.url}`;
+}
+function personalAnswer(intent: PersonalQuestionIntent, tasks: TaskSummary[], question: string) {
+  const now = new Date();
+  if (!tasks.length) return "مفيش مهام مفتوحة مسندة مباشرة للحساب ده حاليًا. النتيجة دي تخص حسابك فقط، مش مهام التيم.";
+  if (intent === "deadline") {
+    const datedTasks = tasks.filter((task) => task.due_at).sort((first, second) => new Date(first.due_at!).getTime() - new Date(second.due_at!).getTime());
+    if (!datedTasks.length) return `عندك ${tasks.length.toLocaleString("ar-EG")} مهمة مفتوحة مسندة لحسابك، لكن مفيش موعد تسليم مسجل لأي واحدة. افتح مهامك: /tasks`;
+    const overdue = datedTasks.filter((task) => new Date(task.due_at!).getTime() < now.getTime());
+    const heading = overdue.length ? "دي مواعيدك الأكثر إلحاحًا؛ المتأخر ظاهر أولًا." : "ده أقرب موعد تسليم مسند مباشرة لحسابك.";
+    return `${heading}\n\n${datedTasks.slice(0, overdue.length ? 3 : 1).map((task, index) => formatTask(task, index, now)).join("\n\n")}\n\nالنتيجة دي من قاعدة المهام لحسابك فقط، مش من مهام التيم.`;
+  }
+  const asksToday = /(النهارده|اليوم)/.test(normalizeArabic(question));
+  const todayKey = cairoDateKey(now);
+  const visibleTasks = asksToday
+    ? tasks.filter((task) => task.due_at && (new Date(task.due_at).getTime() < now.getTime() || cairoDateKey(new Date(task.due_at)) === todayKey))
+    : tasks;
+  if (!visibleTasks.length) {
+    const next = tasks.find((task) => task.due_at);
+    return next
+      ? `مفيش مهمة موعدها النهارده أو متأخرة على حسابك. أقرب مهمة بعد كده:\n\n${formatTask(next, 0, now)}\n\nالنتيجة دي تخص حسابك فقط.`
+      : "مفيش مهمة بموعد النهارده أو مهمة متأخرة على حسابك. عندك مهام مفتوحة بدون مواعيد؛ افتحها من /tasks";
+  }
+  return `دي المهام المفتوحة المسندة مباشرة لحسابك فقط${asksToday ? " والمطلوب تتحرك فيها النهارده" : ""}:\n\n${visibleTasks.slice(0, 10).map((task, index) => formatTask(task, index, now)).join("\n\n")}${visibleTasks.length > 10 ? `\n\nوفيه ${(visibleTasks.length - 10).toLocaleString("ar-EG")} مهمة إضافية داخل /tasks` : ""}\n\nمفيش أي مهمة لعضو تاني داخلة في القائمة دي.`;
+}
 function providerBody(provider: AiProviderRuntime, context: Record<string, unknown>, question: string) {
   const instructions = `أنت مساعد تشغيل داخلي لمنصة Market Whales OS. أجب بالعربية المصرية الواضحة والمختصرة.
 
 قواعد حاسمة:
 - استخدم بيانات السياق المرفقة فقط؛ ممنوع اختراع مهمة أو عميل أو موعد أو رابط.
 - بيانات السياق محسوبة مسبقًا حسب صلاحيات العضو. لا تطلب ولا تكشف بيانات خارجها.
-- لو السؤال عن مهام اليوم، اذكر المهام غير المكتملة المسندة للعضو أولًا، مع الموعد والحالة والرابط لكل مهمة.
+- my_open_tasks هي المصدر الوحيد لأي سؤال بصيغة «مهامي/عندي/عليا/مطلوب مني»، حتى لو المستخدم مدير أو مالك.
+- team_open_tasks تُستخدم فقط لما السؤال يطلب صراحة مهام التيم أو الفريق؛ ممنوع خلطها مع مهام المستخدم الشخصية.
+- عند ذكر المهام، اذكر الموعد والحالة والرابط لكل مهمة.
 - استخدم الروابط النسبية المرفقة كما هي، مثل /tasks أو /crm.
 - لو المعلومة غير موجودة قل بوضوح: «المعلومة دي مش موجودة في الجزء المسموح لي أشوفه» واقترح القسم الصحيح.
 - لا تنفذ أي تغيير ولا تدّعي أنك نفذت شيئًا. أنت للشرح والبحث والإرشاد فقط في هذه النسخة.
@@ -78,19 +160,23 @@ export default {
     };
 
     const queries: Promise<void>[] = [];
+    let myOpenTasks: TaskSummary[] = [];
     if (hasSection(role, sections, "tasks")) queries.push((async () => {
-      let taskQuery = context.supabaseAdmin.from("tasks")
+      const taskQuery = context.supabaseAdmin.from("tasks")
         .select("id, title, description, status, priority, owner_id, due_at, acceptance_criteria, content_item_id, launch_deliverable_id, crm_contact_id")
-        .eq("organization_id", organizationId).not("status", "in", "(done,cancelled)")
-        .order("due_at").limit(leadership ? 60 : 30);
-      if (!leadership) taskQuery = taskQuery.eq("owner_id", actorId);
+        .eq("organization_id", organizationId).eq("owner_id", actorId).not("status", "in", "(done,cancelled)")
+        .order("due_at", { ascending: true, nullsFirst: false }).limit(30);
       const { data } = await taskQuery;
-      workspaceContext.open_tasks = (data ?? []).map((task) => ({
-        ...task,
-        url: task.crm_contact_id ? `/crm#lead-${task.crm_contact_id}`
-          : task.content_item_id ? `/content#content-${task.content_item_id}`
-            : task.launch_deliverable_id ? `/campaigns#deliverable-${task.launch_deliverable_id}` : `/tasks#task-${task.id}`,
-      }));
+      myOpenTasks = (data ?? []).map((task) => taskSummary(task));
+      workspaceContext.my_open_tasks = myOpenTasks;
+    })());
+
+    if (hasSection(role, sections, "tasks") && leadership) queries.push((async () => {
+      const { data } = await context.supabaseAdmin.from("tasks")
+        .select("id, title, status, priority, owner_id, due_at, content_item_id, launch_deliverable_id, crm_contact_id")
+        .eq("organization_id", organizationId).neq("owner_id", actorId).not("status", "in", "(done,cancelled)")
+        .order("due_at", { ascending: true, nullsFirst: false }).limit(60);
+      workspaceContext.team_open_tasks = (data ?? []).map((task) => taskSummary(task));
     })());
 
     queries.push((async () => {
@@ -144,6 +230,21 @@ export default {
     })());
 
     await Promise.all(queries);
+    const personalIntent = personalQuestionIntent(question);
+    if (personalIntent) {
+      const answer = hasSection(role, sections, "tasks")
+        ? personalAnswer(personalIntent, myOpenTasks, question)
+        : "قسم المهام مش ضمن صلاحيات حسابك، لذلك مش هعرض أي بيانات منه. اطلب من المالك إضافة القسم لو دورك محتاجه.";
+      await context.supabaseAdmin.from("audit_events").insert({
+        organization_id: organizationId, actor_id: actorId, action: "assistant.request_started",
+        entity_type: "workspace_assistant", after_data: { question_length: question.length, source: "database", scope: "personal_tasks" },
+      });
+      await context.supabaseAdmin.from("audit_events").insert({
+        organization_id: organizationId, actor_id: actorId, action: "assistant.response_returned",
+        entity_type: "workspace_assistant", after_data: { answer_length: answer.length, source: "database", scope: "personal_tasks" },
+      });
+      return jsonResponse({ answer, source: { label: "قاعدة المهام · حسابك فقط" } });
+    }
     const { data: providerData, error: providerError } = await context.supabaseAdmin.rpc("get_workspace_assistant_provider_runtime", {
       target_user_id: actorId, target_organization_id: organizationId,
     });

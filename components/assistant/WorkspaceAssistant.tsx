@@ -47,10 +47,12 @@ export function WorkspaceAssistant() {
       setError(await getSupabaseFunctionErrorMessage(result.error, "تعذّر الوصول لمساعد التشغيل."));
       return;
     }
-    const payload = result.data as { answer?: unknown; provider?: { name?: unknown; model?: unknown } };
+    const payload = result.data as { answer?: unknown; provider?: { name?: unknown; model?: unknown }; source?: { label?: unknown } };
     const answer = typeof payload.answer === "string" ? payload.answer.trim() : "";
     if (!answer) { setError("وصل رد فارغ من المساعد."); return; }
-    const provider = [payload.provider?.name, payload.provider?.model].filter((value): value is string => typeof value === "string").join(" · ");
+    const provider = typeof payload.source?.label === "string"
+      ? payload.source.label
+      : [payload.provider?.name, payload.provider?.model].filter((value): value is string => typeof value === "string").join(" · ");
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", text: answer, provider }]);
   }
 

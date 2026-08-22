@@ -78,7 +78,14 @@ export function extractProviderText(response: Record<string, unknown>, protocol:
     if (!Array.isArray(choices)) return "";
     const first = choices[0] as Record<string, unknown> | undefined;
     const message = first?.message as Record<string, unknown> | undefined;
-    return typeof message?.content === "string" ? message.content : "";
+    if (typeof message?.content === "string") return message.content;
+    if (!Array.isArray(message?.content)) return "";
+    return message.content.map((part) => {
+      if (typeof part === "string") return part;
+      if (!part || typeof part !== "object") return "";
+      const item = part as Record<string, unknown>;
+      return (item.type === "text" || item.type === "output_text") && typeof item.text === "string" ? item.text : "";
+    }).filter(Boolean).join("\n");
   }
   if (typeof response.output_text === "string") return response.output_text;
   if (!Array.isArray(response.output)) return "";

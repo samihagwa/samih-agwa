@@ -547,7 +547,12 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .automation-note strong { font-size: 11px; }
 .automation-note p { margin: 4px 0 0; color: var(--ink-600); font-size: 12px; line-height: 1.7; }
 
-.team-workspace { display: grid; gap: 15px; }
+.team-workspace { min-width: 0; max-width: 100%; display: grid; gap: 15px; overflow-x: clip; }
+.team-workspace > *, .team-workspace .panel, .team-workspace .section-heading > div,
+.team-workspace .team-member-list, .team-workspace .team-member-list > article,
+.team-workspace .team-member-actions, .team-workspace .presence-grid,
+.team-workspace .presence-grid > article, .team-workspace .presence-privacy-note > div,
+.team-workspace .team-report-panel { min-width: 0; max-width: 100%; }
 .team-onboarding-panel { border-color: #e4cc8c; background: linear-gradient(135deg, #fffaf0, rgba(255,255,255,.94)); }
 .onboarding-step-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .onboarding-step-grid > article { min-width: 0; padding: 14px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 9px; border: 1px solid var(--line); border-radius: 13px; background: var(--paper); }
@@ -891,7 +896,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .custom-range label { display: flex; align-items: center; gap: 5px; }
 .custom-range label > span { color: var(--ink-600); font-size: 11px; font-weight: 800; }
 .custom-range input { min-height: 33px; padding: 5px 7px; font-size: 11px; }
-.team-report-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.team-report-table-wrap { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; border: 1px solid var(--line); border-radius: 12px; -webkit-overflow-scrolling: touch; }
 .team-report-table { width: 100%; min-width: 1080px; border-collapse: collapse; background: var(--paper); }
 .team-report-table th, .team-report-table td { padding: 10px; border-bottom: 1px solid var(--line); color: var(--ink-700); font-size: 11px; text-align: right; white-space: nowrap; }
 .team-report-table thead th { position: sticky; top: 0; background: var(--canvas); color: var(--ink-500); font-weight: 900; }
@@ -1501,6 +1506,24 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .generated-invite-link .button, .join-email-form .button { width: 100%; }
   .team-member-role, .team-member-actions { align-items: flex-start; flex-direction: column; }
   .team-member-actions, .team-member-actions label, .team-member-actions select, .team-member-actions .button { width: 100%; }
+  .team-workspace .panel { padding: 17px 14px; }
+  .team-workspace .section-heading, .team-report-heading { width: 100%; align-items: flex-start; flex-direction: column; gap: 10px; }
+  .team-workspace .section-heading h2, .team-workspace .section-heading p,
+  .team-workspace .team-report-heading h2, .team-workspace .team-report-heading p,
+  .team-workspace .team-member-role > small, .team-workspace .presence-privacy-note p { overflow-wrap: anywhere; }
+  .team-workspace .section-heading > .status-badge { align-self: flex-start; }
+  .team-workspace .team-member-actions .text-button { width: 100%; justify-content: flex-start; }
+  .team-workspace .presence-grid header { align-items: flex-start; flex-wrap: wrap; }
+  .team-workspace .presence-grid header .status-badge { margin-inline-start: auto; }
+  .team-workspace .presence-grid dl > div { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .team-workspace .presence-grid dd { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  .team-workspace .team-range-controls { width: 100%; align-items: stretch; flex-direction: column; }
+  .team-workspace .team-range-controls .segmented-control { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .team-workspace .team-range-controls .segmented-control button { min-width: 0; padding-inline: 5px; }
+  .team-workspace .custom-range { width: 100%; flex-direction: column; }
+  .team-workspace .custom-range label, .team-workspace .custom-range input { width: 100%; }
+  .team-workspace .team-range-controls > span { margin-inline-start: 0; flex-wrap: wrap; }
+  .team-workspace .section-access-picker { width: 100%; padding: 12px 10px; }
   .join-workspace-heading { flex-direction: column; }
   .kanban-board { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
   .content-workflow-subtasks > section { grid-template-columns: 1fr; }
