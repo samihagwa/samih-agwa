@@ -931,6 +931,18 @@ test("workspace is invite-only, section-scoped, and enforced before rendering or
   assert.match(config, /\[functions\.request-access-link\][\s\S]*verify_jwt = false/);
 });
 
+test("team invitations accept any owner-approved valid email including public providers", async () => {
+  const [migration, commands] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260822015819_fix_team_invitation_email_validation.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/team-commands/index.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /team_invitations_email_normalized/);
+  assert.match(migration, /Enter a valid email address/);
+  assert.match(migration, /normalized_email !~ '\^\[\^\[:space:\]@\]\+@\[\^\[:space:\]@\]\+\\\.\[\^\[:space:\]@\]\+\$'/);
+  assert.match(commands, /Enter a valid email address/);
+});
+
 test("content team AI choices remain explicit, version fenced, role scoped, and non-moving", async () => {
   const [migration, aiFunction, commandFunction, workspace, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821132327_content_team_ai_choices_and_research_notifications.sql", import.meta.url), "utf8"),

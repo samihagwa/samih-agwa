@@ -39,7 +39,7 @@ function randomToken() {
 
 function safeErrorMessage(message: string, fallback: string) {
   const known = [
-    "Only the active organization owner", "Enter a valid work email",
+    "Only the active organization owner", "Enter a valid work email", "Enter a valid email address",
     "Enter the team member name", "Owner access cannot", "Invitation expiry",
     "This email already belongs", "Invitation was not found", "Invitation link is invalid",
     "Sign in with the same email", "already belongs to another", "account is suspended",
