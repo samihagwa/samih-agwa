@@ -750,11 +750,12 @@ test("application shell does not impersonate an authenticated owner", async () =
 });
 
 test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task system", async () => {
-  const [migration, contextMigration, scaleMigration, importMigration, edgeFunction, workspace, taskWorkspace, contract, importParser, roadmap] = await Promise.all([
+  const [migration, contextMigration, scaleMigration, importMigration, importPolicyFix, edgeFunction, workspace, taskWorkspace, contract, importParser, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817033924_crm_foundation.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817151104_crm_contact_context_and_chat_links.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817205723_crm_search_multi_identity_owner_performance.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260822165632_crm_archive_import_operations.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260822184714_fix_crm_import_policy_execution.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
@@ -815,6 +816,9 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(importMigration, /function public\.import_telegram_indicator_batch/);
   assert.match(importMigration, /function public\.rollback_crm_import_batch/);
   assert.match(importMigration, /contact\.version = imported_row\.contact_version_at_import/);
+  assert.match(importPolicyFix, /function private\.can_manage_crm_imports/);
+  assert.match(importPolicyFix, /grant execute on function private\.can_manage_crm_imports\(uuid\) to authenticated/);
+  assert.match(importPolicyFix, /membership\.role in \('owner', 'admin'\)/);
   assert.match(edgeFunction, /import_telegram_batch/);
   assert.match(workspace, /الأرشيف/);
   assert.match(workspace, /استيراد عملاء Telegram/);
