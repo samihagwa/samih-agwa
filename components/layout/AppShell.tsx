@@ -17,6 +17,7 @@ import { SessionChip } from "../auth/SessionChip";
 import { PresenceReporter } from "../auth/PresenceReporter";
 import { NotificationCenter } from "../auth/NotificationCenter";
 import { Button } from "../ui/Button";
+import { WorkspaceAssistant } from "../assistant/WorkspaceAssistant";
 import { SidebarNav } from "./SidebarNav";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -151,6 +152,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <div className="page-container">{sectionAllowed ? children : <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><p className="overline">خارج صلاحيات حسابك</p><h2>هذا القسم غير متاح لك</h2><p>مالك المنصة يحدد الأقسام لكل عضو. لو تحتاج هذا القسم اطلب تعديل صلاحيتك.</p></div><Button href={firstAllowedSectionHref(membership)} variant="secondary">العودة لمساحة عملي</Button></section>}</div>
       </div>
+      <WorkspaceAssistant />
     </div>
   );
 }

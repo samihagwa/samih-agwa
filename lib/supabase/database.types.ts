@@ -1035,6 +1035,7 @@ export type Database = {
           owner_id: string
           source: Database["public"]["Enums"]["crm_source"]
           source_detail: string | null
+          source_registered_at: string | null
           stage: Database["public"]["Enums"]["crm_lead_stage"]
           updated_at: string
           version: number
@@ -1056,6 +1057,7 @@ export type Database = {
           owner_id: string
           source: Database["public"]["Enums"]["crm_source"]
           source_detail?: string | null
+          source_registered_at?: string | null
           stage?: Database["public"]["Enums"]["crm_lead_stage"]
           updated_at?: string
           version?: number
@@ -1077,6 +1079,7 @@ export type Database = {
           owner_id?: string
           source?: Database["public"]["Enums"]["crm_source"]
           source_detail?: string | null
+          source_registered_at?: string | null
           stage?: Database["public"]["Enums"]["crm_lead_stage"]
           updated_at?: string
           version?: number
@@ -1214,6 +1217,143 @@ export type Database = {
           },
           {
             foreignKeyName: "crm_identities_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_import_batches: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          created_rows: number
+          duplicate_rows: number
+          error_rows: number
+          id: string
+          organization_id: string
+          rolled_back_at: string | null
+          rolled_back_by: string | null
+          source_system: string
+          status: string
+          total_rows: number
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          created_rows?: number
+          duplicate_rows?: number
+          error_rows?: number
+          id?: string
+          organization_id: string
+          rolled_back_at?: string | null
+          rolled_back_by?: string | null
+          source_system: string
+          status?: string
+          total_rows?: number
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          created_rows?: number
+          duplicate_rows?: number
+          error_rows?: number
+          id?: string
+          organization_id?: string
+          rolled_back_at?: string | null
+          rolled_back_by?: string | null
+          source_system?: string
+          status?: string
+          total_rows?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_import_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_import_batches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_import_batches_rolled_back_by_fkey"
+            columns: ["rolled_back_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_import_rows: {
+        Row: {
+          batch_id: string
+          contact_id: string | null
+          contact_version_at_import: number | null
+          created_at: string
+          error_message: string | null
+          external_id: string
+          id: number
+          organization_id: string
+          result: string
+          signal: string
+          source_registered_at: string | null
+          source_system: string
+        }
+        Insert: {
+          batch_id: string
+          contact_id?: string | null
+          contact_version_at_import?: number | null
+          created_at?: string
+          error_message?: string | null
+          external_id: string
+          id?: never
+          organization_id: string
+          result: string
+          signal: string
+          source_registered_at?: string | null
+          source_system: string
+        }
+        Update: {
+          batch_id?: string
+          contact_id?: string | null
+          contact_version_at_import?: number | null
+          created_at?: string
+          error_message?: string | null
+          external_id?: string
+          id?: never
+          organization_id?: string
+          result?: string
+          signal?: string
+          source_registered_at?: string | null
+          source_system?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_import_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "crm_import_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_import_rows_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_import_rows_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -2661,7 +2801,7 @@ export type Database = {
           {
             foreignKeyName: "script_voice_profiles_organization_id_fkey"
             columns: ["organization_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
@@ -2942,92 +3082,6 @@ export type Database = {
           },
         ]
       }
-      team_invitations: {
-        Row: {
-          accepted_at: string | null
-          accepted_by: string | null
-          allowed_sections: string[]
-          created_at: string
-          email: string
-          expires_at: string
-          full_name: string
-          id: string
-          invited_by: string
-          organization_id: string
-          revoked_at: string | null
-          revoked_by: string | null
-          role: Database["public"]["Enums"]["app_role"]
-          status: Database["public"]["Enums"]["team_invitation_status"]
-          token_hash: string
-          updated_at: string
-        }
-        Insert: {
-          accepted_at?: string | null
-          accepted_by?: string | null
-          allowed_sections?: string[]
-          created_at?: string
-          email: string
-          expires_at: string
-          full_name: string
-          id?: string
-          invited_by: string
-          organization_id: string
-          revoked_at?: string | null
-          revoked_by?: string | null
-          role?: Database["public"]["Enums"]["app_role"]
-          status?: Database["public"]["Enums"]["team_invitation_status"]
-          token_hash: string
-          updated_at?: string
-        }
-        Update: {
-          accepted_at?: string | null
-          accepted_by?: string | null
-          allowed_sections?: string[]
-          created_at?: string
-          email?: string
-          expires_at?: string
-          full_name?: string
-          id?: string
-          invited_by?: string
-          organization_id?: string
-          revoked_at?: string | null
-          revoked_by?: string | null
-          role?: Database["public"]["Enums"]["app_role"]
-          status?: Database["public"]["Enums"]["team_invitation_status"]
-          token_hash?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "team_invitations_accepted_by_fkey"
-            columns: ["accepted_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "team_invitations_invited_by_fkey"
-            columns: ["invited_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "team_invitations_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "team_invitations_revoked_by_fkey"
-            columns: ["revoked_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       tasks: {
         Row: {
           acceptance_criteria: string
@@ -3153,13 +3207,219 @@ export type Database = {
           },
         ]
       }
+      team_chat_messages: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          deleted_at: string | null
+          edited_at: string | null
+          id: number
+          organization_id: string
+          reply_to_id: number | null
+          room_id: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: never
+          organization_id: string
+          reply_to_id?: number | null
+          room_id: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
+          id?: never
+          organization_id?: string
+          reply_to_id?: number | null
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_chat_messages_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_chat_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_chat_messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "team_chat_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_chat_messages_room_org_fkey"
+            columns: ["room_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "team_chat_rooms"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      team_chat_rooms: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          is_archived: boolean
+          name: string
+          organization_id: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          is_archived?: boolean
+          name: string
+          organization_id: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          is_archived?: boolean
+          name?: string
+          organization_id?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_chat_rooms_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_chat_rooms_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          allowed_sections: string[]
+          created_at: string
+          email: string
+          expires_at: string
+          full_name: string
+          id: string
+          invited_by: string
+          organization_id: string
+          revoked_at: string | null
+          revoked_by: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          status: Database["public"]["Enums"]["team_invitation_status"]
+          token_hash: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          allowed_sections?: string[]
+          created_at?: string
+          email: string
+          expires_at: string
+          full_name: string
+          id?: string
+          invited_by: string
+          organization_id: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: Database["public"]["Enums"]["team_invitation_status"]
+          token_hash: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          allowed_sections?: string[]
+          created_at?: string
+          email?: string
+          expires_at?: string
+          full_name?: string
+          id?: string
+          invited_by?: string
+          organization_id?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          status?: Database["public"]["Enums"]["team_invitation_status"]
+          token_hash?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_invitations_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_invitations_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_invitations_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       accept_team_invitation: {
-        Args: { plain_token: string; target_email: string; target_user_id: string }
+        Args: {
+          plain_token: string
+          target_email: string
+          target_user_id: string
+        }
         Returns: string
       }
       acknowledge_team_onboarding: {
@@ -3182,16 +3442,6 @@ export type Database = {
         }
         Returns: string
       }
-      apply_content_ai_choice: {
-        Args: {
-          expected_content_version: number
-          selected_text: string
-          target_content_item_id: string
-          target_scope: string
-          target_user_id: string
-        }
-        Returns: number
-      }
       add_crm_identity: {
         Args: {
           identity_kind: Database["public"]["Enums"]["crm_identity_kind"]
@@ -3202,9 +3452,27 @@ export type Database = {
         }
         Returns: string
       }
+      apply_content_ai_choice: {
+        Args: {
+          expected_content_version: number
+          selected_text: string
+          target_content_item_id: string
+          target_scope: string
+          target_user_id: string
+        }
+        Returns: number
+      }
       approve_brand_article: {
         Args: { target_article_id: string; target_user_id: string }
         Returns: boolean
+      }
+      approve_script_as_voice_sample: {
+        Args: {
+          expected_script_version: number
+          target_script_id: string
+          target_user_id: string
+        }
+        Returns: number
       }
       archive_brand_article: {
         Args: { target_article_id: string; target_user_id: string }
@@ -3221,6 +3489,15 @@ export type Database = {
       bootstrap_market_whales_organization: {
         Args: { target_user_id: string }
         Returns: string
+      }
+      cancel_launch: {
+        Args: {
+          cancellation_reason: string
+          expected_version: number
+          target_launch_id: string
+          target_user_id: string
+        }
+        Returns: number
       }
       cancel_publishing_occurrence: {
         Args: { target_occurrence_id: string }
@@ -3674,18 +3951,6 @@ export type Database = {
         }
         Returns: string
       }
-      create_team_invitation: {
-        Args: {
-          plain_token: string
-          target_actor_id: string
-          target_email: string
-          target_expires_at: string
-          target_full_name: string
-          target_organization_id: string
-          target_role: Database["public"]["Enums"]["app_role"]
-        }
-        Returns: string
-      }
       create_script_from_research: {
         Args: { target_research_id: string; target_user_id: string }
         Returns: string
@@ -3751,6 +4016,41 @@ export type Database = {
         }
         Returns: string
       }
+      create_team_chat_room_v2: {
+        Args: {
+          room_description?: string
+          room_name: string
+          room_slug: string
+          target_actor_id: string
+          target_organization_id: string
+        }
+        Returns: string
+      }
+      create_team_invitation: {
+        Args: {
+          plain_token: string
+          target_actor_id: string
+          target_email: string
+          target_expires_at: string
+          target_full_name: string
+          target_organization_id: string
+          target_role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: string
+      }
+      create_team_invitation_with_sections: {
+        Args: {
+          plain_token: string
+          target_actor_id: string
+          target_allowed_sections: string[]
+          target_email: string
+          target_expires_at: string
+          target_full_name: string
+          target_organization_id: string
+          target_role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: string
+      }
       create_telegram_publication: {
         Args: {
           post_disable_link_preview: boolean
@@ -3775,8 +4075,16 @@ export type Database = {
         }
         Returns: string
       }
+      delete_ai_provider: {
+        Args: { target_provider_id: string; target_user_id: string }
+        Returns: boolean
+      }
       delete_publishing_schedule: {
         Args: { target_schedule_id: string }
+        Returns: boolean
+      }
+      delete_team_chat_message_v2: {
+        Args: { target_actor_id: string; target_message_id: number }
         Returns: boolean
       }
       detach_content_from_launch: {
@@ -3786,6 +4094,34 @@ export type Database = {
           target_user_id: string
         }
         Returns: boolean
+      }
+      edit_team_chat_message_v2: {
+        Args: {
+          message_body: string
+          target_actor_id: string
+          target_message_id: number
+        }
+        Returns: boolean
+      }
+      get_ai_provider_runtime_for_owner: {
+        Args: { target_provider_id: string; target_user_id: string }
+        Returns: Json
+      }
+      get_content_ai_context: {
+        Args: {
+          target_content_item_id: string
+          target_scope: string
+          target_user_id: string
+        }
+        Returns: Json
+      }
+      get_content_ai_provider_runtime: {
+        Args: {
+          target_content_item_id: string
+          target_scope: string
+          target_user_id: string
+        }
+        Returns: Json
       }
       get_crm_owner_performance: {
         Args: { target_organization_id: string; target_range_days: number }
@@ -3804,23 +4140,11 @@ export type Database = {
           won_in_period: number
         }[]
       }
-      get_content_ai_context: {
-        Args: {
-          target_content_item_id: string
-          target_scope: string
-          target_user_id: string
-        }
-        Returns: Json
-      }
-      get_content_ai_provider_runtime: {
-        Args: {
-          target_content_item_id: string
-          target_scope: string
-          target_user_id: string
-        }
-        Returns: Json
-      }
       get_script_ai_context: {
+        Args: { target_script_id: string; target_user_id: string }
+        Returns: Json
+      }
+      get_script_ai_provider_runtime: {
         Args: { target_script_id: string; target_user_id: string }
         Returns: Json
       }
@@ -3851,6 +4175,10 @@ export type Database = {
           tasks_requested: number
           user_id: string
         }[]
+      }
+      get_workspace_assistant_provider_runtime: {
+        Args: { target_organization_id: string; target_user_id: string }
+        Returns: Json
       }
       get_workspace_readiness: {
         Args: { target_organization_id: string }
@@ -3889,13 +4217,18 @@ export type Database = {
         }
         Returns: string
       }
-      mark_all_notifications_read: {
-        Args: { target_organization_id: string }
-        Returns: number
+      hook_restrict_market_whales_signup: {
+        Args: { event: Json }
+        Returns: Json
       }
-      mark_notification_read: {
-        Args: { target_notification_id: number }
-        Returns: boolean
+      import_telegram_indicator_batch: {
+        Args: {
+          default_owner_id: string
+          import_rows: Json
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
       }
       manage_team_membership: {
         Args: {
@@ -3907,11 +4240,39 @@ export type Database = {
         }
         Returns: boolean
       }
+      manage_team_membership_access: {
+        Args: {
+          target_actor_id: string
+          target_allowed_sections: string[]
+          target_organization_id: string
+          target_role: Database["public"]["Enums"]["app_role"]
+          target_status: Database["public"]["Enums"]["membership_status"]
+          target_user_id: string
+        }
+        Returns: boolean
+      }
+      mark_all_notifications_read: {
+        Args: { target_organization_id: string }
+        Returns: number
+      }
+      mark_notification_read: {
+        Args: { target_notification_id: number }
+        Returns: boolean
+      }
       mark_publication_network_started: {
         Args: {
           target_claim_generation: number
           target_claim_token: string
           target_log_id: string
+        }
+        Returns: boolean
+      }
+      record_ai_provider_test: {
+        Args: {
+          target_provider_id: string
+          target_user_id: string
+          test_message: string
+          test_success: boolean
         }
         Returns: boolean
       }
@@ -3930,10 +4291,6 @@ export type Database = {
         Args: { target_organization_id: string; target_section: string }
         Returns: boolean
       }
-      revoke_team_invitation: {
-        Args: { target_actor_id: string; target_invitation_id: string }
-        Returns: boolean
-      }
       remove_content_asset: {
         Args: { target_asset_id: string; target_user_id: string }
         Returns: boolean
@@ -3945,6 +4302,10 @@ export type Database = {
           target_stage: Database["public"]["Enums"]["content_step"]
           target_user_id: string
         }
+        Returns: string
+      }
+      resolve_workspace_login: {
+        Args: { target_email: string; target_token_hash?: string }
         Returns: string
       }
       revise_brand_article: {
@@ -3976,6 +4337,28 @@ export type Database = {
           target_starts_on: string
           target_time_local: string
           target_weekdays: number[]
+        }
+        Returns: string
+      }
+      revoke_team_invitation: {
+        Args: { target_actor_id: string; target_invitation_id: string }
+        Returns: boolean
+      }
+      rollback_crm_import_batch: {
+        Args: { target_batch_id: string; target_user_id: string }
+        Returns: Json
+      }
+      save_ai_provider: {
+        Args: {
+          provider_api_key: string
+          provider_base_url: string
+          provider_is_default: boolean
+          provider_model: string
+          provider_name: string
+          provider_protocol: Database["public"]["Enums"]["ai_api_protocol"]
+          target_organization_id: string
+          target_provider_id: string
+          target_user_id: string
         }
         Returns: string
       }
@@ -4052,14 +4435,6 @@ export type Database = {
         }
         Returns: number
       }
-      approve_script_as_voice_sample: {
-        Args: {
-          expected_script_version: number
-          target_script_id: string
-          target_user_id: string
-        }
-        Returns: number
-      }
       search_crm_contacts: {
         Args: {
           result_limit: number
@@ -4074,6 +4449,36 @@ export type Database = {
           contact_id: string
           total_count: number
         }[]
+      }
+      search_crm_contacts_v2: {
+        Args: {
+          result_limit: number
+          result_offset: number
+          search_query: string
+          target_organization_id: string
+          target_owner_id: string
+          target_scope: string
+          target_stage: Database["public"]["Enums"]["crm_lead_stage"]
+          target_view: string
+        }
+        Returns: {
+          contact_id: string
+          total_count: number
+        }[]
+      }
+      send_team_chat_message_v2: {
+        Args: {
+          message_body: string
+          target_actor_id: string
+          target_organization_id: string
+          target_reply_to_id?: number
+          target_room_id: string
+        }
+        Returns: number
+      }
+      set_default_ai_provider: {
+        Args: { target_provider_id: string; target_user_id: string }
+        Returns: boolean
       }
       set_publishing_kill_switch: {
         Args: {
@@ -4133,6 +4538,26 @@ export type Database = {
           target_user_id: string
         }
         Returns: boolean
+      }
+      update_launch: {
+        Args: {
+          expected_version: number
+          launch_audience: string
+          launch_cta: string
+          launch_currency: string
+          launch_ends_at: string
+          launch_kind: Database["public"]["Enums"]["launch_type"]
+          launch_lead_target: number
+          launch_objective: string
+          launch_offer: string
+          launch_revenue_target: number
+          launch_sales_target: number
+          launch_starts_at: string
+          launch_title: string
+          target_launch_id: string
+          target_user_id: string
+        }
+        Returns: number
       }
       update_social_post_brief: {
         Args: {
@@ -4252,7 +4677,7 @@ export type Database = {
         | "facebook"
         | "messenger"
         | "other"
-      crm_identity_kind: "phone" | "email" | "telegram"
+      crm_identity_kind: "phone" | "email" | "telegram" | "tradingview"
       crm_interest:
         | "indicator"
         | "signals_gold"
@@ -4318,7 +4743,6 @@ export type Database = {
         | "cancelled"
       launch_type: "webinar" | "course" | "service" | "book" | "indicator"
       membership_status: "invited" | "active" | "suspended"
-      team_invitation_status: "pending" | "accepted" | "revoked"
       script_input_mode: "idea" | "reference" | "manual"
       script_research_kind: "idea" | "reference" | "competitor"
       script_research_status: "inbox" | "selected" | "used" | "archived"
@@ -4333,6 +4757,7 @@ export type Database = {
         | "blocked"
         | "done"
         | "cancelled"
+      team_invitation_status: "pending" | "accepted" | "revoked"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4559,7 +4984,7 @@ export const Constants = {
         "messenger",
         "other",
       ],
-      crm_identity_kind: ["phone", "email", "telegram"],
+      crm_identity_kind: ["phone", "email", "telegram", "tradingview"],
       crm_interest: [
         "indicator",
         "signals_gold",
@@ -4632,7 +5057,6 @@ export const Constants = {
       ],
       launch_type: ["webinar", "course", "service", "book", "indicator"],
       membership_status: ["invited", "active", "suspended"],
-      team_invitation_status: ["pending", "accepted", "revoked"],
       script_input_mode: ["idea", "reference", "manual"],
       script_research_kind: ["idea", "reference", "competitor"],
       script_research_status: ["inbox", "selected", "used", "archived"],
@@ -4648,6 +5072,7 @@ export const Constants = {
         "done",
         "cancelled",
       ],
+      team_invitation_status: ["pending", "accepted", "revoked"],
     },
   },
 } as const

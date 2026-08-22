@@ -7,6 +7,7 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supaba
 const sectionByPrefix: Array<[string, string]> = [
   ["/tasks", "tasks"], ["/planning", "planning"], ["/content", "content"], ["/scripts", "scripts"], ["/publishing", "publishing"], ["/brand", "brand"],
   ["/campaigns", "campaigns"], ["/crm", "crm"], ["/analytics", "analytics"],
+  ["/chat", "chat"],
   ["/team", "team"], ["/settings", "settings"],
 ];
 

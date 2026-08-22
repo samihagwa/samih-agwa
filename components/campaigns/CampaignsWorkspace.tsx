@@ -65,6 +65,7 @@ type Workspace = {
   membership: Membership;
   people: TeamPerson[];
 };
+type LaunchView = "current" | "archive";
 
 const assignmentFields: Array<{ gate: LaunchGate; name: string }> = [
   { gate: "strategy", name: "strategy_owner_id" },
@@ -123,6 +124,7 @@ export function CampaignsWorkspace() {
   const [deliverableFormId, setDeliverableFormId] = useState<string | null>(null);
   const [deliverableKindsByLaunch, setDeliverableKindsByLaunch] = useState<Record<string, LaunchDeliverableKind>>({});
   const [submissionFormId, setSubmissionFormId] = useState<string | null>(null);
+  const [launchView, setLaunchView] = useState<LaunchView>("current");
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
   const [renderNow] = useState(() => Date.now());
@@ -608,6 +610,9 @@ export function CampaignsWorkspace() {
   const platformAdmin = canManageAllTaskExecution(workspace.membership.role);
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
   const contentById = new Map(contentItems.map((item) => [item.id, item]));
+  const archivedLaunches = launches.filter((launch) => ["completed", "cancelled"].includes(launch.status));
+  const currentLaunches = launches.filter((launch) => !["completed", "cancelled"].includes(launch.status));
+  const visibleLaunches = launchView === "current" ? currentLaunches : archivedLaunches;
 
   return (
     <section className="campaigns-workspace">
@@ -623,6 +628,11 @@ export function CampaignsWorkspace() {
 
       {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+
+      <div className="workspace-view-switch">
+        <div><p className="overline">تنظيم الغرفة</p><strong>الإطلاق المكتمل أو الملغي ينتقل للأرشيف تلقائيًا.</strong></div>
+        <div className="segmented-control" aria-label="عرض الحملات والإطلاقات"><button type="button" className={launchView === "current" ? "active" : ""} onClick={() => setLaunchView("current")}>الحالي ({currentLaunches.length})</button><button type="button" className={launchView === "archive" ? "active" : ""} onClick={() => setLaunchView("archive")}>الأرشيف ({archivedLaunches.length})</button></div>
+      </div>
 
       {showCreate && manager ? (
         <form className="panel launch-create-form" onSubmit={createLaunch}>
@@ -662,9 +672,9 @@ export function CampaignsWorkspace() {
         </form>
       ) : null}
 
-      {launches.length ? (
-        <div className="launch-list">
-          {launches.map((launch) => {
+      {visibleLaunches.length ? (
+        <div className="launch-list workflow-entity-list">
+          {visibleLaunches.map((launch) => {
             const launchTasks = [...(tasksByLaunch.get(launch.id) ?? [])].sort((a, b) => {
               const aOrder = a.launch_gate ? launchGateConfig[a.launch_gate].order : 99;
               const bOrder = b.launch_gate ? launchGateConfig[b.launch_gate].order : 99;
@@ -710,9 +720,9 @@ export function CampaignsWorkspace() {
             const workingPeople = workspace.people.filter((person) => person.role !== "viewer");
 
             return (
-              <article className="panel launch-card" key={launch.id}>
+              <article className="panel launch-card workflow-entity-card" data-card-state={launch.status} key={launch.id}>
                 <header>
-                  <div className="content-card-title"><span className="icon-tile"><Route size={17} /></span><div><p className="overline">{launchTypeConfig[launch.type].label} · v{launch.version}</p><h3>{launch.title}</h3></div></div>
+                  <div className="content-card-title"><span className="icon-tile"><Route size={17} /></span><div><p className="overline">{launchTypeConfig[launch.type].label} · v{launch.version}</p><h3 className="workflow-card-heading">{launch.title}</h3></div></div>
                   <div className="launch-admin-actions"><StatusBadge tone={launchStatusConfig[launch.status].tone}>{launchStatusConfig[launch.status].label}</StatusBadge>{platformAdmin && !["cancelled", "completed"].includes(launch.status) ? <><button className="text-button" type="button" onClick={() => setEditFormId(editFormId === launch.id ? null : launch.id)}><Pencil size={13} /> تعديل</button><button className="text-button danger-text" type="button" disabled={working} onClick={() => void cancelLaunch(launch)}><Trash2 size={13} /> إلغاء الإطلاق</button></> : null}</div>
                 </header>
 
@@ -854,8 +864,8 @@ export function CampaignsWorkspace() {
       ) : (
         <section className="panel empty-state">
           <span className="empty-visual"><Route size={20} /></span>
-          <div><h2>غرفة الإطلاق جاهزة بدون حملات وهمية</h2><p>عندما تنشئ أول إطلاق سيظهر هنا ومعه الخطة العكسية والبوابات والمسؤولون والمواعيد والأصول.</p></div>
-          <span className="empty-proof"><CheckCircle2 size={15} /> متصلة بالمهام والمحتوى</span>
+          <div><h2>{launchView === "archive" ? "أرشيف الحملات فارغ" : "لا توجد إطلاقات حالية"}</h2><p>{launchView === "archive" ? "أي إطلاق مكتمل أو ملغي سيُحفظ هنا بدلًا من مزاحمة الشغل الحالي." : "أنشئ أول إطلاق، أو افتح الأرشيف لمراجعة الحملات المكتملة والملغاة."}</p></div>
+          <span className="empty-proof"><CheckCircle2 size={15} /> {launchView === "archive" ? "لا يُحذف تاريخ التنفيذ" : "متصلة بالمهام والمحتوى"}</span>
         </section>
       )}
 

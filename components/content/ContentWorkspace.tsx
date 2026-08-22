@@ -64,7 +64,7 @@ type AiChoiceSet<T> = { version: number; options: T[] };
 
 type TeamPerson = { id: string; name: string; role: Membership["role"] };
 type Workspace = { organization: Organization; membership: Membership; people: TeamPerson[] };
-type ContentFilter = "active" | "scheduled" | "published" | "all";
+type ContentFilter = "active" | "scheduled" | "archive";
 
 const assetKinds = Object.keys(contentAssetKindConfig) as ContentAssetKind[];
 const resultSteps = ["recording", "editing", "thumbnail", "caption", "design", "scheduling", "publishing"] as ContentStep[];
@@ -298,8 +298,7 @@ export function ContentWorkspace() {
   const visibleItems = useMemo(() => {
     if (contentFilter === "active") return items.filter((item) => !["published", "cancelled"].includes(item.status));
     if (contentFilter === "scheduled") return items.filter((item) => item.status === "scheduled");
-    if (contentFilter === "published") return items.filter((item) => item.status === "published");
-    return items;
+    return items.filter((item) => ["published", "cancelled"].includes(item.status));
   }, [contentFilter, items]);
 
   useEffect(() => {
@@ -563,7 +562,7 @@ export function ContentWorkspace() {
       <div className="workspace-toolbar">
         <div><p className="overline">{workspace.organization.name}</p><h2>مصنع المحتوى</h2><p>{items.length ? `${items.length} أصل محتوى حقيقي` : "لا يوجد محتوى حقيقي بعد — أنشئ أول مسار عند الجاهزية."}</p></div>
         <div className="toolbar-actions">
-          <div className="segmented-control" aria-label="تصفية المحتوى">{(["active", "scheduled", "published", "all"] as ContentFilter[]).map((value) => <button type="button" key={value} className={contentFilter === value ? "active" : ""} onClick={() => setContentFilter(value)}>{value === "active" ? "الجاري" : value === "scheduled" ? "المجدول" : value === "published" ? "المنشور" : "الكل"}</button>)}</div>
+          <div className="segmented-control" aria-label="تصفية المحتوى">{(["active", "scheduled", "archive"] as ContentFilter[]).map((value) => <button type="button" key={value} className={contentFilter === value ? "active" : ""} onClick={() => setContentFilter(value)}>{value === "active" ? "الحالي" : value === "scheduled" ? "المجدول" : "الأرشيف"}</button>)}</div>
           <button className="icon-button" type="button" aria-label="تحديث المحتوى" onClick={() => void refreshContent(workspace.organization.id)}><RefreshCw size={17} /></button>
           <Button href="/tasks" variant="secondary"><Route size={16} /> عرض كل المهام</Button>
           {manager ? <Button type="button" onClick={() => { setShowQuickIntake((value) => !value); setShowCreate(false); }}><MessageSquareText size={16} /> طلب كامل من Telegram</Button> : null}
@@ -617,7 +616,7 @@ export function ContentWorkspace() {
         </form>
       ) : null}
 
-      {visibleItems.length ? <div className="content-list">{visibleItems.map((item) => {
+      {visibleItems.length ? <div className="content-list workflow-entity-list">{visibleItems.map((item) => {
         const itemTasks = [...(tasksByContent.get(item.id) ?? [])].sort((a, b) => (a.content_step ? contentStepConfig[a.content_step].order : 99) - (b.content_step ? contentStepConfig[b.content_step].order : 99));
         const itemAssets = assetsByContent.get(item.id) ?? [];
         const itemRevisions = revisionsByContent.get(item.id) ?? [];
@@ -662,9 +661,9 @@ export function ContentWorkspace() {
         const itemCaptionChoices = captionChoices[item.id];
         const itemThumbnailChoices = thumbnailChoices[item.id];
 
-        return <article className="panel content-card" id={`content-${item.id}`} key={item.id}>
+        return <article className="panel content-card workflow-entity-card" data-card-state={item.status} id={`content-${item.id}`} key={item.id}>
           <header>
-            <div className="content-card-title"><span className="icon-tile"><Film size={17} /></span><div><p className="overline">{isSocialPost ? "Social Post" : "Reel"} · {platformLabel} · v{item.version}</p><h3>{item.title}</h3></div></div>
+            <div className="content-card-title"><span className="icon-tile"><Film size={17} /></span><div><p className="overline">{isSocialPost ? "Social Post" : "Reel"} · {platformLabel} · v{item.version}</p><h3 className="workflow-card-heading">{item.title}</h3></div></div>
             <div className="content-card-actions"><div className="content-card-badges"><StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>{openRevisions.length ? <StatusBadge tone="warning">{openRevisions.length} تعديل مفتوح</StatusBadge> : null}{openCueCount ? <StatusBadge tone="info">{openCueCount} تعليمة تنفيذ</StatusBadge> : null}</div><button className="content-expand-button" type="button" aria-expanded={expanded} onClick={() => setExpandedContentIds((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}>{expanded ? "إخفاء التفاصيل" : "فتح التفاصيل"}<ChevronDown className={expanded ? "expanded" : ""} size={14} /></button></div>
           </header>
 

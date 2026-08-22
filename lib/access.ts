@@ -11,6 +11,7 @@ export const workspaceSectionDefinitions = [
   { id: "campaigns", label: "الحملات والإطلاقات", href: "/campaigns" },
   { id: "crm", label: "العملاء والـCRM", href: "/crm" },
   { id: "analytics", label: "النتائج والتحليلات", href: "/analytics" },
+  { id: "chat", label: "مجتمع الفريق", href: "/chat" },
   { id: "team", label: "الفريق والصلاحيات", href: "/team" },
   { id: "settings", label: "الإعدادات والتكاملات", href: "/settings" },
 ] as const;
@@ -24,9 +25,9 @@ const sectionSet = new Set<string>(allWorkspaceSections);
 
 export const defaultSectionsByRole: Record<Exclude<Tables<"memberships">["role"], "owner">, WorkspaceSection[]> = {
   admin: [...allWorkspaceSections],
-  manager: ["tasks", "planning"],
-  member: ["tasks"],
-  viewer: ["tasks"],
+  manager: ["tasks", "planning", "chat"],
+  member: ["tasks", "chat"],
+  viewer: ["tasks", "chat"],
 };
 
 export function normalizeWorkspaceSections(values: readonly string[]): WorkspaceSection[] {

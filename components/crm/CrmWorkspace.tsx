@@ -28,6 +28,7 @@ import {
   allowedCrmTransitions,
   crmActivityKindConfig,
   crmConversationChannelConfig,
+  crmIdentityKinds,
   crmIdentityKindConfig,
   crmInterestConfig,
   crmLeadStageConfig,
@@ -44,7 +45,7 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supaba
 import type { Database, Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
-import { canManageTasks, taskStatusConfig } from "../../lib/tasks";
+import { canManageAllTaskExecution, canManageTasks, taskStatusConfig } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 
@@ -59,6 +60,7 @@ type OwnerPerformance = Database["public"]["Functions"]["get_crm_owner_performan
 type TeamPerson = { id: string; name: string; role: Membership["role"] };
 type Workspace = { organization: Organization; membership: Membership; people: TeamPerson[] };
 type Filter = "all" | "mine" | "overdue";
+type BoardView = "current" | "archive";
 
 const PAGE_SIZE = 60;
 
@@ -110,6 +112,7 @@ export function CrmWorkspace() {
   const [filter, setFilter] = useState<Filter>("all");
   const [ownerFilter, setOwnerFilter] = useState("");
   const [stageFilter, setStageFilter] = useState<CrmLeadStage | "">("");
+  const [boardView, setBoardView] = useState<BoardView>("current");
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -120,6 +123,7 @@ export function CrmWorkspace() {
   const [defaultFollowUp] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 24 * 60 * 60 * 1000)));
   const createNameInputRef = useRef<HTMLInputElement>(null);
   const manager = Boolean(workspace && canManageTasks(workspace.membership.role));
+  const platformAdmin = Boolean(workspace && canManageAllTaskExecution(workspace.membership.role));
 
   const clearData = useCallback(() => {
     setContacts([]);
@@ -145,12 +149,13 @@ export function CrmWorkspace() {
     setCrmLoading(true);
     try {
       const [searchResult, performanceResult] = await Promise.all([
-        supabase.rpc("search_crm_contacts", {
+        supabase.rpc("search_crm_contacts_v2", {
           target_organization_id: organizationId,
           search_query: searchQuery,
           target_owner_id: (ownerFilter || null) as unknown as string,
           target_stage: (stageFilter || null) as unknown as CrmLeadStage,
           target_scope: filter,
+          target_view: boardView,
           result_limit: PAGE_SIZE,
           result_offset: page * PAGE_SIZE,
         }),
@@ -193,7 +198,7 @@ export function CrmWorkspace() {
     } finally {
       setCrmLoading(false);
     }
-  }, [filter, manager, ownerFilter, page, performanceRange, searchQuery, stageFilter]);
+  }, [boardView, filter, manager, ownerFilter, page, performanceRange, searchQuery, stageFilter]);
 
   const refreshSafely = useCallback(async (organizationId: string) => {
     try {
@@ -337,10 +342,10 @@ export function CrmWorkspace() {
     const form = new FormData(formElement);
     const followUpAt = futureDateIso(formText(form, "follow_up_at"));
     if (!followUpAt) return setError("حدد موعد متابعة صحيحًا في المستقبل.");
-    const identities = (["phone", "email", "telegram"] as CrmIdentityKind[])
+    const identities = crmIdentityKinds
       .map((kind) => ({ kind, value: formText(form, `identity_${kind}`) }))
       .filter((identity) => identity.value);
-    if (!identities.length) return setError("أضف وسيلة تواصل واحدة على الأقل: هاتف أو بريد أو Telegram.");
+    if (!identities.length) return setError("أضف وسيلة تواصل واحدة على الأقل: هاتف أو بريد أو Telegram أو TradingView.");
     if (!identities.some((identity) => identity.kind === primaryIdentityKind)) {
       return setError(`املأ ${crmIdentityKindConfig[primaryIdentityKind].label} أو اختر وسيلة أخرى كأساسية.`);
     }
@@ -424,6 +429,7 @@ export function CrmWorkspace() {
   }), { all: 0, overdue: 0, fresh: 0, won: 0 });
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const hasFilters = Boolean(searchQuery || ownerFilter || stageFilter || filter !== "all");
+  const visibleStages = crmLeadStages.filter((stage) => boardView === "current" ? crmLeadStageConfig[stage].active : !crmLeadStageConfig[stage].active);
 
   return <section className="crm-workspace">
     <div className="workspace-toolbar">
@@ -438,6 +444,11 @@ export function CrmWorkspace() {
     {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
 
+    <div className="workspace-view-switch">
+      <div><p className="overline">تنظيم العملاء</p><strong>الملفات المحسومة لا تزاحم المتابعات الحالية، وتظل محفوظة وقابلة للبحث.</strong></div>
+      <div className="segmented-control" aria-label="عرض ملفات العملاء"><button type="button" className={boardView === "current" ? "active" : ""} onClick={() => { setBoardView("current"); setStageFilter(""); setPage(0); }}>الحالي</button><button type="button" className={boardView === "archive" ? "active" : ""} onClick={() => { setBoardView("archive"); setStageFilter(""); setFilter("all"); setPage(0); }}>الأرشيف</button></div>
+    </div>
+
     <div className="crm-kpi-strip" aria-label="ملخص CRM الحقيقي">
       <div><ContactRound size={17} /><span>إجمالي المتاح</span><strong>{manager ? totals.all : totalCount}</strong></div>
       <div className={totals.overdue ? "attention" : ""}><AlertTriangle size={17} /><span>متابعات متأخرة</span><strong>{manager ? totals.overdue : contacts.filter((contact) => contact.next_follow_up_at && new Date(contact.next_follow_up_at).getTime() < renderNow).length}</strong></div>
@@ -446,10 +457,10 @@ export function CrmWorkspace() {
     </div>
 
     <section className="crm-search-panel" aria-label="البحث وفلترة العملاء">
-      <label className="crm-search-field"><Search size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="ابحث بالاسم، الهاتف، البريد، Telegram، المصدر، الملاحظات، لينك الشات أو نتيجة متابعة…" aria-label="البحث في كل بيانات العملاء" />{searchInput ? <button type="button" onClick={() => setSearchInput("")}>مسح</button> : null}</label>
+      <label className="crm-search-field"><Search size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="ابحث بالاسم، الهاتف، البريد، TradingView، Telegram، المصدر، لينك الشات أو نتيجة متابعة…" aria-label="البحث في كل بيانات العملاء" />{searchInput ? <button type="button" onClick={() => setSearchInput("")}>مسح</button> : null}</label>
       {manager ? <label><span>المسؤول</span><select value={ownerFilter} onChange={(event) => { setOwnerFilter(event.target.value); setPage(0); }}><option value="">كل المسؤولين</option>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : null}
-      <label><span>المرحلة</span><select value={stageFilter} onChange={(event) => { setStageFilter(event.target.value as CrmLeadStage | ""); setPage(0); }}><option value="">كل المراحل</option>{crmLeadStages.map((stage) => <option value={stage} key={stage}>{crmLeadStageConfig[stage].label}</option>)}</select></label>
-      <div className="crm-filter-row" role="group" aria-label="نطاق العملاء">{(["all", "mine", "overdue"] as Filter[]).map((value) => <button className={filter === value ? "active" : ""} type="button" key={value} onClick={() => { setFilter(value); setPage(0); }}>{value === "all" ? "كل المتاح" : value === "mine" ? "مسؤوليتي" : "متابعة متأخرة"}</button>)}</div>
+      <label><span>المرحلة</span><select value={stageFilter} onChange={(event) => { setStageFilter(event.target.value as CrmLeadStage | ""); setPage(0); }}><option value="">كل المراحل</option>{visibleStages.map((stage) => <option value={stage} key={stage}>{crmLeadStageConfig[stage].label}</option>)}</select></label>
+      <div className="crm-filter-row" role="group" aria-label="نطاق العملاء">{(["all", "mine", ...(boardView === "current" ? ["overdue"] : [])] as Filter[]).map((value) => <button className={filter === value ? "active" : ""} type="button" key={value} onClick={() => { setFilter(value); setPage(0); }}>{value === "all" ? "كل المتاح" : value === "mine" ? "مسؤوليتي" : "متابعة متأخرة"}</button>)}</div>
       <p>{searchInput.trim().length === 1 ? "اكتب حرفين على الأقل لبدء البحث." : `يعرض ${contacts.length} من ${totalCount} نتيجة مطابقة.`}</p>
     </section>
 
@@ -481,7 +492,7 @@ export function CrmWorkspace() {
         <label><span>سبب التسجيل / الاهتمام</span><select name="interest" value={interest} onChange={(event) => setInterest(event.target.value as CrmInterest)}>{(Object.keys(crmInterestConfig) as CrmInterest[]).map((option) => <option value={option} key={option}>{crmInterestConfig[option].label}</option>)}</select><small>اختر «سبب آخر» لكتابة خدمة أو حملة جديدة.</small></label>
         {interest === "other" ? <label><span>سبب التسجيل الجديد</span><input name="interest_detail" minLength={2} maxLength={160} required placeholder="مثال: حضور ويبنار التحليل الفني" /></label> : null}
         <label><span>حالة الموافقة على التواصل</span><select name="consent_status" defaultValue="unknown"><option value="unknown">غير معروفة</option><option value="granted">وافق</option></select><small>إذا رفض لاحقًا، أغلقه بنتيجة «عدم تواصل».</small></label>
-        <fieldset className="crm-identities-fieldset full-field"><legend>وسائل التواصل — املأ واحدة أو أكثر</legend><div>{(["phone", "email", "telegram"] as CrmIdentityKind[]).map((kind) => <label key={kind}><span>{crmIdentityKindConfig[kind].label}</span><input name={`identity_${kind}`} type={crmIdentityKindConfig[kind].inputType} dir="ltr" minLength={3} maxLength={320} placeholder={crmIdentityKindConfig[kind].placeholder} /></label>)}</div><label className="crm-primary-select"><span>وسيلة التواصل الأساسية</span><select value={primaryIdentityKind} onChange={(event) => setPrimaryIdentityKind(event.target.value as CrmIdentityKind)}>{(["phone", "email", "telegram"] as CrmIdentityKind[]).map((kind) => <option value={kind} key={kind}>{crmIdentityKindConfig[kind].label}</option>)}</select></label><small>الأساسية هي التي تظهر أولًا؛ جميع الوسائل تمنع تكرار نفس العميل.</small></fieldset>
+        <fieldset className="crm-identities-fieldset full-field"><legend>وسائل التواصل والحسابات — املأ واحدة أو أكثر</legend><div>{crmIdentityKinds.map((kind) => <label key={kind}><span>{crmIdentityKindConfig[kind].label}</span><input name={`identity_${kind}`} type={crmIdentityKindConfig[kind].inputType} dir="ltr" minLength={3} maxLength={kind === "tradingview" ? 100 : 320} placeholder={crmIdentityKindConfig[kind].placeholder} /></label>)}</div><label className="crm-primary-select"><span>وسيلة التواصل الأساسية</span><select value={primaryIdentityKind} onChange={(event) => setPrimaryIdentityKind(event.target.value as CrmIdentityKind)}>{crmIdentityKinds.map((kind) => <option value={kind} key={kind}>{crmIdentityKindConfig[kind].label}</option>)}</select></label><small>الأساسية تظهر أولًا، وجميع القيم—including TradingView—تدخل في البحث ومنع التكرار.</small></fieldset>
         <label><span>منصة المحادثة المباشرة — اختياري</span><select name="conversation_channel" value={conversationChannel} onChange={(event) => setConversationChannel(event.target.value as CrmConversationChannel | "")}><option value="">بدون لينك حاليًا</option>{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select></label>
         {conversationChannel ? <label><span>لينك شات {crmConversationChannelConfig[conversationChannel].label}</span><input name="conversation_url" type="url" dir="ltr" maxLength={2000} required placeholder={crmConversationChannelConfig[conversationChannel].placeholder} /><small>الصق لينكًا كاملًا يبدأ بـ https://</small></label> : null}
         {manager ? <label><span>مسؤول المتابعة</span><select name="owner_id" defaultValue={session.user.id}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : <input name="owner_id" type="hidden" value={session.user.id} />}
@@ -492,9 +503,9 @@ export function CrmWorkspace() {
       </form>
     </div> : null}
 
-    {contacts.length ? <div className="crm-pipeline" aria-label="خط مبيعات العملاء المحتملين">{crmLeadStages.map((stage) => {
+    {contacts.length ? <div className="crm-pipeline" aria-label="خط مبيعات العملاء المحتملين">{visibleStages.map((stage) => {
       const stageContacts = contacts.filter((contact) => contact.stage === stage);
-      return <section className="crm-stage-column" key={stage} aria-labelledby={`crm-stage-${stage}`}><header><StatusBadge tone={crmLeadStageConfig[stage].tone}>{crmLeadStageConfig[stage].shortLabel}</StatusBadge><strong id={`crm-stage-${stage}`}>{stageContacts.length}</strong></header><div className="crm-stage-stack">{stageContacts.map((contact) => {
+      return <section className="crm-stage-column" key={stage} aria-labelledby={`crm-stage-${stage}`}><header><StatusBadge tone={crmLeadStageConfig[stage].tone}>{crmLeadStageConfig[stage].shortLabel}</StatusBadge><strong id={`crm-stage-${stage}`}>{stageContacts.length}</strong></header><div className="crm-stage-stack workflow-entity-list">{stageContacts.map((contact) => {
         const contactIdentities = identitiesByContact.get(contact.id) ?? [];
         const contactActivities = activitiesByContact.get(contact.id) ?? [];
         const contactConversationLinks = conversationLinksByContact.get(contact.id) ?? [];
@@ -503,11 +514,12 @@ export function CrmWorkspace() {
         const canAct = manager || contact.owner_id === session.user.id;
         const nextOptions = allowedCrmTransitions[contact.stage];
         const remainingIdentityKinds = (["phone", "email", "telegram"] as CrmIdentityKind[]).filter((kind) => !contactIdentities.some((identity) => identity.kind === kind));
-        return <article className={`crm-contact-card ${overdue ? "overdue" : ""}`} key={contact.id} id={`crm-${contact.id}`}><div className="crm-contact-top"><div><p className="overline">{crmSourceConfig[contact.source].label} · {crmInterestConfig[contact.interest].label}</p><h3>{contact.full_name}</h3></div><StatusBadge tone={crmLeadStageConfig[contact.stage].tone}>{crmLeadStageConfig[contact.stage].shortLabel}</StatusBadge></div>
+        return <article className={`crm-contact-card workflow-entity-card ${overdue ? "overdue" : ""}`} data-card-state={overdue ? "overdue" : contact.stage} key={contact.id} id={`crm-${contact.id}`}><div className="crm-contact-top"><div><p className="overline">{crmSourceConfig[contact.source].label} · {crmInterestConfig[contact.interest].label}</p><h3 className="workflow-card-heading">{contact.full_name}</h3></div><StatusBadge tone={crmLeadStageConfig[contact.stage].tone}>{crmLeadStageConfig[contact.stage].shortLabel}</StatusBadge></div>
           <dl className="crm-contact-meta">
             {contactIdentities.map((identity) => <div key={identity.id}><dt>{crmIdentityKindConfig[identity.kind].label}{identity.is_primary ? " · أساسية" : ""}</dt><dd dir="ltr">{identity.value}</dd></div>)}
             <div><dt><CircleUserRound size={13} /> المسؤول</dt><dd>{peopleById.get(contact.owner_id)?.name ?? "عضو فريق"}</dd></div>
             {contact.next_follow_up_at ? <div><dt><CalendarClock size={13} /> المتابعة</dt><dd>{formatDate(contact.next_follow_up_at)}</dd></div> : null}
+            {contact.source_registered_at ? <div><dt><FileClock size={13} /> تاريخ التسجيل</dt><dd>{formatDate(contact.source_registered_at)}</dd></div> : null}
           </dl>
           {contactConversationLinks.length ? <div className="crm-chat-links">{contactConversationLinks.map((link) => <a href={link.url} target="_blank" rel="noreferrer" key={link.id}><ExternalLink size={12} /> فتح شات {link.label ?? crmConversationChannelConfig[link.channel].label}</a>)}</div> : null}
           {contact.notes ? <p className="crm-contact-notes">{contact.notes}</p> : null}
@@ -522,6 +534,6 @@ export function CrmWorkspace() {
     })}</div> : <section className="panel empty-state"><span className="empty-visual">{hasFilters ? <Search size={20} /> : <ContactRound size={20} />}</span><div><h2>{hasFilters ? "لا توجد نتائج مطابقة" : "CRM جاهز بدون بيانات وهمية"}</h2><p>{hasFilters ? "غيّر كلمة البحث أو المسؤول أو المرحلة أو نطاق المتابعة." : "أدخل ملفًا واحدًا بنفسك عند الجاهزية، وسيظهر معه موعد المتابعة ومهمته في البورد."}</p></div><span className="empty-proof"><ShieldCheck size={15} /> لا يوجد استيراد تلقائي</span></section>}
 
     {totalCount > PAGE_SIZE ? <nav className="crm-pagination" aria-label="صفحات نتائج العملاء"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}><ChevronRight size={15} /> السابق</button><span>صفحة {page + 1} من {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)}>التالي <ChevronLeft size={15} /></button></nav> : null}
-    <aside className="automation-note"><LockKeyhole size={17} /><div><strong>التكاملات والرسائل غير مفعّلة</strong><p>Whales Zone وMeta وTelegram والتطبيق مصادر معرفة داخل الملف فقط الآن. لن نستورد أو نراسل أي عميل قبل اعتماد الملكية والموافقة والاختبار.</p></div></aside>
+    <aside className="automation-note"><LockKeyhole size={17} /><div><strong>{platformAdmin ? "استيراد Telegram محكوم بسجل دفعة ورجوع" : "التكاملات تحت تحكم إدارة المنصة"}</strong><p>{platformAdmin ? "أي استيراد يتحقق من الهاتف والبريد وTradingView، يمنع التكرار، ويسجل نتيجة كل صف. لا يرسل النظام أي رسالة للعميل." : "لن تظهر لك أدوات الاستيراد أو مفاتيح التكامل؛ ترى فقط العملاء المسموح لك بمتابعتهم."}</p></div></aside>
   </section>;
 }

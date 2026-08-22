@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("shared navigation covers every primary route", async () => {
   const source = await readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8");
-  for (const route of ["/tasks", "/content", "/planning", "/scripts", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/team", "/settings"]) {
+  for (const route of ["/tasks", "/content", "/planning", "/scripts", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/chat", "/team", "/settings"]) {
     assert.match(source, new RegExp(`href(?::|=)\\s*["']${route}`));
   }
 });
@@ -75,8 +75,77 @@ test("workflow execution is assignee-scoped, voice profiles are private, and mob
   assert.match(navigation, /onNavigate/);
   assert.match(css, /\.sidebar\.mobile-open \{ transform: translateX\(0\)/);
   assert.match(css, /\.mobile-nav-backdrop\.visible/);
-  assert.match(access, /manager: \["tasks", "planning"\]/);
-  assert.match(access, /member: \["tasks"\]/);
+  assert.match(access, /manager: \["tasks", "planning", "chat"\]/);
+  assert.match(access, /member: \["tasks", "chat"\]/);
+});
+
+test("team community chat is private, realtime, command-written, and permission scoped", async () => {
+  const [migration, hardening, commands, workspace, page, navigation, access, presence, css, types, config] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260822171303_team_chat_workspace_assistant.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260822172439_harden_chat_commands_and_indexes.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/chat-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/chat/ChatWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/chat/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/access.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/PresenceReporter.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
+  ]);
+  for (const table of ["team_chat_rooms", "team_chat_messages"]) {
+    assert.match(migration, new RegExp(`create table public\\.${table}`));
+    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(types, new RegExp(`${table}:`));
+  }
+  assert.match(migration, /private\.can_access_any_section\(organization_id, array\['chat'\]/);
+  assert.match(migration, /revoke all on table public\.team_chat_messages from anon, authenticated/);
+  assert.match(migration, /send_team_chat_message/);
+  assert.match(migration, /Only the message author can edit this message/);
+  assert.match(migration, /Only the author or workspace leadership can delete this message/);
+  assert.match(migration, /alter publication supabase_realtime add table public\.team_chat_messages/);
+  assert.match(workspace, /postgres_changes/);
+  assert.match(hardening, /send_team_chat_message_v2/);
+  assert.match(hardening, /to service_role/);
+  assert.match(hardening, /drop function public\.send_team_chat_message/);
+  assert.match(hardening, /team_chat_messages_room_org_idx/);
+  assert.match(commands, /createSupabaseContext/);
+  assert.match(commands, /auth: "user"/);
+  assert.match(commands, /send_team_chat_message_v2/);
+  assert.match(workspace, /functions\.invoke\("chat-commands"/);
+  assert.doesNotMatch(workspace, /\.rpc\("(send|edit|delete|create)_team_chat/);
+  assert.match(page, /دردشة داخلية منظمة/);
+  assert.match(navigation, /href: "\/chat"/);
+  assert.match(access, /id: "chat"/);
+  assert.match(presence, /\["\/chat", "chat"\]/);
+  assert.match(css, /\.team-chat-shell/);
+  assert.match(config, /\[functions\.chat-commands\][\s\S]*verify_jwt = true/);
+});
+
+test("workspace assistant uses the configured provider with server-side permission-scoped context", async () => {
+  const [migration, edgeFunction, component, shell, config] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260822171303_team_chat_workspace_assistant.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/workspace-assistant/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/assistant/WorkspaceAssistant.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
+  ]);
+  assert.match(migration, /get_workspace_assistant_provider_runtime/);
+  assert.match(migration, /vault\.decrypted_secrets/);
+  assert.match(migration, /to service_role/);
+  assert.doesNotMatch(migration, /grant execute on function public\.get_workspace_assistant_provider_runtime[^;]+authenticated/s);
+  assert.match(edgeFunction, /createSupabaseContext/);
+  assert.match(edgeFunction, /auth: "user"/);
+  assert.match(edgeFunction, /allowed_sections/);
+  assert.match(edgeFunction, /if \(!leadership\) taskQuery = taskQuery\.eq\("owner_id", actorId\)/);
+  assert.match(edgeFunction, /ممنوع اختراع مهمة أو عميل أو موعد أو رابط/);
+  assert.match(edgeFunction, /fetchProviderJson/);
+  assert.match(edgeFunction, /assistant\.request_started/);
+  assert.doesNotMatch(edgeFunction, /api_key[^]*jsonResponse\(\{ answer/s);
+  assert.match(component, /functions\.invoke\("workspace-assistant"/);
+  assert.match(component, /لا يغيّر أي بيانات/);
+  assert.match(shell, /WorkspaceAssistant/);
+  assert.match(config, /\[functions\.workspace-assistant\][\s\S]*verify_jwt = true/);
 });
 
 test("script studio is private by assignee, owner-visible, versioned, AI-assisted, and handed off atomically", async () => {
@@ -663,10 +732,11 @@ test("application shell does not impersonate an authenticated owner", async () =
 });
 
 test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task system", async () => {
-  const [migration, contextMigration, scaleMigration, edgeFunction, workspace, taskWorkspace, contract, roadmap] = await Promise.all([
+  const [migration, contextMigration, scaleMigration, importMigration, edgeFunction, workspace, taskWorkspace, contract, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817033924_crm_foundation.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817151104_crm_contact_context_and_chat_links.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817205723_crm_search_multi_identity_owner_performance.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260822165632_crm_archive_import_operations.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
@@ -709,15 +779,25 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(workspace, /لينك شات/);
   assert.match(workspace, /اسم المصدر الجديد/);
   assert.match(workspace, /سبب التسجيل الجديد/);
-  assert.match(workspace, /ابحث بالاسم، الهاتف، البريد، Telegram/);
+  assert.match(workspace, /ابحث بالاسم، الهاتف، البريد، TradingView، Telegram/);
   assert.match(workspace, /أداء مسؤولي العملاء/);
-  assert.match(workspace, /وسائل التواصل — املأ واحدة أو أكثر/);
+  assert.match(workspace, /وسائل التواصل والحسابات — املأ واحدة أو أكثر/);
   assert.match(workspace, /crm-create-dialog-backdrop/);
   assert.match(workspace, /aria-modal="true"/);
   assert.match(workspace, /functions\.invoke\("crm-commands"/);
   assert.match(taskWorkspace, /فتح ملف العميل وتسجيل النتيجة/);
   assert.doesNotMatch(migration, /'متابعة عميل محتمل[^']*'\s*,\s*contact_full_name/);
   assert.match(contract, /allowedCrmTransitions/);
+  assert.match(contract, /tradingview/);
+  assert.match(importMigration, /create table public\.crm_import_batches/);
+  assert.match(importMigration, /create table public\.crm_import_rows/);
+  assert.match(importMigration, /enable row level security/);
+  assert.match(importMigration, /function public\.search_crm_contacts_v2/);
+  assert.match(importMigration, /function public\.import_telegram_indicator_batch/);
+  assert.match(importMigration, /function public\.rollback_crm_import_batch/);
+  assert.match(importMigration, /contact\.version = imported_row\.contact_version_at_import/);
+  assert.match(edgeFunction, /import_telegram_batch/);
+  assert.match(workspace, /الأرشيف/);
   assert.match(roadmap, /Telegram scheduled publishing foundation — implemented/);
   assert.match(roadmap, /unique database claim/);
   assert.match(roadmap, /never retried automatically/);

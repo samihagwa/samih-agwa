@@ -409,6 +409,12 @@ verify_jwt = false
 [functions.ai-provider-commands]
 verify_jwt = true
 
+[functions.workspace-assistant]
+verify_jwt = true
+
+[functions.chat-commands]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

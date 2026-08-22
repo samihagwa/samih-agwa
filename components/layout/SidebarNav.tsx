@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { BarChart3, BookOpenCheck, CalendarRange, Clapperboard, FilePenLine, LayoutDashboard, Rocket, Send, Settings, SquareKanban, UsersRound } from "lucide-react";
+import { BarChart3, BookOpenCheck, CalendarRange, Clapperboard, FilePenLine, LayoutDashboard, MessageCircleMore, Rocket, Send, Settings, SquareKanban, UsersRound } from "lucide-react";
 import type { WorkspaceSection } from "../../lib/access";
 
 const items = [
@@ -15,6 +15,7 @@ const items = [
   { id: "campaigns", href: "/campaigns", label: "الحملات والإطلاقات", icon: Rocket },
   { id: "crm", href: "/crm", label: "العملاء والـCRM", icon: UsersRound },
   { id: "analytics", href: "/analytics", label: "النتائج والتحليلات", icon: BarChart3 },
+  { id: "chat", href: "/chat", label: "مجتمع الفريق", icon: MessageCircleMore },
 ] satisfies Array<{ id: WorkspaceSection; href: string; label: string; icon: typeof LayoutDashboard }>;
 
 export function SidebarNav({ allowedSections, onNavigate }: { allowedSections: WorkspaceSection[]; onNavigate?: () => void }) {

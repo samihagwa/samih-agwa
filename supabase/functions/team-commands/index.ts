@@ -8,6 +8,7 @@ const allowedOnboardingSteps = new Set(["role", "workflow", "brand"]);
 const allowedSections = new Set([
   "dashboard", "tasks", "planning", "content", "scripts", "publishing",
   "brand", "campaigns", "crm", "analytics", "team", "settings",
+  "chat",
 ]);
 
 function jsonResponse(body: unknown, status = 200) {

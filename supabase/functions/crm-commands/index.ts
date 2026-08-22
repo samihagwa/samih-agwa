@@ -4,7 +4,7 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const sources = new Set(["manual", "whales_zone", "samihagwa_site", "telegram", "meta", "market_whales_app", "exness", "tickmill", "referral", "other"]);
 const interests = new Set(["indicator", "signals_gold", "signals_fx", "course", "brokerage", "book", "service", "other"]);
-const identityKinds = new Set(["phone", "email", "telegram"]);
+const identityKinds = new Set(["phone", "email", "telegram", "tradingview"]);
 const conversationChannels = new Set(["telegram", "whatsapp", "instagram", "facebook", "messenger", "other"]);
 const consentStatuses = new Set(["unknown", "granted", "denied"]);
 const activityKinds = new Set(["call", "message", "email", "note"]);
@@ -35,11 +35,12 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/Phone identity is invalid/i, "رقم الهاتف غير صحيح. استخدم رقمًا من 7 إلى 16 رقمًا ويمكن أن يبدأ بعلامة +."],
     [/Email identity is invalid/i, "البريد الإلكتروني غير صحيح."],
     [/Telegram username is invalid/i, "اسم مستخدم Telegram غير صحيح. اكتب اسم المستخدم فقط مثل @username، وضع لينك الشات في خانته المنفصلة."],
+    [/TradingView identity is invalid/i, "اسم حساب TradingView غير صحيح."],
     [/already belongs/i, "وسيلة التواصل هذه مسجلة بالفعل لعميل آخر."],
     [/owner must be an active/i, "مسؤول المتابعة يجب أن يكون عضوًا نشطًا في مساحة العمل."],
     [/Only an active working member/i, "حسابك لا يملك صلاحية إضافة عميل محتمل."],
     [/Team members can create CRM leads for themselves only/i, "عضو الفريق يمكنه إسناد العميل لنفسه فقط."],
-    [/between one and three CRM contact identities/i, "أضف وسيلة تواصل واحدة على الأقل، وبحد أقصى هاتف وبريد وTelegram."],
+    [/between one and four CRM contact identities/i, "أضف وسيلة واحدة على الأقل، وبحد أقصى هاتف وبريد وTelegram وTradingView."],
     [/each CRM identity kind only once/i, "يمكن إضافة هاتف واحد وبريد واحد واسم Telegram واحد عند إنشاء الملف."],
     [/exactly one primary CRM identity/i, "اختر وسيلة تواصل أساسية واحدة."],
     [/Only the CRM owner or organization leadership/i, "إضافة وسيلة تواصل متاحة لمسؤول العميل أو إدارة الشركة فقط."],
@@ -54,6 +55,8 @@ function validIdentity(kind: string, value: string) {
   if (kind === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   if (kind === "phone") return /^\+?[0-9]{7,16}$/.test(value.replace(/[^0-9+]/g, ""));
   if (kind === "telegram") return /^[a-z0-9_]{5,32}$/i.test(value.replace(/^@/, ""));
+  if (kind === "tradingview") return value.trim().length >= 3 && value.trim().length <= 100
+    && !Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
   return false;
 }
 
@@ -76,7 +79,7 @@ function parseIdentities(body: Record<string, unknown>): ContactIdentity[] | nul
   }).filter((identity) => identity.kind || identity.value);
   const primaryKind = text(body.primary_identity_kind) || parsed[0]?.kind;
   for (const identity of parsed) identity.is_primary = identity.kind === primaryKind;
-  if (parsed.length < 1 || parsed.length > 3 || new Set(parsed.map((identity) => identity.kind)).size !== parsed.length) return null;
+  if (parsed.length < 1 || parsed.length > 4 || new Set(parsed.map((identity) => identity.kind)).size !== parsed.length) return null;
   if (parsed.filter((identity) => identity.is_primary).length !== 1) return null;
   return parsed;
 }
@@ -103,7 +106,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     return jsonResponse({ message: "مصدر العميل أو اهتمامه أو حالة الموافقة غير صالحة." }, 400);
   }
   if (!identities || identities.some((identity) => !identityKinds.has(identity.kind) || identity.value.length < 3 || identity.value.length > 320)) {
-    return jsonResponse({ message: "أضف وسيلة تواصل واحدة على الأقل: هاتف أو بريد أو Telegram، بدون تكرار النوع." }, 400);
+    return jsonResponse({ message: "أضف وسيلة تواصل واحدة على الأقل: هاتف أو بريد أو Telegram أو TradingView، بدون تكرار النوع." }, 400);
   }
   const invalidIdentity = identities.find((identity) => !validIdentity(identity.kind, identity.value));
   if (invalidIdentity) {
@@ -111,7 +114,9 @@ async function createLead(body: Record<string, unknown>, context: Context) {
       ? "اكتب اسم مستخدم Telegram فقط مثل @username، وضع لينك الشات في خانته المنفصلة."
       : invalidIdentity.kind === "email"
         ? "البريد الإلكتروني غير صحيح."
-        : "رقم الهاتف غير صحيح. استخدم رقمًا من 7 إلى 16 رقمًا ويمكن أن يبدأ بعلامة +.";
+        : invalidIdentity.kind === "tradingview"
+          ? "اسم حساب TradingView غير صحيح."
+          : "رقم الهاتف غير صحيح. استخدم رقمًا من 7 إلى 16 رقمًا ويمكن أن يبدأ بعلامة +.";
     return jsonResponse({ message }, 400);
   }
   if (source === "other" && (sourceDetail.length < 2 || sourceDetail.length > 160)) {
@@ -210,6 +215,51 @@ async function recordActivity(body: Record<string, unknown>, context: Context) {
   return commandError(error, "تعذّر تسجيل نتيجة المتابعة.") ?? jsonResponse({ changed: data });
 }
 
+async function importTelegramBatch(body: Record<string, unknown>, context: Context) {
+  const organizationId = text(body.organization_id);
+  const defaultOwnerId = text(body.default_owner_id);
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  const signals = new Set(["pending", "contacted", "activated", "needs_account_correction"]);
+
+  if (!organizationId || !defaultOwnerId || rows.length < 1 || rows.length > 500) {
+    return jsonResponse({ message: "دفعة Telegram يجب أن تحتوي من عميل واحد إلى 500 عميل مع مسؤول افتراضي." }, 400);
+  }
+
+  for (const rawRow of rows) {
+    const row = typeof rawRow === "object" && rawRow ? rawRow as Record<string, unknown> : {};
+    const registeredAt = text(row.registered_at);
+    if (
+      !text(row.message_id)
+      || text(row.full_name).length < 2
+      || !validIdentity("phone", text(row.phone))
+      || !validIdentity("email", text(row.email))
+      || !validIdentity("tradingview", text(row.tradingview))
+      || !signals.has(text(row.signal) || "pending")
+      || (registeredAt && Number.isNaN(new Date(registeredAt).getTime()))
+    ) {
+      return jsonResponse({ message: "توجد صفوف ناقصة أو غير صالحة في معاينة استيراد Telegram." }, 400);
+    }
+  }
+
+  const { data, error } = await context!.supabaseAdmin.rpc("import_telegram_indicator_batch", {
+    target_user_id: context!.userClaims!.id,
+    target_organization_id: organizationId,
+    default_owner_id: defaultOwnerId,
+    import_rows: rows,
+  });
+  return commandError(error, "تعذّر استيراد دفعة Telegram. لم يتم اعتماد الدفعة.") ?? jsonResponse({ batchId: data }, 201);
+}
+
+async function rollbackImportBatch(body: Record<string, unknown>, context: Context) {
+  const batchId = text(body.batch_id);
+  if (!batchId) return jsonResponse({ message: "اختر دفعة استيراد صحيحة." }, 400);
+  const { data, error } = await context!.supabaseAdmin.rpc("rollback_crm_import_batch", {
+    target_user_id: context!.userClaims!.id,
+    target_batch_id: batchId,
+  });
+  return commandError(error, "تعذّر التراجع عن دفعة الاستيراد.") ?? jsonResponse({ result: data });
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -228,6 +278,8 @@ export default {
     if (body.action === "create_lead") return createLead(body, context);
     if (body.action === "add_identity") return addIdentity(body, context);
     if (body.action === "record_activity") return recordActivity(body, context);
+    if (body.action === "import_telegram_batch") return importTelegramBatch(body, context);
+    if (body.action === "rollback_import_batch") return rollbackImportBatch(body, context);
     return jsonResponse({ message: "أمر CRM غير معروف." }, 400);
   },
 };

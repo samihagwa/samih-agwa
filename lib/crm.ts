@@ -71,7 +71,10 @@ export const crmIdentityKindConfig: Record<CrmIdentityKind, { label: string; pla
   phone: { label: "رقم الهاتف / WhatsApp", placeholder: "+2010…", inputType: "tel" },
   email: { label: "البريد الإلكتروني", placeholder: "name@example.com", inputType: "email" },
   telegram: { label: "اسم مستخدم Telegram", placeholder: "@username", inputType: "text" },
+  tradingview: { label: "حساب TradingView", placeholder: "TradingView username", inputType: "text" },
 };
+
+export const crmIdentityKinds = Object.keys(crmIdentityKindConfig) as CrmIdentityKind[];
 
 export const crmConsentConfig: Record<CrmConsentStatus, { label: string; tone: Tone }> = {
   unknown: { label: "الموافقة غير معروفة", tone: "neutral" },
