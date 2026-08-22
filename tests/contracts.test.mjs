@@ -902,6 +902,9 @@ test("workspace is invite-only, section-scoped, and enforced before rendering or
   assert.match(loginFunction, /shouldCreateUser: accessMode === "invitation"/);
   assert.match(loginFunction, /accessMode !== "existing" && accessMode !== "invitation"/);
   assert.match(loginFunction, /allowedOrigins/);
+  assert.match(loginFunction, /email_delivery_rate_limited/);
+  assert.match(loginFunction, /if \(accessMode === "invitation"\)/);
+  assert.match(loginFunction, /prevents a false "email sent" confirmation/);
 
   assert.match(migration, /add column allowed_sections text\[\]/);
   assert.match(migration, /hook_restrict_market_whales_signup/);

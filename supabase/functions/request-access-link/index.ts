@@ -26,6 +26,25 @@ function requestOrigin(request: Request) {
   return supplied && allowedOrigins.has(supplied) ? supplied : "https://os.samihagwa.com";
 }
 
+function invitationDeliveryFailure(error: { code?: string; status?: number }) {
+  const rateLimited = error.status === 429 || error.code === "over_email_send_rate_limit";
+  return rateLimited
+    ? {
+      status: 429,
+      body: {
+        code: "email_delivery_rate_limited",
+        message: "لم تُرسل الرسالة؛ وصل نظام البريد إلى الحد المؤقت للإرسال. جرّب لاحقًا أو اطلب من مالك المنصة تفعيل مزوّد البريد المخصص.",
+      },
+    }
+    : {
+      status: 503,
+      body: {
+        code: "email_delivery_unavailable",
+        message: "لم تُرسل رسالة الدخول بسبب عطل في مزوّد البريد. اطلب من مالك المنصة مراجعة إعدادات البريد ثم أعد المحاولة.",
+      },
+    };
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -89,8 +108,16 @@ export default {
       },
     });
 
-    if (otpError) console.error("invite-only OTP request failed", otpError.message);
+    if (otpError) {
+      console.error("invite-only OTP request failed", otpError.code, otpError.status, otpError.message);
+      // A valid invitation token is a high-entropy secret and is already bound
+      // to this exact email. Returning a delivery error here does not expose the
+      // team directory, and prevents a false "email sent" confirmation.
+      if (accessMode === "invitation") {
+        const failure = invitationDeliveryFailure(otpError);
+        return jsonResponse(failure.body, failure.status);
+      }
+    }
     return jsonResponse({ accepted: true });
   },
 };
-
