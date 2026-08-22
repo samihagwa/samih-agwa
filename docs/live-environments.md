@@ -36,6 +36,8 @@ Applied migrations:
 22. `team_onboarding_and_access_control`: owner-only, email-bound one-time claim links, first-day acknowledgements, role/status management, safe suspension guards, RLS, and immutable audit evidence. Existing owner access was backfilled as complete and no invitation row was created.
 23. Subsequent controlled foundations add compact task/content execution, notifications and presence, publishing safety, script AI/versioning, and production delivery contracts.
 24. `team_readiness_reminders_and_planning` plus `content_planning_fk_indexes`: quarterly plans, pillars and calendar items with RLS/audit/history, content-state synchronization, a leadership-only readiness RPC, a deduplicated ten-minute deadline reminder job, complete presence-section validation, and full foreign-key index coverage for the new calendar plus the missing publishing media composite index. They create no plan, task, invitation, customer, or external message.
+25. `invite_only_section_access`: owner-pinned access for `samihsmaih1234@gmail.com`, explicit per-member section lists on memberships and invitations, an Auth signup allowlist hook, service-only login resolver, audited role/section commands, and restrictive section RLS policies across the operational domains.
+26. `section_scope_function_writes`: nine publishing-table write fences for legacy trusted RPCs plus section-scoped presence recording, closing direct-function bypasses for members without the corresponding section.
 
 Deployed Edge Functions:
 
@@ -46,6 +48,8 @@ Deployed Edge Functions:
 5. `crm-commands` v3: JWT-protected manual lead creation with one to three deduplicated contact methods, optional direct chat link and custom acquisition context, controlled identity additions, plus follow-up recording. It sends no message, performs no import, and rejects unauthenticated requests with `401`.
 6. `brand-commands` v1: JWT-protected brand draft, edit, revision, owner approval, and archive commands. The browser has no direct table-write or database-command privilege.
 7. `team-commands` v1: JWT-protected invitation-link creation/revocation, exact-email acceptance, member role/status changes, and onboarding acknowledgements. It sends no email, Telegram message, or external request.
+8. `team-commands` v2: keeps the manual invitation-link flow and atomically stores each invited or existing member's selected dashboard sections with role/status changes.
+9. `request-access-link` v1: public, enumeration-resistant login entrypoint. It sends a magic link only for an active member or an exact valid invitation and allows Auth user creation only for the invitation path.
 
 Verification on 2026-08-17:
 
@@ -72,6 +76,9 @@ Additional verification on 2026-08-22:
 
 - The planning migration was transaction-tested with rollback before being applied to the live project.
 - Deadline materialization performs database-only, recipient-scoped inserts and stays silent while only the owner is active.
-- The hosted application remains private and no invitation, Telegram send, customer import, or external analytics action was triggered by this release.
+- The application shell withholds every operational route and the full sidebar until an active membership is verified; `/login` and the email-bound `/join` activation surface are the only public views.
+- The owner email is an active `owner` with all twelve sections. Unknown-email login resolution returns no access, while the signup hook returns `403`; the owner's existing login resolves successfully.
+- Nine publishing-table triggers fence legacy SECURITY DEFINER mutations by the caller's `publishing` section, and presence cannot be recorded for a hidden section.
+- No invitation, Telegram send, customer import, or external analytics action was triggered by this release.
 
 Never commit `.env.local`, secret keys, legacy service-role keys, or production customer data.

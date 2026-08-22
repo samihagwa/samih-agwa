@@ -35,22 +35,20 @@ The identity, owner-controlled team onboarding, task-management, deadline-remind
 
 ## First owner setup
 
-1. Open `/tasks` on the deployed site.
+1. Open `/login` on the deployed site.
 2. Request a one-time sign-in link using the owner's email.
 3. After the verified session returns, choose **Create Market Whales workspace** once.
 4. During personal testing, create only clearly labeled test tasks and reel workflows. Team invitations are created manually from `/team` and never sent automatically.
 
-The bootstrap endpoint is authenticated and can create only the first organization. The team flow creates a one-time claim link bound to a specific email; it never sends email or a Telegram message. The member must authenticate with that same email and explicitly accept. Suspending access is blocked while the member owns open tasks, scripts, or leads.
+The bootstrap endpoint is authenticated and can create only the first organization. The team flow creates a one-time claim link bound to a specific email; it never sends email or a Telegram message. The member must authenticate with that same email and explicitly accept. Unknown emails cannot receive a login link or create an Auth user. Suspending access is blocked while the member owns open tasks, scripts, or leads.
 
 ## Controlled team onboarding test
 
-1. Keep the hosted site private while testing. Sign in as the owner and open `/team`.
-2. Use an email account you control, choose the least-privileged role, and select **Create link only**. Nothing is sent.
+1. Sign in as the owner and open `/team`. Public visitors see only the login page; the dashboard and sidebar are withheld until membership verification.
+2. Use an email account you control, choose the least-privileged role, select only the required sections, and select **Create link only**. Nothing is sent.
 3. Copy the one-time link and open it in a private browser window. Request the magic link using the exact invited email, then explicitly activate the membership.
 4. Complete the three onboarding acknowledgements, confirm **My tasks** shows only accountable work, and submit one clearly labeled test result.
-5. Back in the owner account, verify presence, notifications, the activity report, role changes, and that suspension is refused until open work is reassigned or closed.
-
-Do not share a link with a real team member until the hosted-site access policy and the Supabase Auth redirect allowlist have been reviewed for the final domain.
+5. Back in the owner account, verify that hidden sections stay absent, direct deep links are refused, presence and notifications are scoped, and suspension is refused until open work is reassigned or closed.
 
 ## Personal brand test
 

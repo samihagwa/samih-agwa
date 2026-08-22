@@ -52,14 +52,12 @@ export function JoinWorkspace() {
     setWorking(true);
     setError(null);
     setNotice(null);
-    const redirectUrl = `${window.location.origin}/join?code=${encodeURIComponent(token)}`;
-    const { error: authError } = await getSupabaseBrowserClient().auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: true, emailRedirectTo: redirectUrl },
+    const { error: authError } = await getSupabaseBrowserClient().functions.invoke("request-access-link", {
+      body: { email, invitation_token: token },
     });
     setWorking(false);
-    if (authError) setError(authError.message);
-    else setNotice("أرسلنا رابط دخول آمن إلى البريد المسجل في الدعوة. افتحه ثم ارجع لنفس الصفحة.");
+    if (authError) setError(await getSupabaseFunctionErrorMessage(authError, "تعذّر طلب رابط الدخول مؤقتًا."));
+    else setNotice("لو البريد مطابقًا للدعوة المعتمدة، سيصلك رابط الدخول. أي بريد آخر لن يستلم شيئًا.");
   }
 
   async function acceptInvitation() {
@@ -76,8 +74,8 @@ export function JoinWorkspace() {
       return;
     }
     window.sessionStorage.removeItem(tokenStorageKey);
-    setNotice("تم تفعيل عضويتك. ننقلك الآن إلى تعريف الفريق.");
-    window.setTimeout(() => window.location.assign("/team?welcome=1"), 500);
+    setNotice("تم تفعيل عضويتك. ننقلك الآن إلى أول قسم مسموح لحسابك.");
+    window.setTimeout(() => window.location.assign("/login"), 500);
   }
 
   async function signOut() {

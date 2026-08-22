@@ -154,7 +154,7 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(types, /approve_script_as_voice_sample:/);
   assert.match(navigation, /href: "\/scripts"/);
   assert.match(presence, /\["\/scripts", "scripts"\]/);
-  assert.match(team, /scripts: "استوديو الاسكريبتات"/);
+  assert.match(team, /workspaceSectionDefinitions/);
   assert.match(config, /\[functions\.script-commands\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.script-ai\][\s\S]*verify_jwt = true/);
 });
@@ -856,16 +856,79 @@ test("team onboarding is owner-controlled, email-bound, auditable, and sends not
   assert.match(commands, /auth: "user"/);
   assert.match(commands, /randomToken/);
   assert.doesNotMatch(commands, /inviteUserByEmail|sendMessage|telegram|smtp|await\s+fetch|globalThis\.fetch/i);
-  assert.match(teamWorkspace, /إنشاء رابط فقط/);
-  assert.match(teamWorkspace, /لم نرسل بريدًا أو رسالة/);
+  assert.match(teamWorkspace, /تم إنشاء رابط آمن فقط/);
+  assert.match(teamWorkspace, /لم نرسل بريدًا أو رسالة لأي شخص/);
   assert.match(teamWorkspace, /إيقاف الوصول/);
   assert.match(teamWorkspace, /3 اتفاقات قبل استلام الشغل/);
-  assert.match(joinWorkspace, /shouldCreateUser: true/);
+  assert.match(joinWorkspace, /request-access-link/);
+  assert.match(joinWorkspace, /invitation_token/);
   assert.match(joinWorkspace, /accept_invitation/);
   assert.match(joinWorkspace, /نفس البريد/);
   assert.match(joinPage, /دعوة من المالك/);
   assert.match(config, /\[functions\.team-commands\][\s\S]*verify_jwt = true/);
   assert.match(readme, /never sent automatically|never sends email/i);
+});
+
+test("workspace is invite-only, section-scoped, and enforced before rendering or direct API access", async () => {
+  const [migration, functionFence, access, shell, navigation, login, join, tasks, loginFunction, teamCommands, teamWorkspace, config, types] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260822012237_invite_only_section_access.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260822014445_section_scope_function_writes.sql", import.meta.url), "utf8"),
+    readFile(new URL("../lib/access.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/LoginWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/team/JoinWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/request-access-link/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/team-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/team/TeamWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(shell, /\.from\("memberships"\)/);
+  assert.match(shell, /\.select\("role, status, allowed_sections"\)/);
+  assert.match(shell, /if \(!session\) return <LoginWorkspace/);
+  assert.match(shell, /sectionAllowed \? children/);
+  assert.match(shell, /<SidebarNav allowedSections=\{allowedSections\}/);
+  assert.match(navigation, /allowedSections: WorkspaceSection\[\]/);
+  assert.match(access, /membership\.role === "owner"/);
+  assert.match(access, /membership\.allowed_sections\.includes\(section\)/);
+  assert.match(login, /request-access-link/);
+  assert.match(login, /أي بريد غير معتمد لن يستلم شيئًا/);
+  assert.doesNotMatch(`${login}\n${join}\n${tasks}`, /signInWithOtp/);
+  assert.match(loginFunction, /resolve_workspace_login/);
+  assert.match(loginFunction, /auth\.signInWithOtp/);
+  assert.match(loginFunction, /shouldCreateUser: accessMode === "invitation"/);
+  assert.match(loginFunction, /accessMode !== "existing" && accessMode !== "invitation"/);
+  assert.match(loginFunction, /allowedOrigins/);
+
+  assert.match(migration, /add column allowed_sections text\[\]/);
+  assert.match(migration, /hook_restrict_market_whales_signup/);
+  assert.match(migration, /to supabase_auth_admin/);
+  assert.match(migration, /from public, anon, authenticated/);
+  assert.match(migration, /resolve_workspace_login/);
+  assert.match(migration, /to service_role/);
+  assert.match(migration, /samihsmaih1234@gmail\.com/);
+  assert.match(migration, /create policy "section_scope_tasks"/);
+  assert.match(migration, /create policy "section_scope_scripts"/);
+  assert.match(migration, /create policy "section_scope_publishing_schedules"/);
+  assert.match(migration, /as restrictive/);
+  assert.match(migration, /create_team_invitation_with_sections/);
+  assert.match(migration, /manage_team_membership_access/);
+  assert.match(functionFence, /guard_publishing_section_write/);
+  assert.match(functionFence, /array\['publishing'\]::text\[\]/);
+  for (const table of ["publishing_admin_connections", "publishing_channels", "publishing_controls", "publishing_occurrences", "publishing_posts", "publishing_publication_logs", "publishing_schedule_channels", "publishing_schedules", "publishing_telegram_assets"]) {
+    assert.match(functionFence, new RegExp(`before insert or update or delete on public\\.${table}`));
+  }
+  assert.match(functionFence, /array\[target_section\]::text\[\]/);
+  assert.match(functionFence, /Workspace section access is required/);
+  assert.match(teamCommands, /create_team_invitation_with_sections/);
+  assert.match(teamCommands, /manage_team_membership_access/);
+  assert.match(teamWorkspace, /الأقسام المسموحة/);
+  assert.match(teamWorkspace, /مالك \+ مدير المنصة/);
+  assert.match(types, /allowed_sections: string\[\]/);
+  assert.match(config, /\[functions\.request-access-link\][\s\S]*verify_jwt = false/);
 });
 
 test("content team AI choices remain explicit, version fenced, role scoped, and non-moving", async () => {

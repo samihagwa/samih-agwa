@@ -1619,6 +1619,7 @@ export type Database = {
       }
       memberships: {
         Row: {
+          allowed_sections: string[]
           created_at: string
           id: string
           invited_by: string | null
@@ -1632,6 +1633,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          allowed_sections?: string[]
           created_at?: string
           id?: string
           invited_by?: string | null
@@ -1645,6 +1647,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          allowed_sections?: string[]
           created_at?: string
           id?: string
           invited_by?: string | null
@@ -2917,6 +2920,7 @@ export type Database = {
         Row: {
           accepted_at: string | null
           accepted_by: string | null
+          allowed_sections: string[]
           created_at: string
           email: string
           expires_at: string
@@ -2934,6 +2938,7 @@ export type Database = {
         Insert: {
           accepted_at?: string | null
           accepted_by?: string | null
+          allowed_sections?: string[]
           created_at?: string
           email: string
           expires_at: string
@@ -2951,6 +2956,7 @@ export type Database = {
         Update: {
           accepted_at?: string | null
           accepted_by?: string | null
+          allowed_sections?: string[]
           created_at?: string
           email?: string
           expires_at?: string

@@ -31,7 +31,7 @@ export function SessionChip() {
   }
 
   if (!email) {
-    return <a className="user-chip user-chip-link" href="/tasks"><span><LogIn size={16} /></span><div><strong>تسجيل الدخول</strong><small>ابدأ من قسم المهام</small></div></a>;
+    return <a className="user-chip user-chip-link" href="/login"><span><LogIn size={16} /></span><div><strong>تسجيل الدخول</strong><small>من البوابة الآمنة</small></div></a>;
   }
 
   const initial = email.slice(0, 1).toUpperCase();

@@ -2,32 +2,34 @@
 
 import { usePathname } from "next/navigation";
 import { BarChart3, BookOpenCheck, CalendarRange, Clapperboard, FilePenLine, LayoutDashboard, Rocket, Send, Settings, SquareKanban, UsersRound } from "lucide-react";
+import type { WorkspaceSection } from "../../lib/access";
 
 const items = [
-  { href: "/", label: "مركز القيادة", icon: LayoutDashboard },
-  { href: "/tasks", label: "مهام الفريق", icon: SquareKanban },
-  { href: "/planning", label: "الخطة وتقويم المحتوى", icon: CalendarRange },
-  { href: "/content", label: "مصنع المحتوى", icon: Clapperboard },
-  { href: "/scripts", label: "استوديو الاسكريبتات", icon: FilePenLine },
-  { href: "/publishing", label: "النشر التلقائي", icon: Send },
-  { href: "/brand", label: "مركز معرفة البراند", icon: BookOpenCheck },
-  { href: "/campaigns", label: "الحملات والإطلاقات", icon: Rocket },
-  { href: "/crm", label: "العملاء والـCRM", icon: UsersRound },
-  { href: "/analytics", label: "النتائج والتحليلات", icon: BarChart3 },
-];
+  { id: "dashboard", href: "/", label: "مركز القيادة", icon: LayoutDashboard },
+  { id: "tasks", href: "/tasks", label: "مهام الفريق", icon: SquareKanban },
+  { id: "planning", href: "/planning", label: "الخطة وتقويم المحتوى", icon: CalendarRange },
+  { id: "content", href: "/content", label: "مصنع المحتوى", icon: Clapperboard },
+  { id: "scripts", href: "/scripts", label: "استوديو الاسكريبتات", icon: FilePenLine },
+  { id: "publishing", href: "/publishing", label: "النشر التلقائي", icon: Send },
+  { id: "brand", href: "/brand", label: "مركز معرفة البراند", icon: BookOpenCheck },
+  { id: "campaigns", href: "/campaigns", label: "الحملات والإطلاقات", icon: Rocket },
+  { id: "crm", href: "/crm", label: "العملاء والـCRM", icon: UsersRound },
+  { id: "analytics", href: "/analytics", label: "النتائج والتحليلات", icon: BarChart3 },
+] satisfies Array<{ id: WorkspaceSection; href: string; label: string; icon: typeof LayoutDashboard }>;
 
-export function SidebarNav() {
+export function SidebarNav({ allowedSections }: { allowedSections: WorkspaceSection[] }) {
   const pathname = usePathname();
+  const allowed = new Set(allowedSections);
   return (
     <nav className="sidebar-nav" aria-label="التنقل الرئيسي">
       <p className="nav-label">مساحة العمل</p>
-      {items.map(({ href, label, icon: Icon }) => {
+      {items.filter(({ id }) => allowed.has(id)).map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === href : pathname.startsWith(href);
         return <a key={href} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}><Icon size={19} /><span>{label}</span></a>;
       })}
-      <p className="nav-label nav-label-spaced">النظام</p>
-      <a href="/team" className={pathname.startsWith("/team") ? "active" : ""}><UsersRound size={19} /><span>الفريق والصلاحيات</span></a>
-      <a href="/settings" className={pathname.startsWith("/settings") ? "active" : ""}><Settings size={19} /><span>الإعدادات والتكاملات</span></a>
+      {allowed.has("team") || allowed.has("settings") ? <p className="nav-label nav-label-spaced">النظام</p> : null}
+      {allowed.has("team") ? <a href="/team" className={pathname.startsWith("/team") ? "active" : ""}><UsersRound size={19} /><span>الفريق والصلاحيات</span></a> : null}
+      {allowed.has("settings") ? <a href="/settings" className={pathname.startsWith("/settings") ? "active" : ""}><Settings size={19} /><span>الإعدادات والتكاملات</span></a> : null}
     </nav>
   );
 }

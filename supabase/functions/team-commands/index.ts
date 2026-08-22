@@ -5,6 +5,10 @@ const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const allowedRoles = new Set(["admin", "manager", "member", "viewer"]);
 const allowedMembershipStatuses = new Set(["active", "suspended"]);
 const allowedOnboardingSteps = new Set(["role", "workflow", "brand"]);
+const allowedSections = new Set([
+  "dashboard", "tasks", "planning", "content", "scripts", "publishing",
+  "brand", "campaigns", "crm", "analytics", "team", "settings",
+]);
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: responseHeaders });
@@ -18,6 +22,11 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function cleanSections(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(cleanString).filter((section) => allowedSections.has(section)))];
 }
 
 function randomToken() {
@@ -36,7 +45,7 @@ function safeErrorMessage(message: string, fallback: string) {
     "Sign in with the same email", "already belongs to another", "account is suspended",
     "Team membership was not found", "workspace owner access cannot",
     "Reassign or close", "Reassign or archive", "Active organization membership",
-    "Unknown onboarding step",
+    "Unknown onboarding step", "Choose at least one valid workspace section",
   ];
   return known.some((part) => message.includes(part)) ? message : fallback;
 }
@@ -65,9 +74,10 @@ export default {
       const email = cleanString(body.email).toLowerCase();
       const fullName = cleanString(body.full_name);
       const role = cleanString(body.role);
+      const sections = cleanSections(body.allowed_sections);
       const expiresInDays = Number(body.expires_in_days ?? 7);
-      if (!organizationId || !email || !fullName || !allowedRoles.has(role)) {
-        return jsonResponse({ message: "أكمل اسم العضو وبريده ودوره." }, 400);
+      if (!organizationId || !email || !fullName || !allowedRoles.has(role) || !sections.length) {
+        return jsonResponse({ message: "أكمل اسم العضو وبريده ودوره واختر قسمًا واحدًا على الأقل." }, 400);
       }
       if (!Number.isInteger(expiresInDays) || expiresInDays < 1 || expiresInDays > 14) {
         return jsonResponse({ message: "مدة الرابط يجب أن تكون من يوم إلى 14 يومًا." }, 400);
@@ -75,12 +85,13 @@ export default {
 
       const token = randomToken();
       const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
-      const { data, error } = await context.supabaseAdmin.rpc("create_team_invitation", {
+      const { data, error } = await context.supabaseAdmin.rpc("create_team_invitation_with_sections", {
         target_actor_id: actorId,
         target_organization_id: organizationId,
         target_email: email,
         target_full_name: fullName,
         target_role: role,
+        target_allowed_sections: sections,
         plain_token: token,
         target_expires_at: expiresAt,
       });
@@ -115,15 +126,17 @@ export default {
       const userId = cleanString(body.user_id);
       const role = cleanString(body.role);
       const status = cleanString(body.status);
-      if (!organizationId || !userId || !allowedRoles.has(role) || !allowedMembershipStatuses.has(status)) {
+      const sections = cleanSections(body.allowed_sections);
+      if (!organizationId || !userId || !allowedRoles.has(role) || !allowedMembershipStatuses.has(status) || !sections.length) {
         return jsonResponse({ message: "بيانات العضو أو الصلاحية غير صالحة." }, 400);
       }
-      const { data, error } = await context.supabaseAdmin.rpc("manage_team_membership", {
+      const { data, error } = await context.supabaseAdmin.rpc("manage_team_membership_access", {
         target_actor_id: actorId,
         target_organization_id: organizationId,
         target_user_id: userId,
         target_role: role,
         target_status: status,
+        target_allowed_sections: sections,
       });
       if (error) return jsonResponse({ message: safeErrorMessage(error.message, "تعذّر تحديث صلاحية العضو.") }, 400);
       return jsonResponse({ updated: data });

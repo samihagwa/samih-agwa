@@ -7,6 +7,12 @@ import {
   ShieldCheck, UserCog, UserPlus, UsersRound,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  defaultSectionsByRole,
+  normalizeWorkspaceSections,
+  workspaceSectionDefinitions,
+  type WorkspaceSection,
+} from "../../lib/access";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Database, Json, Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -28,16 +34,13 @@ type Person = {
   joinedAt: string | null;
   onboardingAcknowledgements: Json;
   onboardingCompletedAt: string | null;
+  allowedSections: WorkspaceSection[];
 };
 type Workspace = { organization: Organization; membership: Membership; people: Person[]; invitations: Invitation[] };
 type RangePreset = "week" | "month" | "custom";
 type OnboardingStep = "role" | "workflow" | "brand";
 
-const sectionLabels: Record<string, string> = {
-  dashboard: "مركز القيادة", tasks: "مهام الفريق", content: "مصنع المحتوى",
-  scripts: "استوديو الاسكريبتات", publishing: "النشر التلقائي", brand: "مركز البراند", campaigns: "الحملات", crm: "العملاء",
-  analytics: "التحليلات", team: "الفريق", settings: "الإعدادات",
-};
+const sectionLabels: Record<string, string> = Object.fromEntries(workspaceSectionDefinitions.map((section) => [section.id, section.label]));
 
 const manageableRoles: Array<Exclude<Membership["role"], "owner">> = ["admin", "manager", "member", "viewer"];
 const roleDescriptions: Record<Membership["role"], string> = {
@@ -80,6 +83,28 @@ function acknowledgements(value: Json): Record<string, boolean> {
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, item === true]));
 }
 
+function SectionPicker({ value, onChange, disabled = false }: { value: WorkspaceSection[]; onChange: (value: WorkspaceSection[]) => void; disabled?: boolean }) {
+  const selected = new Set(value);
+  return <fieldset className="section-access-picker" disabled={disabled}>
+    <legend>الأقسام المسموحة</legend>
+    <div>{workspaceSectionDefinitions.map((section) => <label key={section.id}>
+      <input type="checkbox" checked={selected.has(section.id)} onChange={(event) => onChange(event.target.checked ? normalizeWorkspaceSections([...value, section.id]) : value.filter((item) => item !== section.id))} />
+      <span>{section.label}</span>
+    </label>)}</div>
+    {!value.length ? <small role="alert">اختر قسمًا واحدًا على الأقل.</small> : null}
+  </fieldset>;
+}
+
+function MemberSectionEditor({ person, working, onSave }: { person: Person; working: boolean; onSave: (sections: WorkspaceSection[]) => Promise<void> }) {
+  const [sections, setSections] = useState(person.allowedSections);
+  const changed = sections.join("|") !== person.allowedSections.join("|");
+  return <details className="member-section-editor">
+    <summary>الأقسام المسموحة ({person.allowedSections.length})</summary>
+    <SectionPicker value={sections} onChange={setSections} disabled={working || person.status === "suspended"} />
+    <Button type="button" variant="secondary" disabled={working || !sections.length || !changed} onClick={() => void onSave(sections)}>حفظ الأقسام</Button>
+  </details>;
+}
+
 export function TeamWorkspace() {
   const configured = isSupabaseConfigured();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -91,6 +116,8 @@ export function TeamWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [invitationLink, setInvitationLink] = useState<string | null>(null);
+  const [inviteRole, setInviteRole] = useState<Exclude<Membership["role"], "owner">>("member");
+  const [inviteSections, setInviteSections] = useState<WorkspaceSection[]>(defaultSectionsByRole.member);
   const [preset, setPreset] = useState<RangePreset>("week");
   const [customStart, setCustomStart] = useState(() => dateInput(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
   const [customEnd, setCustomEnd] = useState(() => dateInput(new Date()));
@@ -144,6 +171,7 @@ export function TeamWorkspace() {
         joinedAt: row.joined_at,
         onboardingAcknowledgements: row.onboarding_acknowledgements,
         onboardingCompletedAt: row.onboarding_completed_at,
+        allowedSections: normalizeWorkspaceSections(row.allowed_sections),
         name: profiles?.find((profile) => profile.id === row.user_id)?.full_name
           ?? (row.user_id === activeSession.user.id ? activeSession.user.email : null)
           ?? "عضو فريق",
@@ -205,12 +233,15 @@ export function TeamWorkspace() {
     const result = await runTeamCommand({
       action: "create_invitation", organization_id: workspace.organization.id,
       full_name: String(form.get("full_name") ?? ""), email: String(form.get("email") ?? ""),
-      role: String(form.get("role") ?? "member"), expires_in_days: Number(form.get("expires_in_days") ?? 7),
+      role: inviteRole, allowed_sections: inviteSections,
+      expires_in_days: Number(form.get("expires_in_days") ?? 7),
     }, "تعذّر إنشاء رابط الدعوة.");
     if (!result || typeof result.token !== "string") return;
     setInvitationLink(`${window.location.origin}/join?code=${encodeURIComponent(result.token)}`);
     setNotice("تم إنشاء رابط آمن فقط. لم نرسل بريدًا أو رسالة لأي شخص.");
     formElement.reset();
+    setInviteRole("member");
+    setInviteSections(defaultSectionsByRole.member);
     await loadWorkspace(session);
   }
 
@@ -223,10 +254,10 @@ export function TeamWorkspace() {
     await loadWorkspace(session);
   }
 
-  async function updateMember(person: Person, role: Membership["role"], status: Membership["status"]) {
+  async function updateMember(person: Person, role: Membership["role"], status: Membership["status"], allowedSections = person.allowedSections) {
     if (!workspace || !session || role === "owner" || status === "invited") return;
     if (status === "suspended" && !window.confirm(`إيقاف وصول ${person.name}؟ سيُرفض لو لديه شغل مفتوح حتى لا تضيع المسؤولية.`)) return;
-    const result = await runTeamCommand({ action: "update_member", organization_id: workspace.organization.id, user_id: person.id, role, status }, "تعذّر تحديث صلاحية العضو.");
+    const result = await runTeamCommand({ action: "update_member", organization_id: workspace.organization.id, user_id: person.id, role, status, allowed_sections: allowedSections }, "تعذّر تحديث صلاحية العضو.");
     if (!result) return;
     setNotice(status === "suspended" ? "تم إيقاف الوصول بعد التحقق من عدم وجود شغل مفتوح." : "تم تحديث صلاحية العضو وتسجيل التغيير.");
     await loadWorkspace(session);
@@ -275,14 +306,15 @@ export function TeamWorkspace() {
       <form className="team-invite-form" onSubmit={createInvitation}>
         <label><span>اسم العضو</span><input name="full_name" minLength={2} maxLength={120} required placeholder="الاسم الذي سيظهر للفريق" /></label>
         <label><span>البريد</span><input name="email" type="email" required placeholder="name@company.com" /></label>
-        <label><span>الدور</span><select name="role" defaultValue="member">{manageableRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></label>
+        <label><span>الدور</span><select name="role" value={inviteRole} onChange={(event) => { const role = event.target.value as Exclude<Membership["role"], "owner">; setInviteRole(role); setInviteSections(defaultSectionsByRole[role]); }}>{manageableRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></label>
         <label><span>صلاحية الرابط</span><select name="expires_in_days" defaultValue="7"><option value="1">يوم واحد</option><option value="3">3 أيام</option><option value="7">7 أيام</option><option value="14">14 يومًا</option></select></label>
-        <Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <UserPlus size={16} />} إنشاء رابط فقط</Button>
+        <SectionPicker value={inviteSections} onChange={setInviteSections} disabled={working} />
+        <Button type="submit" disabled={working || !inviteSections.length}>{working ? <LoaderCircle className="spin" size={16} /> : <UserPlus size={16} />} اعتماد البريد وإنشاء الرابط</Button>
       </form>
       {invitationLink ? <div className="generated-invite-link"><div><strong>هذا الرابط يظهر الآن فقط</strong><small>لو ضاع، ألغِ الدعوة وأنشئ واحدًا جديدًا. لا نخزن الرمز الأصلي.</small></div><code dir="ltr">{invitationLink}</code><Button type="button" variant="secondary" onClick={() => void copyInvitationLink()}><Copy size={15} /> نسخ الرابط</Button></div> : null}
       {workspace.invitations.length ? <div className="pending-invitations"><h3>روابط في انتظار الاستخدام</h3>{workspace.invitations.map((invitation) => {
         const expired = new Date(invitation.expires_at).getTime() <= now;
-        return <article key={invitation.id}><div><strong>{invitation.full_name}</strong><small>{invitation.email} · {roleLabel(invitation.role)}</small></div><StatusBadge tone={expired ? "danger" : "warning"}>{expired ? "منتهي" : `ينتهي ${formatDate(invitation.expires_at)}`}</StatusBadge><button type="button" className="text-button danger-text" disabled={working} onClick={() => void revokeInvitation(invitation)}><Ban size={14} /> إلغاء</button></article>;
+        return <article key={invitation.id}><div><strong>{invitation.full_name}</strong><small>{invitation.email} · {roleLabel(invitation.role)}</small><small>{normalizeWorkspaceSections(invitation.allowed_sections).map((section) => sectionLabels[section]).join(" · ")}</small></div><StatusBadge tone={expired ? "danger" : "warning"}>{expired ? "منتهي" : `ينتهي ${formatDate(invitation.expires_at)}`}</StatusBadge><button type="button" className="text-button danger-text" disabled={working} onClick={() => void revokeInvitation(invitation)}><Ban size={14} /> إلغاء</button></article>;
       })}</div> : null}
     </section> : null}
 
@@ -291,7 +323,7 @@ export function TeamWorkspace() {
       <div className="team-member-list">{workspace.people.map((person) => <article key={person.id} className={person.status === "suspended" ? "suspended" : ""}>
         <div className="team-member-identity"><span>{person.name.slice(0, 1)}</span><div><strong>{person.name}</strong><small>{person.joinedAt ? `انضم ${formatDate(person.joinedAt)}` : "لم يكتمل الانضمام"}</small></div></div>
         <div className="team-member-role"><StatusBadge tone={person.status === "suspended" ? "danger" : person.role === "owner" ? "success" : "info"}>{person.status === "suspended" ? "موقوف" : roleLabel(person.role)}</StatusBadge><small>{roleDescriptions[person.role]}</small></div>
-        {person.role === "owner" ? <span className="owner-lock"><ShieldCheck size={15} /> محمي</span> : <div className="team-member-actions"><label><span>الصلاحية</span><select value={person.role} disabled={working || person.status === "suspended"} onChange={(event) => void updateMember(person, event.target.value as Membership["role"], "active")}>{manageableRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></label>{person.status === "suspended" ? <Button type="button" variant="secondary" disabled={working} onClick={() => void updateMember(person, person.role, "active")}><RotateCcw size={14} /> إعادة الوصول</Button> : <button type="button" className="text-button danger-text" disabled={working} onClick={() => void updateMember(person, person.role, "suspended")}><Ban size={14} /> إيقاف الوصول</button>}</div>}
+        {person.role === "owner" ? <div className="owner-lock"><ShieldCheck size={15} /><span><strong>مالك + مدير المنصة</strong><small>وصول كامل ومحمي لكل الأقسام</small></span></div> : <div className="team-member-actions"><label><span>الصلاحية</span><select value={person.role} disabled={working || person.status === "suspended"} onChange={(event) => void updateMember(person, event.target.value as Membership["role"], "active")}>{manageableRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></label><MemberSectionEditor key={`${person.id}:${person.allowedSections.join("|")}`} person={person} working={working} onSave={(sections) => updateMember(person, person.role, "active", sections)} />{person.status === "suspended" ? <Button type="button" variant="secondary" disabled={working} onClick={() => void updateMember(person, person.role, "active")}><RotateCcw size={14} /> إعادة الوصول</Button> : <button type="button" className="text-button danger-text" disabled={working} onClick={() => void updateMember(person, person.role, "suspended")}><Ban size={14} /> إيقاف الوصول</button>}</div>}
       </article>)}</div>
     </section> : null}
 

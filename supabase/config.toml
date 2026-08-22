@@ -403,6 +403,9 @@ verify_jwt = true
 [functions.team-commands]
 verify_jwt = true
 
+[functions.request-access-link]
+verify_jwt = false
+
 [functions.ai-provider-commands]
 verify_jwt = true
 

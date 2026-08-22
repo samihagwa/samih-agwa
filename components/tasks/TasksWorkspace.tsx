@@ -10,11 +10,9 @@ import {
   FileText,
   Film,
   LoaderCircle,
-  LockKeyhole,
   Plus,
   RefreshCw,
   Route,
-  Send,
   ShieldCheck,
   UserRoundCheck,
 } from "lucide-react";
@@ -286,34 +284,6 @@ export function TasksWorkspace() {
     });
   }, [filter, renderNow, session, tasks]);
 
-  async function requestMagicLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const email = String(form.get("email") ?? "").trim().toLowerCase();
-    if (!email) return;
-
-    setWorking(true);
-    setError(null);
-    setNotice(null);
-
-    try {
-      const { error: authError } = await getSupabaseBrowserClient().auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: true,
-          emailRedirectTo: `${window.location.origin}/tasks`,
-        },
-      });
-
-      if (authError) throw authError;
-      setNotice("أرسلنا رابط دخول آمن إلى بريدك. افتحه من نفس المتصفح لإكمال الدخول.");
-    } catch (requestError) {
-      setError(getErrorMessage(requestError));
-    } finally {
-      setWorking(false);
-    }
-  }
-
   async function bootstrapWorkspace() {
     if (!session) return;
     setWorking(true);
@@ -409,29 +379,7 @@ export function TasksWorkspace() {
   }
 
   if (!session) {
-    return (
-      <section className="auth-layout">
-        <article className="panel auth-card">
-          <span className="icon-tile large"><LockKeyhole size={22} /></span>
-          <p className="overline">دخول آمن</p>
-          <h2>ادخل ببريدك من دون كلمة مرور</h2>
-          <p>سنرسل رابطًا يستخدم مرة واحدة. بعد الدخول سترى فقط مساحة الشركة والمهام المسموح بها لحسابك.</p>
-          <form className="stacked-form" onSubmit={requestMagicLink}>
-            <label htmlFor="login-email">البريد الإلكتروني</label>
-            <input id="login-email" name="email" type="email" autoComplete="email" required placeholder="name@company.com" dir="ltr" />
-            <Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />} إرسال رابط الدخول</Button>
-          </form>
-          {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
-          {error ? <p className="form-notice error" role="alert">{error}</p> : null}
-        </article>
-        <aside className="panel auth-explainer">
-          <StatusBadge tone="success">RLS مفعّل</StatusBadge>
-          <h2>الصلاحيات ليست شكلًا في الواجهة</h2>
-          <p>كل قراءة أو تعديل يُفحص داخل قاعدة البيانات بحسب الشركة والدور ومالك المهمة، حتى لو حاول شخص تجاوز الواجهة.</p>
-          <ul><li><CheckCircle2 size={16} /> لا توجد مهام تجريبية مخفية.</li><li><CheckCircle2 size={16} /> لا يمكن لعضو رؤية شركة أخرى.</li><li><CheckCircle2 size={16} /> كل تغيير مهم له سجل تدقيق.</li></ul>
-        </aside>
-      </section>
-    );
+    return <section className="workspace-state workspace-onboarding"><UserRoundCheck size={27} /><div><h2>سجّل الدخول من البوابة الآمنة</h2><p>لن يظهر بورد المهام قبل اعتماد البريد وعضوية الفريق.</p></div><Button href="/login">فتح تسجيل الدخول</Button></section>;
   }
 
   if (!workspace) {

@@ -53,6 +53,11 @@ Existing Market Whales application
 
 ## Team operations contract
 
+- Every operational route is wrapped by an invite-only application gate. Before an active membership is loaded, the browser renders only the login or invitation surface and does not mount the sidebar, notifications, presence, or page workspace.
+- The owner membership always receives every canonical section. Other roles carry an explicit `allowed_sections` list; the same list filters navigation, blocks deep links, scopes presence, and is enforced by restrictive RLS policies for direct Data API requests.
+- The public login form never calls Supabase Auth directly. A public Edge Function returns the same response for known and unknown emails, sends a magic link only to an active member or an exact valid invitation, and never creates a user outside the invitation flow.
+- A Supabase Before User Created hook is the final signup allowlist: only the fixed owner email or an unexpired pending invitation can create an Auth user. The hook and login resolver are not executable by browser roles.
+- Publishing uses legacy trusted database commands, so every publishing table also has an independent write trigger that requires the caller's `publishing` section. This prevents a hidden-section member from bypassing RLS through an RPC.
 - `notifications` contains recipient-scoped, deduplicated in-app events for assignment, dependency unlock, review, blocking, completion, and revision requests. Authenticated clients can read only their own rows and can change only their own read state.
 - A database Cron job materializes due-soon, overdue, and 24-hour leadership-escalation events every ten minutes. Dedupe keys make each deadline window idempotent, and the job performs no external network call.
 - Deadline reminders stay disabled for a one-member workspace. They begin only after a second active member exists, which prevents personal test tasks from being mistaken for real team alerts.
