@@ -712,6 +712,8 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(workspace, /ابحث بالاسم، الهاتف، البريد، Telegram/);
   assert.match(workspace, /أداء مسؤولي العملاء/);
   assert.match(workspace, /وسائل التواصل — املأ واحدة أو أكثر/);
+  assert.match(workspace, /crm-create-dialog-backdrop/);
+  assert.match(workspace, /aria-modal="true"/);
   assert.match(workspace, /functions\.invoke\("crm-commands"/);
   assert.match(taskWorkspace, /فتح ملف العميل وتسجيل النتيجة/);
   assert.doesNotMatch(migration, /'متابعة عميل محتمل[^']*'\s*,\s*contact_full_name/);
@@ -856,6 +858,7 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
   assert.match(notificationCenter, /30_000/);
   assert.match(notificationCenter, /visibilitychange/);
   assert.match(notificationCenter, /notification-toast/);
+  assert.match(notificationCenter, /notification-popover/);
   assert.match(notificationCenter, /window\.location\.assign\(notification\.url\)/);
   assert.doesNotMatch(notificationCenter, /useRouter|router\.push/);
   assert.match(presenceReporter, /60_000/);

@@ -23,7 +23,7 @@ import {
   ShieldCheck,
   UserRoundCheck,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   allowedCrmTransitions,
   crmActivityKindConfig,
@@ -118,6 +118,7 @@ export function CrmWorkspace() {
   const [notice, setNotice] = useState<string | null>(null);
   const [renderNow] = useState(() => Date.now());
   const [defaultFollowUp] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 24 * 60 * 60 * 1000)));
+  const createNameInputRef = useRef<HTMLInputElement>(null);
   const manager = Boolean(workspace && canManageTasks(workspace.membership.role));
 
   const clearData = useCallback(() => {
@@ -276,6 +277,22 @@ export function CrmWorkspace() {
     return () => { void supabase.removeChannel(channel); };
   }, [refreshSafely, workspace]);
 
+  useEffect(() => {
+    if (!showCreate) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowCreate(false);
+    };
+    const focusFrame = window.requestAnimationFrame(() => createNameInputRef.current?.focus());
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [showCreate]);
+
   const identitiesByContact = useMemo(() => {
     const grouped = new Map<string, Identity[]>();
     for (const identity of identities) grouped.set(identity.contact_id, [...(grouped.get(identity.contact_id) ?? []), identity]);
@@ -414,7 +431,7 @@ export function CrmWorkspace() {
       <div className="toolbar-actions">
         <button className="icon-button" type="button" aria-label="تحديث CRM" disabled={crmLoading} onClick={() => void refreshSafely(workspace.organization.id)}><RefreshCw className={crmLoading ? "spin" : ""} size={17} /></button>
         <Button href="/tasks" variant="secondary"><Route size={16} /> مهام المتابعة</Button>
-        {canCreate ? <Button type="button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> عميل محتمل جديد</Button> : null}
+        {canCreate ? <Button type="button" aria-expanded={showCreate} aria-controls="crm-create-dialog" onClick={() => setShowCreate(true)}><Plus size={16} /> عميل محتمل جديد</Button> : null}
       </div>
     </div>
 
@@ -452,11 +469,13 @@ export function CrmWorkspace() {
       })}</div>
     </section> : null}
 
-    {showCreate && canCreate ? <form className="panel crm-create-form" onSubmit={(event) => void createLead(event)}>
-      <div className="section-heading"><div><p className="overline">ملف + وسائل تواصل + مهمة</p><h2>إضافة عميل محتمل يدويًا</h2></div><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div>
+    {showCreate && canCreate ? <div className="crm-create-dialog-backdrop">
+      <button className="crm-create-dialog-dismiss" type="button" aria-label="إغلاق نافذة إضافة العميل" onClick={() => setShowCreate(false)} />
+      <form id="crm-create-dialog" className="panel crm-create-form" role="dialog" aria-modal="true" aria-labelledby="crm-create-dialog-title" onSubmit={(event) => void createLead(event)}>
+      <div className="section-heading"><div><p className="overline">ملف + وسائل تواصل + مهمة</p><h2 id="crm-create-dialog-title">إضافة عميل محتمل يدويًا</h2></div><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div>
       <div className="crm-safety-note"><ShieldCheck size={18} /><div><strong>لن تُرسل أي رسالة</strong><p>هذا الإدخال يحفظ الملف ويضيف مهمة متابعة فقط. الاستيراد والتواصل التلقائي غير مفعّلين.</p></div></div>
       <div className="form-grid">
-        <label><span>اسم العميل المحتمل</span><input name="full_name" minLength={2} maxLength={160} required placeholder="الاسم كما تعرفه" /></label>
+        <label><span>اسم العميل المحتمل</span><input ref={createNameInputRef} name="full_name" minLength={2} maxLength={160} required placeholder="الاسم كما تعرفه" /></label>
         <label><span>مصدر التسجيل</span><select name="source" value={source} onChange={(event) => setSource(event.target.value as CrmSource)}>{(Object.keys(crmSourceConfig) as CrmSource[]).map((option) => <option value={option} key={option}>{crmSourceConfig[option].label}</option>)}</select><small>اختر «مصدر مخصص» لإضافة أي مصدر جديد.</small></label>
         {source === "other" ? <label><span>اسم المصدر الجديد</span><input name="source_detail" minLength={2} maxLength={160} required placeholder="مثال: Webinar أغسطس" /></label> : null}
         <label><span>سبب التسجيل / الاهتمام</span><select name="interest" value={interest} onChange={(event) => setInterest(event.target.value as CrmInterest)}>{(Object.keys(crmInterestConfig) as CrmInterest[]).map((option) => <option value={option} key={option}>{crmInterestConfig[option].label}</option>)}</select><small>اختر «سبب آخر» لكتابة خدمة أو حملة جديدة.</small></label>
@@ -470,7 +489,8 @@ export function CrmWorkspace() {
         <label className="full-field"><span>سياق مهم قبل التواصل — اختياري</span><textarea name="notes" maxLength={5000} rows={3} placeholder="ماذا طلب؟ ما الذي سجّل فيه؟ وما الذي يجب أن يعرفه المسؤول؟" /></label>
       </div>
       <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <UserRoundCheck size={16} />} حفظ وإنشاء مهمة المتابعة</Button><small>إذا كانت أي وسيلة مسجلة من قبل، سيرفض النظام الملف المكرر كله.</small></div>
-    </form> : null}
+      </form>
+    </div> : null}
 
     {contacts.length ? <div className="crm-pipeline" aria-label="خط مبيعات العملاء المحتملين">{crmLeadStages.map((stage) => {
       const stageContacts = contacts.filter((contact) => contact.stage === stage);

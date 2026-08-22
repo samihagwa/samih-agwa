@@ -61,17 +61,17 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus);
 .notification-center { position: relative; }
 .notification-trigger { position: relative; }
 .notification-trigger > span { min-width: 17px; height: 17px; padding: 0 4px; position: absolute; top: -5px; inset-inline-start: -5px; display: grid; place-items: center; border: 2px solid var(--canvas); border-radius: 999px; background: var(--red-700); color: white; font-size: 10px; font-weight: 900; }
-.notification-popover { width: min(370px, calc(100vw - 24px)); max-height: min(520px, calc(100vh - 90px)); position: absolute; z-index: 50; top: 46px; inset-inline-end: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: 0 22px 55px rgba(16,36,49,.18); }
-.notification-popover > header { padding: 13px 14px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); }
+.notification-popover { width: min(370px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: min(520px, calc(100dvh - 90px)); position: fixed; z-index: 60; top: 76px; inset-inline-end: clamp(12px, 4vw, 52px); direction: rtl; overflow: hidden; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: 0 22px 55px rgba(16,36,49,.18); }
+.notification-popover > header { min-width: 0; padding: 13px 14px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); }
 .notification-popover > header strong, .notification-popover > header small { display: block; }
 .notification-popover > header strong { font-size: 12px; }
 .notification-popover > header small { margin-top: 3px; color: var(--ink-500); font-size: 11px; }
-.notification-popover > header button { padding: 3px; display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--teal-700); font-size: 11px; font-weight: 900; cursor: pointer; }
+.notification-popover > header button { min-width: 0; padding: 3px; display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--teal-700); font-size: 11px; font-weight: 900; cursor: pointer; }
 .notification-popover ol { max-height: 430px; margin: 0; padding: 0; list-style: none; overflow: auto; }
 .notification-popover li { position: relative; border-bottom: 1px solid var(--line); }
 .notification-popover li.unread { background: #f0f8f6; }
 .notification-popover li.unread::before { content: ""; width: 6px; height: 6px; position: absolute; top: 17px; inset-inline-start: 10px; border-radius: 50%; background: var(--teal-700); }
-.notification-link { width: 100%; padding: 12px 19px 12px 14px; display: block; border: 0; background: transparent; color: inherit; text-align: start; cursor: pointer; }
+.notification-link { width: 100%; min-width: 0; padding: 12px 19px 12px 14px; display: block; border: 0; background: transparent; color: inherit; text-align: start; overflow-wrap: anywhere; cursor: pointer; }
 .notification-popover li strong { font-size: 10px; }
 .notification-popover li p { margin: 4px 0; color: var(--ink-600); font-size: 12px; line-height: 1.6; }
 .notification-popover li small { color: var(--ink-400); font-size: 10px; }
@@ -230,15 +230,21 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .kanban-column { min-height: 430px; padding: 13px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgba(226,233,232,.55); scroll-snap-align: start; }
 .kanban-column > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 2px 12px; }
 .kanban-column > header > strong { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink-600); font-size: 10px; }
-.kanban-stack { display: grid; align-content: start; gap: 10px; }
-.task-card { padding: 15px; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: 0 8px 22px rgba(16,36,49,.045); }
+.kanban-stack { display: grid; align-content: start; gap: 13px; }
+.task-card { min-width: 0; position: relative; padding: 15px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 15px; background: var(--paper); box-shadow: 0 9px 24px rgba(16,36,49,.065); }
+.task-card::before { content: ""; width: 4px; position: absolute; inset-block: 0; inset-inline-start: 0; background: #9fb4b2; }
+.task-card[data-priority="low"]::before { background: #83bdb6; }
+.task-card[data-priority="normal"]::before, .task-card[data-state="active"]::before { background: var(--teal-700); }
+.task-card[data-priority="high"]::before, .task-card[data-state="review"]::before { background: #d5a647; }
+.task-card[data-priority="urgent"]::before, .task-card[data-state="blocked"]::before, .task-card.task-overdue::before { background: var(--red-700); }
+.kanban-stack > .task-card:nth-child(even) { background: #fbfcfc; }
 .task-card.task-overdue { border-color: #e7aaa6; }
 .task-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .task-card-top small { color: var(--ink-400); font-size: 12px; }
 .priority { font-size: 12px; font-weight: 900; color: var(--ink-600); }
 .priority-high, .priority-urgent { color: var(--red-700); }
 .priority-low { color: var(--teal-700); }
-.task-card h3 { margin: 11px 0 7px; font-size: 14px; line-height: 1.55; }
+.task-card h3 { margin: 11px 0 8px; padding: 7px 9px; border: 1px solid #c8dcda; border-radius: 9px; background: #eef6f4; color: var(--ink-950); font-size: 15px; font-weight: 950; line-height: 1.55; overflow-wrap: anywhere; }
 .task-card > p { margin: 0 0 13px; color: var(--ink-600); font-size: 10px; line-height: 1.75; }
 .collapsible-text { min-width: 0; }
 .collapsible-text p { margin: 0; color: var(--ink-600); font-size: 10px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -584,11 +590,17 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .research-score-row label { display: grid; gap: 6px; }
 .research-score-row span { color: var(--ink-800); font-size: 11px; font-weight: 900; }
 .scripts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.script-card { min-width: 0; padding: 17px; display: grid; gap: 14px; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: var(--shadow-soft); }
+.script-card { min-width: 0; position: relative; padding: 17px; display: grid; gap: 14px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 15px; background: var(--paper); box-shadow: 0 10px 28px rgba(16,36,49,.075); transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.script-card::before { content: ""; width: 4px; position: absolute; inset-block: 0; inset-inline-start: 0; background: #9fb4b2; }
+.script-card[data-status="ready_to_record"]::before { background: #d5a647; }
+.script-card[data-status="handed_off"]::before { background: var(--teal-700); }
+.script-card[data-status="archived"]::before { background: #8d9a99; }
+.scripts-grid > .script-card:nth-child(even) { background: #fbfcfc; }
+.script-card:hover { border-color: #9ac9bd; box-shadow: 0 14px 34px rgba(16,36,49,.1); transform: translateY(-1px); }
 .script-card > header, .script-card > header > div { min-width: 0; display: flex; align-items: flex-start; gap: 10px; }
 .script-card > header { justify-content: space-between; }
 .script-card-icon { width: 35px; height: 35px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px; background: var(--teal-100); color: var(--teal-700); }
-.script-card h3 { margin: 0; color: var(--ink-950); font-size: 15px; line-height: 1.55; }
+.script-card h3 { width: fit-content; max-width: 100%; margin: 0; padding: 4px 9px; border-radius: 8px; background: #e8f3f1; color: var(--teal-700); font-size: 16px; font-weight: 950; line-height: 1.55; overflow-wrap: anywhere; }
 .script-card header p { margin: 4px 0 0; display: -webkit-box; overflow: hidden; color: var(--ink-600); font-size: 12px; line-height: 1.65; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .script-card dl { margin: 0; padding: 10px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border-radius: 10px; background: var(--canvas); }
 .script-card dl > div { min-width: 0; display: grid; gap: 3px; }
@@ -1016,7 +1028,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .crm-owner-grid dd { margin: 4px 0 0; color: var(--ink-950); font-size: 13px; font-weight: 900; }
 .crm-owner-grid footer { justify-content: space-between; color: var(--ink-600); font-size: 11px; }
 .crm-owner-grid footer button { border: 0; background: transparent; color: var(--teal-700); font-size: 11px; font-weight: 900; cursor: pointer; }
-.crm-create-form { padding: 24px; }
+.crm-create-dialog-backdrop { position: fixed; z-index: 100; inset: 0; padding: clamp(12px, 4vw, 40px); display: grid; place-items: center; background: rgba(8,22,30,.58); backdrop-filter: blur(4px); }
+.crm-create-dialog-dismiss { position: absolute; inset: 0; border: 0; background: transparent; cursor: default; }
+.crm-create-form { width: min(940px, 100%); max-height: calc(100dvh - clamp(24px, 8vw, 80px)); position: relative; z-index: 1; margin: 0; padding: 24px; overflow-y: auto; overscroll-behavior: contain; box-shadow: 0 30px 80px rgba(8,22,30,.24); }
 .crm-create-form .section-heading { margin-bottom: 16px; }
 .crm-create-form label > small { color: var(--ink-600); font-size: 11px; line-height: 1.6; }
 .crm-safety-note { margin-bottom: 18px; padding: 13px 14px; display: flex; align-items: flex-start; gap: 9px; border: 1px solid #b3dbd5; border-radius: 12px; background: var(--teal-100); }
@@ -1459,6 +1473,10 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .reel-caption-heading, .reel-approval-panel { align-items: flex-start; flex-direction: column; }
   .reel-caption-heading > div:last-child, .reel-approval-state { width: 100%; justify-items: start; text-align: right; }
   .notification-toast { inset-inline: 12px; top: 74px; width: auto; }
+  .notification-popover { top: 66px; inset-inline: 12px; width: auto; max-width: none; }
+  .notification-popover > header { flex-wrap: wrap; }
+  .crm-create-dialog-backdrop { padding: 10px; place-items: stretch; }
+  .crm-create-form { width: 100%; max-height: calc(100dvh - 20px); padding: 18px 15px; }
   .content-card-badges, .production-header, .production-tool-heading { align-items: flex-start; justify-content: flex-start; flex-direction: column; }
   .inline-production-form { grid-template-columns: 1fr; }
   .inline-production-form .form-actions { grid-column: auto; }

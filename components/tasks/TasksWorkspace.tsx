@@ -441,7 +441,7 @@ export function TasksWorkspace() {
                     const overdueTasks = entry.tasks.filter((task) => isOverdue(task, renderNow));
                     const completedTasks = entry.tasks.filter(taskIsClosed).length;
                     const progress = Math.round((completedTasks / entry.tasks.length) * 100);
-                    return <article className={`task-card content-workflow-group ${overdueTasks.length ? "task-overdue" : ""}`} key={entry.id}>
+                    return <article className={`task-card content-workflow-group ${overdueTasks.length ? "task-overdue" : ""}`} data-state={lane.id} key={entry.id}>
                       <div className="task-card-top"><span className="workflow-task-label"><Film size={12} /> محتوى · {entry.tasks.length} خطوات تنفيذ</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info"}>{lane.label}</StatusBadge></div>
                       <h3>{contentGroupTitle(entry.tasks[0])}</h3>
                       <a className="task-production-link" href={`/content#content-${entry.contentItemId}`}><FileText size={12} /> فتح ملف المحتوى ونتائج التنفيذ</a>
@@ -486,7 +486,7 @@ export function TasksWorkspace() {
                       || option !== "review" || task.status === "review")
                   );
                   return (
-                    <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} key={task.id}>
+                    <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} data-priority={task.priority} data-status={task.status} key={task.id}>
                       <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small>v{task.version}</small></div>
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
                       {task.content_item_id ? <a className="task-production-link" href={`/content#content-${task.content_item_id}`}><FileText size={12} /> فتح ملف المحتوى وتسليم النتيجة</a> : null}
