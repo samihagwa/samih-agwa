@@ -45,3 +45,4 @@ This file is the implementation memory for ideas that must not disappear between
 - AI preview never changes workflow state unless the user explicitly selects and saves it.
 - Terminal work leaves current boards and remains searchable in archives.
 - No production publishing test is sent to an allowlisted real channel without an explicit, current approval.
+- Sites releases must deploy the validated local build archive so public Supabase browser configuration is embedded at build time.
