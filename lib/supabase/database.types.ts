@@ -1570,6 +1570,69 @@ export type Database = {
           },
         ]
       }
+      crm_lead_intake_events: {
+        Row: {
+          contact_id: string | null
+          created_at: string
+          external_id: string
+          id: string
+          organization_id: string
+          outcome: string
+          payload_hash: string
+          registered_at: string
+          request_fingerprint: string | null
+          sheet_mirror_error: string | null
+          sheet_mirror_status: string
+          sheet_mirrored_at: string | null
+          source_system: string
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string
+          external_id: string
+          id?: string
+          organization_id: string
+          outcome: string
+          payload_hash: string
+          registered_at: string
+          request_fingerprint?: string | null
+          sheet_mirror_error?: string | null
+          sheet_mirror_status?: string
+          sheet_mirrored_at?: string | null
+          source_system: string
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string
+          external_id?: string
+          id?: string
+          organization_id?: string
+          outcome?: string
+          payload_hash?: string
+          registered_at?: string
+          request_fingerprint?: string | null
+          sheet_mirror_error?: string | null
+          sheet_mirror_status?: string
+          sheet_mirrored_at?: string | null
+          source_system?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_lead_intake_events_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_lead_intake_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       launch_content_items: {
         Row: {
           content_item_id: string
@@ -3801,6 +3864,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      complete_whales_zone_sheet_mirror: {
+        Args: {
+          mirror_error: string
+          mirror_succeeded: boolean
+          target_event_id: string
+        }
+        Returns: boolean
+      }
       complete_publishing_admin_link: {
         Args: {
           raw_link_code: string
@@ -4349,6 +4420,20 @@ export type Database = {
           won_in_period: number
         }[]
       }
+      get_whales_zone_intake_health: {
+        Args: { target_organization_id: string }
+        Returns: {
+          conflict_events: number
+          created_contacts: number
+          deduplicated_events: number
+          failed_mirrors: number
+          historical_events: number
+          last_received_at: string | null
+          last_successful_mirror_at: string | null
+          live_events: number
+          total_events: number
+        }[]
+      }
       get_script_ai_context: {
         Args: { target_script_id: string; target_user_id: string }
         Returns: Json
@@ -4438,6 +4523,36 @@ export type Database = {
           target_user_id: string
         }
         Returns: string
+      }
+      import_whales_zone_sheet_batch: {
+        Args: {
+          default_owner_id: string
+          import_rows: Json
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
+      ingest_whales_zone_lead: {
+        Args: {
+          contact_email: string
+          contact_full_name: string
+          contact_tradingview: string
+          contact_whatsapp: string
+          intake_external_id: string
+          intake_owner_id: string
+          intake_payload_hash: string
+          intake_registered_at: string
+          intake_request_fingerprint: string
+          intake_source_system: string
+        }
+        Returns: {
+          contact_id: string | null
+          event_id: string
+          mirror_status: string
+          outcome: string
+          should_mirror: boolean
+        }[]
       }
       lookup_exness_account: {
         Args: {

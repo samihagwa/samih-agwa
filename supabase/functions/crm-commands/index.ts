@@ -250,6 +250,40 @@ async function importTelegramBatch(body: Record<string, unknown>, context: Conte
   return commandError(error, "تعذّر استيراد دفعة Telegram. لم يتم اعتماد الدفعة.") ?? jsonResponse({ batchId: data }, 201);
 }
 
+async function importWhalesZoneSheetBatch(body: Record<string, unknown>, context: Context) {
+  const organizationId = text(body.organization_id);
+  const defaultOwnerId = text(body.default_owner_id);
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+
+  if (!organizationId || !defaultOwnerId || rows.length < 1 || rows.length > 500) {
+    return jsonResponse({ message: "دفعة Whales Zone يجب أن تحتوي من عميل واحد إلى 500 عميل مع مسؤول افتراضي." }, 400);
+  }
+
+  for (const rawRow of rows) {
+    const row = typeof rawRow === "object" && rawRow ? rawRow as Record<string, unknown> : {};
+    const registeredAt = text(row.registered_at);
+    if (
+      text(row.external_id).length < 3
+      || text(row.full_name).length < 2
+      || !validIdentity("phone", text(row.phone))
+      || !validIdentity("email", text(row.email))
+      || !validIdentity("tradingview", text(row.tradingview))
+      || !registeredAt
+      || Number.isNaN(new Date(registeredAt).getTime())
+    ) {
+      return jsonResponse({ message: "توجد صفوف ناقصة أو غير صالحة في ملف Whales Zone." }, 400);
+    }
+  }
+
+  const { data, error } = await context!.supabaseAdmin.rpc("import_whales_zone_sheet_batch", {
+    target_user_id: context!.userClaims!.id,
+    target_organization_id: organizationId,
+    default_owner_id: defaultOwnerId,
+    import_rows: rows,
+  });
+  return commandError(error, "تعذّر استيراد سجل Whales Zone. لم يتم اعتماد الدفعة.") ?? jsonResponse({ batchId: data }, 201);
+}
+
 async function rollbackImportBatch(body: Record<string, unknown>, context: Context) {
   const batchId = text(body.batch_id);
   if (!batchId) return jsonResponse({ message: "اختر دفعة استيراد صحيحة." }, 400);
@@ -279,6 +313,7 @@ export default {
     if (body.action === "add_identity") return addIdentity(body, context);
     if (body.action === "record_activity") return recordActivity(body, context);
     if (body.action === "import_telegram_batch") return importTelegramBatch(body, context);
+    if (body.action === "import_whales_zone_sheet_batch") return importWhalesZoneSheetBatch(body, context);
     if (body.action === "rollback_import_batch") return rollbackImportBatch(body, context);
     return jsonResponse({ message: "أمر CRM غير معروف." }, 400);
   },

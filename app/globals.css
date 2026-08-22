@@ -1121,8 +1121,20 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .crm-safety-note > svg { flex: 0 0 auto; margin-top: 1px; color: var(--teal-700); }
 .crm-safety-note strong { font-size: 10px; }
 .crm-safety-note p { margin: 3px 0 0; color: var(--ink-600); font-size: 12px; line-height: 1.65; }
+.crm-intake-health { padding: 14px 16px; display: grid; grid-template-columns: auto minmax(240px, 1fr) minmax(360px, .8fr); align-items: center; gap: 13px; border: 1px solid #b3dbd5; border-radius: 15px; background: linear-gradient(135deg, var(--teal-100), rgba(255,255,255,.8)); }
+.crm-intake-health.attention { border-color: #e5c27b; background: #fffaf0; }
+.crm-intake-health-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: var(--paper); color: var(--teal-700); }
+.crm-intake-health.attention .crm-intake-health-icon { color: #a76600; }
+.crm-intake-health > div { min-width: 0; display: grid; gap: 3px; }
+.crm-intake-health > div strong { font-size: 12px; line-height: 1.55; }
+.crm-intake-health > div small { color: var(--ink-600); font-size: 10px; }
+.crm-intake-health dl { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.crm-intake-health dl div { padding: 8px; display: grid; gap: 2px; border: 1px solid rgba(16, 108, 96, .16); border-radius: 9px; background: rgba(255,255,255,.72); }
+.crm-intake-health dt { color: var(--ink-500); font-size: 9px; font-weight: 800; }
+.crm-intake-health dd { margin: 0; font-size: 14px; font-weight: 950; }
 .crm-import-dialog { width: min(1100px, 100%); }
 .crm-import-dialog .section-heading > div > p:last-child { max-width: 760px; margin: 5px 0 0; color: var(--ink-600); font-size: 12px; line-height: 1.7; }
+.crm-import-mode { width: fit-content; margin-bottom: 12px; }
 .crm-import-source-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, .36fr); gap: 10px; }
 .crm-import-file, .crm-template-button { min-height: 76px; padding: 14px; display: flex; align-items: center; gap: 10px; border: 1px dashed var(--line-strong); border-radius: 13px; background: var(--canvas); color: var(--ink-800); cursor: pointer; text-align: right; }
 .crm-import-file { position: relative; }
@@ -1632,7 +1644,8 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .notification-popover { top: 66px; inset-inline: 12px; width: auto; max-width: none; }
   .notification-popover > header { flex-wrap: wrap; }
   .crm-create-dialog-backdrop { padding: 10px; place-items: stretch; }
-  .crm-import-source-grid, .crm-import-approval { grid-template-columns: 1fr; }
+  .crm-import-source-grid, .crm-import-approval, .crm-intake-health { grid-template-columns: 1fr; }
+  .crm-intake-health dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .crm-import-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .broker-lookup-panel { grid-template-columns: auto minmax(0, 1fr); }
   .broker-lookup-panel > label, .broker-lookup-panel > .button, .broker-lookup-result { grid-column: 1 / -1; }

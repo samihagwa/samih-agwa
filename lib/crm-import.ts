@@ -28,7 +28,7 @@ const headerAliases = {
   full_name: ["full_name", "full name", "name", "اسم العميل", "الاسم", "الاسم بالكامل"],
   phone: ["phone", "mobile", "whatsapp", "رقم الهاتف", "الهاتف", "رقم الواتس", "واتساب", "الواتس"],
   email: ["email", "e-mail", "البريد", "البريد الإلكتروني", "الايميل", "الإيميل"],
-  tradingview: ["tradingview", "trading view", "tradingview username", "حساب tradingview", "حساب تريدنج فيو", "تريدنج فيو"],
+  tradingview: ["tradingview", "trading view", "tradingview username", "حساب tradingview", "حساب تريدنج فيو", "تريدنج فيو", "اليوزرنيم", "اليوزر"],
   registered_at: ["registered_at", "registered at", "date", "registration date", "تاريخ التسجيل", "التاريخ"],
   signal: ["signal", "status", "الحالة", "الإشارة"],
 } as const;
@@ -218,6 +218,43 @@ export function parseTelegramCustomerImport(input: string): TelegramImportPrevie
 
   const signalCounts: Record<TelegramImportSignal, number> = { pending: 0, contacted: 0, activated: 0, needs_account_correction: 0 };
   for (const row of rows) signalCounts[row.signal] += 1;
+  const validRows = rows.filter((row) => row.errors.length === 0).map((row) => ({
+    message_id: row.message_id,
+    full_name: row.full_name,
+    phone: row.phone,
+    email: row.email,
+    tradingview: row.tradingview,
+    signal: row.signal,
+    registered_at: row.registered_at,
+  }));
+  return { rows, valid_rows: validRows, invalid_count: rows.length - validRows.length, duplicate_count: duplicateCount, signal_counts: signalCounts };
+}
+
+export function parseWhalesZoneSheetImport(input: string): TelegramImportPreview {
+  const records = sourceRecords(input);
+  const rows = records.map((record, index) => {
+    const parsed = recordFromMessage(record, index);
+    const row: TelegramImportRow = {
+      ...parsed,
+      message_id: `sheet-row-${index + 2}`,
+      signal: "pending",
+    };
+    return { ...row, row_number: index + 2, errors: validateRow(row) };
+  });
+
+  const seen = new Set<string>();
+  let duplicateCount = 0;
+  for (const row of rows) {
+    const keys = [
+      row.phone && `phone:${row.phone}`,
+      row.email && `email:${row.email}`,
+      row.tradingview && `tradingview:${row.tradingview.toLocaleLowerCase("en-US")}`,
+    ].filter(Boolean) as string[];
+    if (keys.some((key) => seen.has(key))) duplicateCount += 1;
+    for (const key of keys) seen.add(key);
+  }
+
+  const signalCounts: Record<TelegramImportSignal, number> = { pending: rows.length, contacted: 0, activated: 0, needs_account_correction: 0 };
   const validRows = rows.filter((row) => row.errors.length === 0).map((row) => ({
     message_id: row.message_id,
     full_name: row.full_name,

@@ -47,7 +47,7 @@ import {
   type CrmLeadStage,
   type CrmSource,
 } from "../../lib/crm";
-import { parseTelegramCustomerImport, type TelegramImportPreview, type TelegramImportSignal } from "../../lib/crm-import";
+import { parseTelegramCustomerImport, parseWhalesZoneSheetImport, type TelegramImportPreview, type TelegramImportSignal } from "../../lib/crm-import";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Database, Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -71,6 +71,8 @@ type TeamPerson = { id: string; name: string; role: Membership["role"] };
 type Workspace = { organization: Organization; membership: Membership; people: TeamPerson[] };
 type Filter = "all" | "mine" | "overdue";
 type BoardView = "current" | "archive";
+type ImportMode = "telegram" | "whales_zone_sheet";
+type IntakeHealth = Database["public"]["Functions"]["get_whales_zone_intake_health"]["Returns"][number];
 
 const PAGE_SIZE = 60;
 
@@ -123,12 +125,14 @@ export function CrmWorkspace() {
   const [ownerPerformance, setOwnerPerformance] = useState<OwnerPerformance[]>([]);
   const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [intakeHealth, setIntakeHealth] = useState<IntakeHealth | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(configured);
   const [crmLoading, setCrmLoading] = useState(false);
   const [working, setWorking] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [importMode, setImportMode] = useState<ImportMode>("telegram");
   const [importSourceText, setImportSourceText] = useState("");
   const [importFileName, setImportFileName] = useState("");
   const [importPreview, setImportPreview] = useState<TelegramImportPreview | null>(null);
@@ -169,6 +173,7 @@ export function CrmWorkspace() {
     setOwnerPerformance([]);
     setImportBatches([]);
     setImportRows([]);
+    setIntakeHealth(null);
     setTotalCount(0);
     setActivityFormId(null);
     setIdentityFormId(null);
@@ -185,7 +190,7 @@ export function CrmWorkspace() {
     const supabase = getSupabaseBrowserClient();
     setCrmLoading(true);
     try {
-      const [searchResult, performanceResult, batchesResult] = await Promise.all([
+      const [searchResult, performanceResult, batchesResult, intakeHealthResult] = await Promise.all([
         supabase.rpc("search_crm_contacts_v2", {
           target_organization_id: organizationId,
           search_query: searchQuery,
@@ -202,15 +207,20 @@ export function CrmWorkspace() {
         platformAdmin
           ? supabase.from("crm_import_batches").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(12)
           : Promise.resolve({ data: [] as ImportBatch[], error: null }),
+        platformAdmin
+          ? supabase.rpc("get_whales_zone_intake_health", { target_organization_id: organizationId })
+          : Promise.resolve({ data: [] as IntakeHealth[], error: null }),
       ]);
       if (searchResult.error) throw searchResult.error;
       if (performanceResult.error) throw performanceResult.error;
       if (batchesResult.error) throw batchesResult.error;
+      if (intakeHealthResult.error) throw intakeHealthResult.error;
 
       const matches = searchResult.data ?? [];
       const contactIds = matches.map((match) => match.contact_id);
       setTotalCount(Number(matches[0]?.total_count ?? 0));
       setOwnerPerformance(performanceResult.data ?? []);
+      setIntakeHealth(intakeHealthResult.data?.[0] ?? null);
       const batches = batchesResult.data ?? [];
       setImportBatches(batches);
       if (platformAdmin && batches.length) {
@@ -470,6 +480,17 @@ export function CrmWorkspace() {
     setImportReviewed(false);
   }
 
+  function parseImportSource(sourceText: string) {
+    return importMode === "whales_zone_sheet"
+      ? parseWhalesZoneSheetImport(sourceText)
+      : parseTelegramCustomerImport(sourceText);
+  }
+
+  function changeImportMode(nextMode: ImportMode) {
+    setImportMode(nextMode);
+    resetImportDraft();
+  }
+
   async function readImportFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -482,7 +503,7 @@ export function CrmWorkspace() {
       const source = await file.text();
       setImportSourceText(source);
       setImportFileName(file.name);
-      setImportPreview(parseTelegramCustomerImport(source));
+      setImportPreview(parseImportSource(source));
       setImportReviewed(false);
       setError(null);
     } catch (fileError) {
@@ -493,24 +514,30 @@ export function CrmWorkspace() {
   }
 
   function analyzeImportSource() {
-    const preview = parseTelegramCustomerImport(importSourceText);
+    const preview = parseImportSource(importSourceText);
     setImportPreview(preview);
     setImportReviewed(false);
-    setError(preview.rows.length ? null : "لم أجد أي عميل في النص أو الملف. استخدم قالب الأعمدة الموضح أو ملف Telegram JSON.");
+    setError(preview.rows.length ? null : importMode === "whales_zone_sheet"
+      ? "لم أجد صفوف عملاء. استخدم ملف CSV المصدر من Whales Zone بالأعمدة: الاسم، الإيميل، اليوزرنيم، الواتساب، التاريخ."
+      : "لم أجد أي عميل في النص أو الملف. استخدم قالب الأعمدة الموضح أو ملف Telegram JSON.");
   }
 
   function downloadImportTemplate() {
-    const columns = "message_id,full_name,phone,email,tradingview,registered_at,signal\n";
-    const example = "9507,اسم العميل,+201000000000,name@example.com,tradingview_user,2026-08-22T12:00:00+03:00,pending\n";
+    const columns = importMode === "whales_zone_sheet"
+      ? "الاسم,الإيميل,اليوزرنيم,الواتساب,التاريخ,المصدر\n"
+      : "message_id,full_name,phone,email,tradingview,registered_at,signal\n";
+    const example = importMode === "whales_zone_sheet"
+      ? "اسم العميل,name@example.com,tradingview_user,+201000000000,2026-08-22T12:00:00+03:00,whales-zone-v2\n"
+      : "9507,اسم العميل,+201000000000,name@example.com,tradingview_user,2026-08-22T12:00:00+03:00,pending\n";
     const url = URL.createObjectURL(new Blob([columns, example], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "telegram-customers-template.csv";
+    anchor.download = importMode === "whales_zone_sheet" ? "whales-zone-leads-template.csv" : "telegram-customers-template.csv";
     anchor.click();
     URL.revokeObjectURL(url);
   }
 
-  async function importTelegramCustomers() {
+  async function importCustomers() {
     if (!workspace || !importPreview) return;
     if (importPreview.invalid_count || !importPreview.valid_rows.length) {
       setError("أصلح الصفوف المعلّمة أولًا. الدفعة لن تُحفظ جزئيًا من شاشة المعاينة.");
@@ -525,11 +552,20 @@ export function CrmWorkspace() {
       return;
     }
     const imported = await invokeCrm({
-      action: "import_telegram_batch",
+      action: importMode === "whales_zone_sheet" ? "import_whales_zone_sheet_batch" : "import_telegram_batch",
       organization_id: workspace.organization.id,
       default_owner_id: importDefaultOwner,
-      rows: importPreview.valid_rows,
-    }, `تم اعتماد دفعة من ${importPreview.valid_rows.length} عميل. راجع النتيجة في سجل الاستيراد.`);
+      rows: importMode === "whales_zone_sheet"
+        ? importPreview.valid_rows.map((row) => ({
+            external_id: row.message_id,
+            full_name: row.full_name,
+            phone: row.phone,
+            email: row.email,
+            tradingview: row.tradingview,
+            registered_at: row.registered_at,
+          }))
+        : importPreview.valid_rows,
+    }, `تم اعتماد ${importPreview.valid_rows.length} صفًا. دُمج العميل المكرر بهويته الحالية بدل إنشاء ملف ثانٍ.`);
     if (imported) resetImportDraft();
   }
 
@@ -581,13 +617,19 @@ export function CrmWorkspace() {
       <div className="toolbar-actions">
         <button className="icon-button" type="button" aria-label="تحديث CRM" disabled={crmLoading} onClick={() => void refreshSafely(workspace.organization.id)}><RefreshCw className={crmLoading ? "spin" : ""} size={17} /></button>
         <Button href="/tasks" variant="secondary"><Route size={16} /> مهام المتابعة</Button>
-        {platformAdmin ? <Button type="button" variant="secondary" onClick={() => { setImportDefaultOwner(importDefaultOwner || session.user.id); setShowImport(true); }}><Upload size={16} /> استيراد عملاء Telegram</Button> : null}
+        {platformAdmin ? <Button type="button" variant="secondary" onClick={() => { setImportDefaultOwner(importDefaultOwner || session.user.id); setShowImport(true); }}><Upload size={16} /> استيراد ومزامنة العملاء</Button> : null}
         {canCreate ? <Button type="button" aria-expanded={showCreate} aria-controls="crm-create-dialog" onClick={() => setShowCreate(true)}><Plus size={16} /> عميل محتمل جديد</Button> : null}
       </div>
     </div>
 
     {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+
+    {platformAdmin && intakeHealth ? <section className={`crm-intake-health ${Number(intakeHealth.failed_mirrors) ? "attention" : "healthy"}`} aria-label="حالة ربط Whales Zone">
+      <span className="crm-intake-health-icon">{Number(intakeHealth.failed_mirrors) ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}</span>
+      <div><p className="overline">Whales Zone → CRM</p><strong>{Number(intakeHealth.failed_mirrors) ? "التسجيل في CRM يعمل وتوجد محاولات مزامنة للشيت تحتاج مراجعة" : "الربط التلقائي جاهز: العميل يُحفظ في CRM أولًا"}</strong><small>{intakeHealth.last_received_at ? `آخر تسجيل أو استيراد: ${formatDate(intakeHealth.last_received_at)}` : "لم يصل تسجيل إلى المسار الجديد بعد."}</small></div>
+      <dl><div><dt>تسجيلات مباشرة</dt><dd>{intakeHealth.live_events}</dd></div><div><dt>صفوف تاريخية</dt><dd>{intakeHealth.historical_events}</dd></div><div><dt>تم دمجها</dt><dd>{intakeHealth.deduplicated_events}</dd></div><div><dt>تعثر نسخ الشيت</dt><dd>{intakeHealth.failed_mirrors}</dd></div></dl>
+    </section> : null}
 
     <div className="workspace-view-switch">
       <div><p className="overline">تنظيم العملاء</p><strong>الملفات المحسومة لا تزاحم المتابعات الحالية، وتظل محفوظة وقابلة للبحث.</strong></div>
@@ -653,26 +695,28 @@ export function CrmWorkspace() {
     {showImport && platformAdmin ? <div className="crm-create-dialog-backdrop">
       <button className="crm-create-dialog-dismiss" type="button" aria-label="إغلاق نافذة استيراد العملاء" onClick={() => setShowImport(false)} />
       <section className="panel crm-create-form crm-import-dialog" role="dialog" aria-modal="true" aria-labelledby="crm-import-dialog-title">
-        <div className="section-heading"><div><p className="overline">مراجعة محلية + دفعة قابلة للتراجع</p><h2 id="crm-import-dialog-title">استيراد عملاء «أدمن الحيتان»</h2><p>اقرأ ملف Telegram JSON أو CSV أو الصق الرسائل كما هي. لن يخرج الملف الخام من جهازك؛ السيرفر يستقبل الصفوف التي وافقت عليها فقط.</p></div><button className="text-button" type="button" onClick={() => setShowImport(false)}>إغلاق</button></div>
-        <div className="crm-safety-note"><ShieldCheck size={18} /><div><strong>لا رسائل ولا تفعيل تلقائي</strong><p>الاستيراد ينشئ ملفات CRM ومهام متابعة فقط، ويمنع التكرار بالهاتف والبريد وTradingView ومعرّف رسالة Telegram.</p></div></div>
+        <div className="section-heading"><div><p className="overline">استيراد موثّق + دمج هوية</p><h2 id="crm-import-dialog-title">استيراد ومزامنة العملاء</h2><p>{importMode === "whales_zone_sheet" ? "ارفع CSV المصدر من Google Sheet لاسترداد التسجيلات القديمة. التكرارات تُدمج في ملف العميل نفسه ولا تمنع الدفعة." : "اقرأ ملف Telegram JSON أو CSV أو الصق رسائل «أدمن الحيتان» كما هي. السيرفر يستقبل الصفوف التي راجعتها فقط."}</p></div><button className="text-button" type="button" onClick={() => setShowImport(false)}>إغلاق</button></div>
+        <div className="segmented-control crm-import-mode" aria-label="مصدر استيراد العملاء"><button type="button" className={importMode === "telegram" ? "active" : ""} onClick={() => changeImportMode("telegram")}>Telegram · أدمن الحيتان</button><button type="button" className={importMode === "whales_zone_sheet" ? "active" : ""} onClick={() => changeImportMode("whales_zone_sheet")}>Google Sheet · Whales Zone</button></div>
+        <div className="crm-safety-note"><ShieldCheck size={18} /><div><strong>لا رسائل ولا تفعيل تلقائي</strong><p>الاستيراد ينشئ ملفات CRM ومهام متابعة فقط. الهاتف والبريد وTradingView يمنعون إنشاء ملف مكرر لنفس العميل.</p></div></div>
         <div className="crm-import-source-grid">
-          <label className="crm-import-file"><Upload size={18} /><span><strong>{importFileName || "اختر ملف Telegram أو CSV"}</strong><small>JSON / CSV / TSV / TXT — حد أقصى 5MB</small></span><input type="file" accept=".json,.csv,.tsv,.txt,application/json,text/csv,text/plain" onChange={(event) => void readImportFile(event)} /></label>
+          <label className="crm-import-file"><Upload size={18} /><span><strong>{importFileName || (importMode === "whales_zone_sheet" ? "اختر CSV المصدر من Whales Zone" : "اختر ملف Telegram أو CSV")}</strong><small>{importMode === "whales_zone_sheet" ? "CSV / TSV — الأعمدة العربية الحالية مدعومة" : "JSON / CSV / TSV / TXT"} — حد أقصى 5MB</small></span><input type="file" accept={importMode === "whales_zone_sheet" ? ".csv,.tsv,text/csv,text/tab-separated-values" : ".json,.csv,.tsv,.txt,application/json,text/csv,text/plain"} onChange={(event) => void readImportFile(event)} /></label>
           <button className="crm-template-button" type="button" onClick={downloadImportTemplate}><Download size={16} /><span><strong>تنزيل قالب CSV</strong><small>لو ستجهّز الدفعة يدويًا</small></span></button>
         </div>
-        <label className="crm-import-paste"><span>أو الصق رسائل العملاء / بيانات الأعمدة</span><textarea rows={7} value={importSourceText} onChange={(event) => { setImportSourceText(event.target.value); setImportFileName(""); setImportPreview(null); setImportReviewed(false); }} placeholder={"الاسم: محمد أحمد\nرقم الهاتف: +2010…\nالبريد الإلكتروني: name@example.com\nحساب TradingView: username\nتاريخ التسجيل: 2026-08-20"} /></label>
+        <label className="crm-import-paste"><span>{importMode === "whales_zone_sheet" ? "أو الصق صفوف CSV من Google Sheet" : "أو الصق رسائل العملاء / بيانات الأعمدة"}</span><textarea rows={7} value={importSourceText} onChange={(event) => { setImportSourceText(event.target.value); setImportFileName(""); setImportPreview(null); setImportReviewed(false); }} placeholder={importMode === "whales_zone_sheet" ? "الاسم,الإيميل,اليوزرنيم,الواتساب,التاريخ,المصدر" : "الاسم: محمد أحمد\nرقم الهاتف: +2010…\nالبريد الإلكتروني: name@example.com\nحساب TradingView: username\nتاريخ التسجيل: 2026-08-20"} /></label>
         <div className="form-actions crm-import-analyze"><Button type="button" variant="secondary" disabled={!importSourceText.trim()} onClick={analyzeImportSource}><Search size={15} /> تحليل ومعاينة</Button>{importSourceText ? <button className="text-button" type="button" onClick={resetImportDraft}>مسح المسودة</button> : null}</div>
 
         {importPreview ? <section className="crm-import-preview" aria-label="معاينة دفعة العملاء">
-          <div className="crm-import-summary"><div><strong>{importPreview.rows.length}</strong><span>إجمالي الصفوف</span></div><div><strong>{importPreview.valid_rows.length}</strong><span>صالحة</span></div><div className={importPreview.invalid_count ? "attention" : ""}><strong>{importPreview.invalid_count}</strong><span>تحتاج تصحيحًا</span></div><div><strong>{importPreview.duplicate_count}</strong><span>مكررة داخل الملف</span></div></div>
-          <div className="crm-import-signals">{(Object.keys(importSignalConfig) as TelegramImportSignal[]).map((signal) => <span key={signal}><StatusBadge tone={importSignalConfig[signal].tone}>{importSignalConfig[signal].label}</StatusBadge><strong>{importPreview.signal_counts[signal]}</strong></span>)}</div>
-          <div className="crm-import-table-wrap"><table><thead><tr><th>#</th><th>العميل</th><th>الهاتف والبريد</th><th>TradingView</th><th>حالة Telegram</th><th>الفحص</th></tr></thead><tbody>{importPreview.rows.slice(0, 500).map((row) => <tr className={row.errors.length ? "invalid" : "valid"} key={`${row.message_id}-${row.row_number}`}><td>{row.row_number}</td><td><strong>{row.full_name || "—"}</strong><small>رسالة {row.message_id || "—"}</small></td><td dir="ltr"><span>{row.phone || "—"}</span><small>{row.email || "—"}</small></td><td dir="ltr">{row.tradingview || "—"}</td><td><StatusBadge tone={importSignalConfig[row.signal].tone}>{importSignalConfig[row.signal].label}</StatusBadge></td><td>{row.errors.length ? <ul>{row.errors.map((rowError) => <li key={rowError}>{rowError}</li>)}</ul> : <span className="crm-import-valid"><CheckCircle2 size={14} /> صالح</span>}</td></tr>)}</tbody></table></div>
-          <div className="crm-import-approval"><label><span>مسؤول المتابعة الافتراضي</span><select value={importDefaultOwner} onChange={(event) => setImportDefaultOwner(event.target.value)}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label className="crm-checkbox"><input type="checkbox" checked={importReviewed} onChange={(event) => setImportReviewed(event.target.checked)} /><span>راجعت الصفوف والحالات، وأفهم أن العملية لا ترسل أي رسالة للعميل.</span></label><Button type="button" disabled={working || Boolean(importPreview.invalid_count) || !importPreview.valid_rows.length || !importReviewed} onClick={() => void importTelegramCustomers()}>{working ? <LoaderCircle className="spin" size={15} /> : <DatabaseIcon size={15} />} اعتماد {importPreview.valid_rows.length} عميل</Button></div>
+          <div className="crm-import-summary"><div><strong>{importPreview.rows.length}</strong><span>إجمالي الصفوف</span></div><div><strong>{importPreview.valid_rows.length}</strong><span>صالحة</span></div><div className={importPreview.invalid_count ? "attention" : ""}><strong>{importPreview.invalid_count}</strong><span>تحتاج تصحيحًا</span></div><div><strong>{importPreview.duplicate_count}</strong><span>{importMode === "whales_zone_sheet" ? "سيتم دمجها" : "مكررة داخل الملف"}</span></div></div>
+          {importMode === "telegram" ? <div className="crm-import-signals">{(Object.keys(importSignalConfig) as TelegramImportSignal[]).map((signal) => <span key={signal}><StatusBadge tone={importSignalConfig[signal].tone}>{importSignalConfig[signal].label}</StatusBadge><strong>{importPreview.signal_counts[signal]}</strong></span>)}</div> : <p className="empty-proof"><ShieldCheck size={15} /> إعادة رفع نفس الشيت آمنة: الصف الموجود يُسجّل كمكرر ولا يُنشئ عميلاً ثانيًا.</p>}
+          <div className="crm-import-table-wrap"><table><thead><tr><th>#</th><th>العميل</th><th>الهاتف والبريد</th><th>TradingView</th>{importMode === "telegram" ? <th>حالة Telegram</th> : null}<th>الفحص</th></tr></thead><tbody>{importPreview.rows.slice(0, 500).map((row) => <tr className={row.errors.length ? "invalid" : "valid"} key={`${row.message_id}-${row.row_number}`}><td>{row.row_number}</td><td><strong>{row.full_name || "—"}</strong><small>{importMode === "whales_zone_sheet" ? `صف ${row.row_number}` : `رسالة ${row.message_id || "—"}`}</small></td><td dir="ltr"><span>{row.phone || "—"}</span><small>{row.email || "—"}</small></td><td dir="ltr">{row.tradingview || "—"}</td>{importMode === "telegram" ? <td><StatusBadge tone={importSignalConfig[row.signal].tone}>{importSignalConfig[row.signal].label}</StatusBadge></td> : null}<td>{row.errors.length ? <ul>{row.errors.map((rowError) => <li key={rowError}>{rowError}</li>)}</ul> : <span className="crm-import-valid"><CheckCircle2 size={14} /> صالح</span>}</td></tr>)}</tbody></table></div>
+          <div className="crm-import-approval"><label><span>مسؤول المتابعة الافتراضي</span><select value={importDefaultOwner} onChange={(event) => setImportDefaultOwner(event.target.value)}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label className="crm-checkbox"><input type="checkbox" checked={importReviewed} onChange={(event) => setImportReviewed(event.target.checked)} /><span>راجعت الصفوف، وأفهم أن العملية تحفظ الملفات والمهام فقط ولا ترسل رسالة.</span></label><Button type="button" disabled={working || Boolean(importPreview.invalid_count) || !importPreview.valid_rows.length || !importReviewed} onClick={() => void importCustomers()}>{working ? <LoaderCircle className="spin" size={15} /> : <DatabaseIcon size={15} />} اعتماد {importPreview.valid_rows.length} صفًا</Button></div>
         </section> : null}
 
         <section className="crm-import-history"><div className="section-heading"><div><p className="overline">سجل تدقيق لا يُمحى</p><h3>آخر دفعات الاستيراد</h3></div><StatusBadge tone="neutral">{importBatches.length} دفعة</StatusBadge></div>{importBatches.length ? <div>{importBatches.map((batch) => {
           const batchRows = importRows.filter((row) => row.batch_id === batch.id);
           const status = importBatchStatusConfig[batch.status];
-          return <details key={batch.id}><summary><div><strong>{formatDate(batch.created_at)}</strong><span>{batch.created_rows} جديد · {batch.duplicate_rows} مكرر · {batch.error_rows} خطأ</span></div><StatusBadge tone={status?.tone ?? "neutral"}>{status?.label ?? batch.status}</StatusBadge></summary><div className="crm-import-batch-body"><ul>{batchRows.map((row) => <li key={row.id}><span>رسالة {row.external_id}</span><strong>{row.result === "created" ? "تم الإنشاء" : row.result === "duplicate" ? "مكرر" : row.result === "rolled_back" ? "تم التراجع" : row.result === "rollback_blocked" ? "محفوظ لأنه عُدّل" : "خطأ"}</strong>{row.error_message ? <small>{row.error_message}</small> : null}</li>)}</ul>{batch.status === "completed" && batch.created_rows > 0 ? <Button type="button" variant="secondary" className="crm-import-rollback" disabled={working} onClick={() => void rollbackImport(batch)}><Undo2 size={14} /> التراجع الآمن عن الدفعة</Button> : null}</div></details>;
+          const isWhalesZone = batch.source_system === "google_sheet_whales_zone";
+          return <details key={batch.id}><summary><div><strong>{isWhalesZone ? "Whales Zone Sheet" : "Telegram · أدمن الحيتان"} · {formatDate(batch.created_at)}</strong><span>{batch.created_rows} جديد · {batch.duplicate_rows} مدمج/مكرر · {batch.error_rows} خطأ</span></div><StatusBadge tone={status?.tone ?? "neutral"}>{status?.label ?? batch.status}</StatusBadge></summary><div className="crm-import-batch-body"><ul>{batchRows.map((row) => <li key={row.id}><span>{isWhalesZone ? "صف" : "رسالة"} {row.external_id}</span><strong>{row.result === "created" ? "تم الإنشاء" : row.result === "duplicate" ? "موجود وتم دمجه" : row.result === "rolled_back" ? "تم التراجع" : row.result === "rollback_blocked" ? "محفوظ لأنه عُدّل" : "خطأ"}</strong>{row.error_message ? <small>{row.error_message}</small> : null}</li>)}</ul>{batch.status === "completed" && batch.created_rows > 0 ? <Button type="button" variant="secondary" className="crm-import-rollback" disabled={working} onClick={() => void rollbackImport(batch)}><Undo2 size={14} /> التراجع الآمن عن الدفعة</Button> : null}</div></details>;
         })}</div> : <p className="empty-proof"><DatabaseIcon size={15} /> لم تُعتمد أي دفعة حتى الآن.</p>}</section>
       </section>
     </div> : null}
@@ -705,9 +749,9 @@ export function CrmWorkspace() {
           {activityFormId === contact.id && canAct ? <form className="crm-activity-form" onSubmit={(event) => void recordActivity(event, contact)}><label><span>طريقة المتابعة</span><select name="kind" defaultValue="message">{(Object.keys(crmActivityKindConfig) as Exclude<CrmActivityKind, "created">[]).map((kind) => <option value={kind} key={kind}>{crmActivityKindConfig[kind].label}</option>)}</select></label><label><span>المرحلة بعد المتابعة</span><select value={activityStage} onChange={(event) => setActivityStage(event.target.value as CrmLeadStage)}>{nextOptions.map((option) => <option value={option} key={option}>{crmLeadStageConfig[option].label}</option>)}</select></label><label><span>{["lost", "do_not_contact"].includes(activityStage) ? "سبب الإغلاق" : "نتيجة التواصل"}</span><textarea name="summary" minLength={3} maxLength={["lost", "do_not_contact"].includes(activityStage) ? 1000 : 4000} rows={3} required placeholder="ما الذي حدث؟ وما القرار أو الخطوة التالية؟" /></label>{crmLeadStageConfig[activityStage].active ? <label><span>موعد المتابعة التالية</span><input name="next_follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /></label> : <p className="crm-close-note">سيتم إغلاق مهمة المتابعة الحالية ولن تُنشأ مهمة جديدة.</p>}<div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ النتيجة</Button><button className="text-button" type="button" onClick={() => setActivityFormId(null)}>إلغاء</button></div></form> : null}
         </article>;
       })}{!stageContacts.length ? <div className="column-empty"><span>—</span><p>لا يوجد</p></div> : null}</div></section>;
-    })}</div> : <section className="panel empty-state"><span className="empty-visual">{hasFilters ? <Search size={20} /> : <ContactRound size={20} />}</span><div><h2>{hasFilters ? "لا توجد نتائج مطابقة" : "CRM جاهز بدون بيانات وهمية"}</h2><p>{hasFilters ? "غيّر كلمة البحث أو المسؤول أو المرحلة أو نطاق المتابعة." : "أدخل ملفًا واحدًا بنفسك عند الجاهزية، وسيظهر معه موعد المتابعة ومهمته في البورد."}</p></div><span className="empty-proof"><ShieldCheck size={15} /> لا يوجد استيراد تلقائي</span></section>}
+    })}</div> : <section className="panel empty-state"><span className="empty-visual">{hasFilters ? <Search size={20} /> : <ContactRound size={20} />}</span><div><h2>{hasFilters ? "لا توجد نتائج مطابقة" : "CRM جاهز لاستقبال العملاء"}</h2><p>{hasFilters ? "غيّر كلمة البحث أو المسؤول أو المرحلة أو نطاق المتابعة." : "تسجيلات Whales Zone الجديدة ستظهر هنا تلقائيًا، ويمكن للإدارة استرداد السجل القديم من أداة الاستيراد."}</p></div><span className="empty-proof"><ShieldCheck size={15} /> Whales Zone مرتبط بالـCRM</span></section>}
 
     {totalCount > PAGE_SIZE ? <nav className="crm-pagination" aria-label="صفحات نتائج العملاء"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}><ChevronRight size={15} /> السابق</button><span>صفحة {page + 1} من {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)}>التالي <ChevronLeft size={15} /></button></nav> : null}
-    <aside className="automation-note"><LockKeyhole size={17} /><div><strong>{platformAdmin ? "استيراد Telegram متاح لك وحدك من زر أعلى الصفحة" : "التكاملات تحت تحكم إدارة المنصة"}</strong><p>{platformAdmin ? "حلّل الملف، راجع كل صف، ثم اعتمد الدفعة. السجل يحفظ نتيجة كل عميل ويتيح تراجعًا آمنًا." : "لن تظهر لك أدوات الاستيراد أو مفاتيح التكامل؛ ترى فقط العملاء المسموح لك بمتابعتهم."}</p></div></aside>
+    <aside className="automation-note"><LockKeyhole size={17} /><div><strong>{platformAdmin ? "ربط Whales Zone واستيراد Telegram تحت تحكمك وحدك" : "التكاملات تحت تحكم إدارة المنصة"}</strong><p>{platformAdmin ? "التسجيل الجديد يدخل CRM تلقائيًا، والاستيراد التاريخي له معاينة وسجل تدقيق وتراجع آمن." : "لن تظهر لك أدوات الاستيراد أو مفاتيح التكامل؛ ترى فقط العملاء المسموح لك بمتابعتهم."}</p></div></aside>
   </section>;
 }

@@ -415,6 +415,14 @@ verify_jwt = true
 [functions.chat-commands]
 verify_jwt = true
 
+[functions.crm-commands]
+verify_jwt = true
+
+# Public landing endpoint with strict origin, honeypot, validation, rate limits,
+# service-only database RPCs, and no browser-exposed privileged credential.
+[functions.lead-intake]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

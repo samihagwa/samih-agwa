@@ -348,6 +348,54 @@ test("browser configuration cannot declare a service role variable", async () =>
   assert.match(`${envExample}\n${client}`, /PUBLISHABLE_KEY/);
 });
 
+test("Whales Zone registrations are idempotent, CRM-first, historically importable, and publicly hardened", async () => {
+  const [migration, reimportFix, ambiguityFix, intake, commands, parser, workspace, landing, types, config] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260822191033_whales_zone_lead_intake.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260822193056_make_whales_zone_reimport_safe.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260822193245_disambiguate_whales_zone_reimport.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/lead-intake/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/crm-import.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../whales-zone/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /create table public\.crm_lead_intake_events/);
+  assert.match(migration, /alter table public\.crm_lead_intake_events enable row level security/);
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /crm_lead_intake_rate_limits/);
+  assert.match(migration, /payload_hash <> intake_payload_hash/);
+  assert.match(migration, /import_whales_zone_sheet_batch/);
+  assert.match(migration, /get_whales_zone_intake_health/);
+  assert.match(migration, /to service_role/);
+  assert.doesNotMatch(migration, /grant (insert|update|delete) on table public\.crm_lead_intake_events to authenticated/i);
+  assert.match(reimportFix, /existing_intake/);
+  assert.match(ambiguityFix, /row_external_id/);
+  assert.doesNotMatch(ambiguityFix, /intake\.external_id = external_id\b/);
+
+  assert.match(intake, /allowedOrigins/);
+  assert.match(intake, /company/);
+  assert.match(intake, /elapsed < 2_000/);
+  assert.match(intake, /ingest_whales_zone_lead/);
+  assert.match(intake, /complete_whales_zone_sheet_mirror/);
+  assert.match(intake, /sheetMirrorUrl/);
+  assert.match(commands, /import_whales_zone_sheet_batch/);
+  assert.match(parser, /parseWhalesZoneSheetImport/);
+  assert.match(parser, /اليوزرنيم/);
+  assert.match(workspace, /Google Sheet · Whales Zone/);
+  assert.match(workspace, /get_whales_zone_intake_health/);
+  assert.match(workspace, /Whales Zone مرتبط بالـCRM/);
+  assert.match(landing, /functions\/v1\/lead-intake/);
+  assert.match(landing, /await fetch/);
+  assert.doesNotMatch(landing, /mode:\s*["']no-cors["']/);
+  assert.match(types, /crm_lead_intake_events:/);
+  assert.match(types, /get_whales_zone_intake_health:/);
+  assert.match(config, /\[functions\.lead-intake\][\s\S]*verify_jwt = false/);
+  assert.match(config, /\[functions\.crm-commands\][\s\S]*verify_jwt = true/);
+});
+
 test("Supabase client consumes generated database types", async () => {
   const [client, types] = await Promise.all([
     readFile(new URL("../lib/supabase/client.ts", import.meta.url), "utf8"),
@@ -821,7 +869,7 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(importPolicyFix, /membership\.role in \('owner', 'admin'\)/);
   assert.match(edgeFunction, /import_telegram_batch/);
   assert.match(workspace, /الأرشيف/);
-  assert.match(workspace, /استيراد عملاء Telegram/);
+  assert.match(workspace, /استيراد ومزامنة العملاء/);
   assert.match(workspace, /تحليل ومعاينة/);
   assert.match(workspace, /التراجع الآمن عن الدفعة/);
   assert.match(workspace, /crm_import_batches/);

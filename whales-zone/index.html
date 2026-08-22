@@ -380,6 +380,23 @@
             margin-top: 11px;
         }
 
+        .form-error {
+            min-height: 22px;
+            margin-top: 9px;
+            color: #ffaaa5;
+            font-size: .76rem;
+            text-align: center;
+        }
+
+        .form-trap {
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            overflow: hidden !important;
+            clip: rect(0 0 0 0) !important;
+            white-space: nowrap !important;
+        }
+
         /* success */
         .success {
             display: none;
@@ -797,22 +814,22 @@
                 <!-- FORM -->
                 <div class="reveal" id="get">
                     <div class="card">
-                        <div id="formWrap">
+                        <form id="formWrap" novalidate>
                             <div class="card-h">
                                 <h3>استلم المؤشر دلوقتي</h3>
                                 <p>سيب بياناتك وهيوصلك خلال دقايق</p>
                             </div>
                             <div class="field">
                                 <label for="fullName">الاسم</label>
-                                <input class="inp" id="fullName" placeholder="اكتب اسمك">
+                                <input class="inp" id="fullName" name="name" autocomplete="name" maxlength="160" required placeholder="اكتب اسمك">
                             </div>
                             <div class="field">
                                 <label for="email">الإيميل</label>
-                                <input class="inp" id="email" type="email" placeholder="example@mail.com">
+                                <input class="inp" id="email" name="email" type="email" autocomplete="email" maxlength="320" required placeholder="example@mail.com">
                             </div>
                             <div class="field">
                                 <label for="tvUsername">اسم المستخدم في TradingView</label>
-                                <input class="inp" id="tvUsername" placeholder="TradingView username">
+                                <input class="inp" id="tvUsername" name="tv_username" maxlength="100" required placeholder="TradingView username">
                             </div>
                             <div class="field">
                                 <label for="whatsapp">رقم الواتساب</label>
@@ -834,12 +851,14 @@
                                         <option value="+249">🇸🇩 +249</option>
                                         <option value="+964">🇮🇶 +964</option>
                                     </select>
-                                    <input class="inp" id="whatsapp" inputmode="numeric" placeholder="رقم الموبايل">
+                                    <input class="inp" id="whatsapp" name="whatsapp" autocomplete="tel" inputmode="tel" maxlength="24" required placeholder="رقم الموبايل">
                                 </div>
                             </div>
-                            <button class="submit" id="submitBtn" onclick="handleSubmit()">احصل على المؤشر مجاناً</button>
+                            <label class="form-trap" aria-hidden="true">Company<input id="company" name="company" tabindex="-1" autocomplete="off"></label>
+                            <button class="submit" id="submitBtn" type="submit">احصل على المؤشر مجاناً</button>
+                            <p class="form-error" id="formError" role="alert" aria-live="polite"></p>
                             <p class="fnote">بياناتك آمنة ولن تُشارك مع أي طرف.</p>
-                        </div>
+                        </form>
 
                         <div class="success" id="successPanel">
                             <div class="ok">
@@ -1017,18 +1036,28 @@
         }, { threshold: .12 });
         document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 
-        // ===== form submit (same endpoint + data keys as before) =====
-        function handleSubmit() {
+        // ===== verified CRM intake; Google Sheet stays as a server-side mirror =====
+        const INTAKE_ENDPOINT = 'https://xmnqwcevqahtoixvcdya.supabase.co/functions/v1/lead-intake';
+        const formOpenedAt = Date.now();
+        let submissionId = crypto.randomUUID();
+
+        document.getElementById('formWrap').addEventListener('submit', handleSubmit);
+
+        async function handleSubmit(event) {
+            event.preventDefault();
             const name = document.getElementById('fullName').value.trim();
             const email = document.getElementById('email').value.trim();
-            const tv = document.getElementById('tvUsername').value.trim();
+            const tv = document.getElementById('tvUsername').value.trim().replace(/^@/, '');
             const phoneRaw = document.getElementById('whatsapp').value.trim().replace(/^0+/, '');
             const code = document.getElementById('countryCode').value;
             const btn = document.getElementById('submitBtn');
+            const errorBox = document.getElementById('formError');
 
-            if (!name || !email || !tv || !phoneRaw) { alert('من فضلك املأ كل الحقول'); return; }
-            if (!email.includes('@') || !email.includes('.')) { alert('أدخل إيميل صحيح'); return; }
-            if (phoneRaw.replace(/\D/g, '').length < 7) { alert('أدخل رقم واتساب صحيح'); return; }
+            errorBox.textContent = '';
+            if (!name || !email || !tv || !phoneRaw) { errorBox.textContent = 'من فضلك املأ كل الحقول.'; return; }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errorBox.textContent = 'أدخل إيميل صحيح.'; return; }
+            if (tv.length < 3) { errorBox.textContent = 'أدخل اسم مستخدم TradingView صحيح.'; return; }
+            if (phoneRaw.replace(/\D/g, '').length < 7) { errorBox.textContent = 'أدخل رقم واتساب صحيح.'; return; }
 
             btn.disabled = true; btn.textContent = 'ثانية واحدة...';
 
@@ -1037,17 +1066,27 @@
                 email: email,
                 tv_username: tv,
                 whatsapp: code + phoneRaw,
-                date: new Date().toISOString(),
-                source: 'whales-zone-v2'
+                request_id: submissionId,
+                opened_at: formOpenedAt,
+                company: document.getElementById('company').value
             };
 
-            const SCRIPT = 'https://script.google.com/macros/s/AKfycbykNPobf2loiMmXREpxgbgrN8XD3yZ2lGkTbn51481bpXV_U4n6ojuMOa9VyLkORKx9/exec';
-            fetch(SCRIPT + '?' + new URLSearchParams(data).toString(), { mode: 'no-cors' }).catch(() => { });
-
-            setTimeout(() => {
+            try {
+                const response = await fetch(INTAKE_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result.accepted) throw new Error(result.message || 'تعذّر حفظ التسجيل حاليًا. جرّب مرة أخرى.');
                 document.getElementById('formWrap').style.display = 'none';
                 document.getElementById('successPanel').classList.add('show');
-            }, 700);
+                submissionId = crypto.randomUUID();
+            } catch (error) {
+                errorBox.textContent = error instanceof Error ? error.message : 'تعذّر حفظ التسجيل حاليًا. جرّب مرة أخرى.';
+                btn.disabled = false;
+                btn.textContent = 'احصل على المؤشر مجاناً';
+            }
         }
     </script>
 </body>
