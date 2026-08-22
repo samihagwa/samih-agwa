@@ -13,10 +13,12 @@ import {
   Link2,
   LoaderCircle,
   LockKeyhole,
+  Pencil,
   Plus,
   RefreshCw,
   Route,
   Sparkles,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
@@ -38,7 +40,7 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supaba
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
-import { canManageTasks, taskStatusConfig } from "../../lib/tasks";
+import { canManageAllTaskExecution, canManageTasks, taskStatusConfig } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 
@@ -116,6 +118,7 @@ export function CampaignsWorkspace() {
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [editFormId, setEditFormId] = useState<string | null>(null);
   const [documentFormId, setDocumentFormId] = useState<string | null>(null);
   const [deliverableFormId, setDeliverableFormId] = useState<string | null>(null);
   const [deliverableKindsByLaunch, setDeliverableKindsByLaunch] = useState<Record<string, LaunchDeliverableKind>>({});
@@ -441,6 +444,51 @@ export function CampaignsWorkspace() {
     }
   }
 
+  async function updateLaunch(event: FormEvent<HTMLFormElement>, launch: Launch) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const startsAt = new Date(String(form.get("starts_at") ?? ""));
+    const endsAt = new Date(String(form.get("ends_at") ?? ""));
+    const leadTarget = optionalNumber(form.get("lead_target"));
+    const salesTarget = optionalNumber(form.get("sales_target"));
+    const revenueTarget = optionalNumber(form.get("revenue_target"));
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+      setError("راجع بداية الإطلاق ونهايته قبل الحفظ.");
+      return;
+    }
+    const updated = await invokeLaunch({
+      action: "update_launch",
+      launch_id: launch.id,
+      expected_version: launch.version,
+      launch_title: String(form.get("title") ?? "").trim(),
+      launch_kind: String(form.get("type") ?? launch.type),
+      launch_objective: String(form.get("objective") ?? "").trim(),
+      launch_audience: String(form.get("audience") ?? "").trim(),
+      launch_offer: String(form.get("offer") ?? "").trim(),
+      launch_cta: String(form.get("cta") ?? "").trim(),
+      launch_starts_at: startsAt.toISOString(),
+      launch_ends_at: endsAt.toISOString(),
+      launch_lead_target: leadTarget,
+      launch_sales_target: salesTarget,
+      launch_revenue_target: revenueTarget,
+      launch_currency: String(form.get("currency") ?? launch.currency).trim().toUpperCase(),
+    }, "تم تحديث الإطلاق ومزامنة عناوين ومواعيد مهامه المفتوحة.");
+    if (updated) setEditFormId(null);
+  }
+
+  async function cancelLaunch(launch: Launch) {
+    const reason = window.prompt(`اكتب سبب إلغاء «${launch.title}». سيتم إغلاق مهامه مع الاحتفاظ بكل السجل:`)?.trim();
+    if (!reason) return;
+    if (!window.confirm("تأكيد إلغاء الإطلاق وإغلاق كل مهامه المفتوحة؟")) return;
+    await invokeLaunch({
+      action: "cancel_launch",
+      launch_id: launch.id,
+      expected_version: launch.version,
+      cancellation_reason: reason,
+    }, "تم إلغاء الإطلاق وإغلاق مهامه مع الاحتفاظ بكل المخرجات وسجل التدقيق.");
+  }
+
   async function createLaunch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspace) return;
@@ -557,6 +605,7 @@ export function CampaignsWorkspace() {
   }
 
   const manager = canManageTasks(workspace.membership.role);
+  const platformAdmin = canManageAllTaskExecution(workspace.membership.role);
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
   const contentById = new Map(contentItems.map((item) => [item.id, item]));
 
@@ -651,9 +700,10 @@ export function CampaignsWorkspace() {
               return summary;
             }, {}));
             const executionDone = launchDeliverables.filter((deliverable) => deliverableTaskById.get(deliverable.id)?.status === "done").length;
-            const canSaveGateOutput = manager || launchTasks.some((task) => task.owner_id === session.user.id);
+            const launchIsOpen = !["cancelled", "completed"].includes(launch.status);
+            const canSaveGateOutput = launchIsOpen && (platformAdmin || launchTasks.some((task) => task.owner_id === session.user.id));
             const launchEndTime = new Date(launch.ends_at).getTime();
-            const canPlanMore = manager && launchEndTime > renderNow;
+            const canPlanMore = manager && launchIsOpen && launchEndTime > renderNow;
             const suggestedDue = toLocalDateTimeInput(new Date(Math.min(renderNow + 7 * 24 * 60 * 60 * 1000, launchEndTime - 60 * 60 * 1000)));
             const suggestedFirstPublish = toLocalDateTimeInput(new Date(Math.min(renderNow + 24 * 60 * 60 * 1000, new Date(suggestedDue).getTime())));
             const selectedDeliverableKind = deliverableKindsByLaunch[launch.id] ?? "reel";
@@ -663,8 +713,27 @@ export function CampaignsWorkspace() {
               <article className="panel launch-card" key={launch.id}>
                 <header>
                   <div className="content-card-title"><span className="icon-tile"><Route size={17} /></span><div><p className="overline">{launchTypeConfig[launch.type].label} · v{launch.version}</p><h3>{launch.title}</h3></div></div>
-                  <StatusBadge tone={launchStatusConfig[launch.status].tone}>{launchStatusConfig[launch.status].label}</StatusBadge>
+                  <div className="launch-admin-actions"><StatusBadge tone={launchStatusConfig[launch.status].tone}>{launchStatusConfig[launch.status].label}</StatusBadge>{platformAdmin && !["cancelled", "completed"].includes(launch.status) ? <><button className="text-button" type="button" onClick={() => setEditFormId(editFormId === launch.id ? null : launch.id)}><Pencil size={13} /> تعديل</button><button className="text-button danger-text" type="button" disabled={working} onClick={() => void cancelLaunch(launch)}><Trash2 size={13} /> إلغاء الإطلاق</button></> : null}</div>
                 </header>
+
+                {editFormId === launch.id && platformAdmin ? <form className="launch-inline-form launch-edit-form" onSubmit={(event) => void updateLaunch(event, launch)}>
+                  <div className="section-heading"><div><p className="overline">تعديل محكوم</p><h4>بيانات الإطلاق والأهداف</h4></div><button className="text-button" type="button" onClick={() => setEditFormId(null)}>إغلاق</button></div>
+                  <label><span>اسم الإطلاق</span><input name="title" required minLength={3} maxLength={180} defaultValue={launch.title} /></label>
+                  <label><span>النوع</span><select name="type" defaultValue={launch.type}>{(Object.keys(launchTypeConfig) as LaunchType[]).map((type) => <option key={type} value={type}>{launchTypeConfig[type].label}</option>)}</select></label>
+                  <label><span>البداية</span><input name="starts_at" type="datetime-local" required defaultValue={toLocalDateTimeInput(new Date(launch.starts_at))} /></label>
+                  <label><span>النهاية</span><input name="ends_at" type="datetime-local" required defaultValue={toLocalDateTimeInput(new Date(launch.ends_at))} /></label>
+                  <label className="wide"><span>الهدف</span><textarea name="objective" required minLength={5} maxLength={1500} defaultValue={launch.objective} /></label>
+                  <label className="wide"><span>الجمهور</span><textarea name="audience" required minLength={3} maxLength={1000} defaultValue={launch.audience} /></label>
+                  <label className="wide"><span>العرض</span><textarea name="offer" required minLength={3} maxLength={1500} defaultValue={launch.offer} /></label>
+                  <label className="wide"><span>الـCTA</span><textarea name="cta" required minLength={2} maxLength={500} defaultValue={launch.primary_cta} /></label>
+                  <label><span>مستهدف العملاء</span><input name="lead_target" type="number" min="0" step="1" defaultValue={launch.lead_target ?? ""} /></label>
+                  <label><span>مستهدف المبيعات</span><input name="sales_target" type="number" min="0" step="1" defaultValue={launch.sales_target ?? ""} /></label>
+                  <label><span>مستهدف الإيراد</span><input name="revenue_target" type="number" min="0" step="0.01" defaultValue={launch.revenue_target ?? ""} /></label>
+                  <label><span>العملة</span><input name="currency" required minLength={3} maxLength={3} defaultValue={launch.currency} dir="ltr" /></label>
+                  <div className="form-actions wide"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ التعديلات</Button><small>التعديل مسجل بإصدار جديد؛ الإطلاق الملغي أو المكتمل يظل للقراءة فقط.</small></div>
+                </form> : null}
+
+                {launch.status === "cancelled" && launch.cancellation_reason ? <p className="launch-risk"><AlertTriangle size={15} /> سبب الإلغاء: {launch.cancellation_reason}</p> : null}
 
                 <div className="launch-summary-grid">
                   <div><small>الهدف</small><p>{launch.objective}</p></div>
@@ -699,7 +768,7 @@ export function CampaignsWorkspace() {
                   <div className="launch-execution-heading"><div><p className="overline">مخرجات البوابات</p><h4>هنا تُحفظ الاستراتيجية وباقي قرارات الإطلاق</h4><p>كل تسليم يبقى داخل الكورس بإصداره وحالته ورابطه؛ إكمال مهمة البوابة يتطلب وجود مخرج محفوظ.</p></div>{canSaveGateOutput ? <Button type="button" variant="secondary" onClick={() => setDocumentFormId(documentFormId === launch.id ? null : launch.id)}><FileText size={14} /> إضافة مخرج بوابة</Button> : null}</div>
                   {documentFormId === launch.id && canSaveGateOutput ? <form className="launch-inline-form" onSubmit={(event) => void saveGateDocument(event, launch)}>
                     <label><span>البوابة</span><select name="gate" defaultValue="strategy">{launchGates.map((gate) => <option value={gate} key={gate}>{launchGateConfig[gate].label}</option>)}</select></label>
-                    <label><span>حالة المخرج</span><select name="status" defaultValue={manager ? "approved" : "submitted"}>{(Object.keys(launchDocumentStatusConfig) as LaunchDocumentStatus[]).filter((status) => manager || status !== "approved").map((status) => <option value={status} key={status}>{launchDocumentStatusConfig[status].label}</option>)}</select></label>
+                    <label><span>حالة المخرج</span><select name="status" defaultValue={platformAdmin ? "approved" : "submitted"}>{(Object.keys(launchDocumentStatusConfig) as LaunchDocumentStatus[]).filter((status) => platformAdmin || status !== "approved").map((status) => <option value={status} key={status}>{launchDocumentStatusConfig[status].label}</option>)}</select></label>
                     <label className="wide"><span>عنوان المخرج</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: الاستراتيجية التسويقية المعتمدة لإطلاق كورس أيمن" /></label>
                     <label className="wide"><span>القرار والملخص التنفيذي</span><textarea name="summary" minLength={5} maxLength={10000} rows={4} required placeholder="الرسالة، الجمهور، الزوايا، القنوات، الأهداف والقرارات التي سيعمل عليها الفريق…" /></label>
                     <label className="wide"><span>رابط الملف أو المستند — اختياري</span><input name="document_url" type="url" dir="ltr" maxLength={2000} placeholder="https://drive.google.com/..." /></label>
@@ -749,7 +818,7 @@ export function CampaignsWorkspace() {
                   {launchDeliverables.length ? <div className="launch-deliverable-list">{launchDeliverables.map((deliverable) => {
                     const task = deliverableTaskById.get(deliverable.id);
                     const dependencies = (dependenciesByDeliverable.get(deliverable.id) ?? []).map((dependency) => deliverableById.get(dependency.depends_on_deliverable_id)).filter((item): item is LaunchDeliverable => Boolean(item));
-                    const canSubmit = manager || deliverable.owner_id === session.user.id;
+                    const canSubmit = platformAdmin || deliverable.owner_id === session.user.id;
                     const submittable = task && ["ready", "in_progress", "review"].includes(task.status);
                     const generatedItems = contentLinks
                       .filter((link) => link.launch_deliverable_id === deliverable.id)

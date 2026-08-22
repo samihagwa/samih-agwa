@@ -43,7 +43,7 @@ import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supaba
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
-import { canManageTasks, taskStatusConfig, taskStatusLabel } from "../../lib/tasks";
+import { canManageAllTaskExecution, canManageTasks, taskStatusConfig, taskStatusLabel } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 import { QuickIntakeForm, type QuickIntakePayload } from "./QuickIntakeForm";
@@ -555,6 +555,7 @@ export function ContentWorkspace() {
   );
 
   const manager = canManageTasks(workspace.membership.role);
+  const platformAdmin = canManageAllTaskExecution(workspace.membership.role);
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
 
   return (
@@ -632,9 +633,11 @@ export function ContentWorkspace() {
         const captionTask = itemTasks.find((task) => task.content_step === "caption");
         const captionDelivery = captionTask ? deliveriesByTask.get(captionTask.id) : undefined;
         const workflowOwner = itemTasks.some((task) => task.owner_id === session.user.id);
-        const canAddAsset = manager || workflowOwner;
-        const canRequestRevision = manager || workflowOwner;
-        const canChangeTimeline = manager || editingTask?.owner_id === session.user.id;
+        const contentCoordinator = item.created_by === session.user.id;
+        const canEditBrief = platformAdmin || contentCoordinator;
+        const canAddAsset = platformAdmin || contentCoordinator || workflowOwner;
+        const canRequestRevision = platformAdmin || contentCoordinator || workflowOwner;
+        const canChangeTimeline = platformAdmin || editingTask?.owner_id === session.user.id;
         const completedCueCount = itemTimeline.filter((cue) => cue.completed_at).length;
         const openCueCount = itemTimeline.length - completedCueCount;
         const isSocialPost = item.format === "post";
@@ -652,10 +655,10 @@ export function ContentWorkspace() {
         const expanded = expandedContentIds.has(item.id);
         const canUseCaptionAi = Boolean(!isSocialPost && !captionDelivery && captionTask
           && !["done", "cancelled"].includes(captionTask.status)
-          && (manager || captionTask.owner_id === session.user.id));
+          && (platformAdmin || captionTask.owner_id === session.user.id));
         const canUseThumbnailAi = Boolean(!isSocialPost && thumbnailTask
           && !["done", "cancelled"].includes(thumbnailTask.status)
-          && (manager || thumbnailTask.owner_id === session.user.id));
+          && (platformAdmin || thumbnailTask.owner_id === session.user.id));
         const itemCaptionChoices = captionChoices[item.id];
         const itemThumbnailChoices = thumbnailChoices[item.id];
 
@@ -668,9 +671,9 @@ export function ContentWorkspace() {
           {expanded ? <>
           <div className="content-brief-grid"><div><small>الهدف</small><p>{item.goal}</p></div><div><small>الـHook</small><p>{item.hook}</p></div><div><small>الـCTA</small><p>{item.cta}</p></div></div>
           <section className="content-brand-references"><div><BookOpenCheck size={16} /><div><p className="overline">مرجع التنفيذ</p><h4>مراجع البراند المعتمدة</h4></div></div>{itemBrandArticles.length ? <div>{itemBrandArticles.map((article) => <a href={`/brand#article-${article.id}`} key={article.id}><strong>{article.title}</strong><small>{brandCategoryConfig[article.category].label} · v{article.version}{article.status === "archived" ? " · نسخة محفوظة" : ""}</small></a>)}</div> : <p>لم يُربط مرجع معتمد بهذا الطلب. استخدم الملاحظات الخاصة أدناه فقط عند وجود استثناء فعلي.</p>}</section>
-          <div className="production-header"><div><FileText size={17} /><div><p className="overline">تعليمات التنفيذ</p><h4>{isSocialPost ? "Social Post Brief" : "Production Brief"}</h4></div></div>{manager ? <button className="text-button" type="button" onClick={() => setEditingBriefId(editingBriefId === item.id ? null : item.id)}><Pencil size={13} /> {briefComplete ? "تعديل التعليمات" : "استكمال التعليمات"}</button> : null}</div>
+          <div className="production-header"><div><FileText size={17} /><div><p className="overline">تعليمات التنفيذ</p><h4>{isSocialPost ? "Social Post Brief" : "Production Brief"}</h4></div></div>{canEditBrief ? <button className="text-button" type="button" onClick={() => setEditingBriefId(editingBriefId === item.id ? null : item.id)}><Pencil size={13} /> {briefComplete ? "تعديل التعليمات" : "استكمال التعليمات"}</button> : null}</div>
 
-          {editingBriefId === item.id && manager && isSocialPost ? <form className="inline-production-form" onSubmit={(event) => void updateSocialPostBrief(event, item.id)}>
+          {editingBriefId === item.id && canEditBrief && isSocialPost ? <form className="inline-production-form" onSubmit={(event) => void updateSocialPostBrief(event, item.id)}>
             <label><span>عنوان البوست</span><input name="title" minLength={3} maxLength={180} required defaultValue={item.title} /></label>
             <label><span>الهدف</span><textarea name="goal" minLength={5} maxLength={1000} rows={2} required defaultValue={item.goal} /></label>
             <label><span>الـHook</span><textarea name="hook" minLength={3} maxLength={1000} rows={2} required defaultValue={item.hook} /></label>
@@ -678,7 +681,7 @@ export function ContentWorkspace() {
             <label><span>تعليمات كتابة الكابشن</span><textarea name="copy_brief" minLength={10} maxLength={8000} rows={5} required defaultValue={item.copy_brief} /></label>
             <label><span>تعليمات التصميم</span><textarea name="design_brief" minLength={10} maxLength={8000} rows={5} required defaultValue={item.design_brief} /></label>
             <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={15} /> : <CheckCircle2 size={15} />} حفظ ومزامنة المهام</Button><button className="text-button" type="button" onClick={() => setEditingBriefId(null)}>إلغاء</button></div>
-          </form> : editingBriefId === item.id && manager ? <form className="inline-production-form" onSubmit={(event) => void updateBrief(event, item.id)}>
+          </form> : editingBriefId === item.id && canEditBrief ? <form className="inline-production-form" onSubmit={(event) => void updateBrief(event, item.id)}>
             <label><span>السكريبت أو التسلسل</span><textarea name="script_outline" minLength={10} maxLength={8000} rows={5} required defaultValue={item.script_outline} /></label>
             <label><span>تعليمات المونتاج</span><textarea name="editing_brief" minLength={10} maxLength={8000} rows={6} required defaultValue={item.editing_brief} placeholder="القطع، الموسيقى، الصمت، الترجمة، B-roll، المؤثرات، والممنوعات" /></label>
             <label><span>تعليمات الغلاف</span><textarea name="thumbnail_brief" minLength={10} maxLength={4000} rows={4} required defaultValue={item.thumbnail_brief} placeholder="النص، الصورة، الترتيب البصري، المقاس، والممنوعات" /></label>
@@ -709,7 +712,7 @@ export function ContentWorkspace() {
                 : <p className="reel-caption-empty">صانع المحتوى يكتب الكابشن هنا بعد تثبيت الفكرة. لا تُنشأ له مهمة ثانية في البورد، وسيُراجع الكابشن مع الفيديو والغلاف مرة واحدة.</p>}
             {canUseCaptionAi ? <div className="content-caption-ai-actions"><Button type="button" variant="secondary" disabled={Boolean(aiWorking) || working} onClick={() => void generateContentAiChoices(item, "caption")}>{aiWorking === `${item.id}:caption` ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />} 3 اقتراحات كابشن بالـAI</Button><small>طلب API واحد، ولا يُحفظ اقتراح قبل اختيارك.</small></div> : null}
             {canUseCaptionAi && itemCaptionChoices?.options.length ? <div className="script-variants-grid" aria-label="اقتراحات الكابشن داخل مصنع المحتوى">{itemCaptionChoices.options.map((option, index) => <article key={`${option.label}-${index}`}><header><span>كابشن {index + 1}</span><strong>{option.label}</strong></header><p>{option.caption}</p><small>{option.hashtags.join(" ")}</small><Button type="button" disabled={working} onClick={() => void applyContentAiChoice(item, "caption", itemCaptionChoices.version, captionOptionText(option))}><CheckCircle2 size={14} /> اختيار ووضعه في الملف</Button></article>)}</div> : null}
-            {(manager || captionTask.owner_id === session.user.id) && ["ready", "in_progress", "review", "done"].includes(captionTask.status) ? <>
+            {(platformAdmin || captionTask.owner_id === session.user.id) && ["ready", "in_progress", "review", "done"].includes(captionTask.status) ? <>
               {captionDelivery && deliveryFormTaskId !== captionTask.id ? <button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(captionTask.id)}><Pencil size={12} /> تعديل الكابشن</button> : null}
               {(!captionDelivery || deliveryFormTaskId === captionTask.id) ? <form className="reel-caption-form" key={`caption-form-${item.id}-${item.version}`} onSubmit={(event) => void submitStepDelivery(event, captionTask)}>
                 <label><span>نص الكابشن والهاشتاجات</span><textarea name="result_note" minLength={3} maxLength={10000} rows={6} required defaultValue={captionDelivery?.result_note ?? item.caption_brief} placeholder={`اكتب الكابشن النهائي، ثم CTA واضح مثل: ${item.cta}\nوأضف الهاشتاجات المناسبة في النهاية.`} /></label>
@@ -737,7 +740,7 @@ export function ContentWorkspace() {
               <div className="production-tool-heading"><div><Paperclip size={16} /><div><p className="overline">ملفات ومراجع</p><h4>مركز الأصول</h4></div></div>{canAddAsset ? <button className="text-button" type="button" onClick={() => setAssetFormId(assetFormId === item.id ? null : item.id)}><Plus size={13} /> إضافة رابط</button> : null}</div>
               {itemAssets.length ? <ul className="asset-list">{itemAssets.map((asset) => <li key={asset.id}>
                 <div><span className="asset-kind">{contentAssetKindConfig[asset.kind].label}</span><a href={asset.url} target="_blank" rel="noreferrer">{asset.title} <ExternalLink size={12} /></a><small>{asset.stage ? contentStepConfig[asset.stage].label : "كل المراحل"} · أضافه {peopleById.get(asset.created_by)?.name ?? "عضو فريق"}</small>{asset.notes ? <p>{asset.notes}</p> : null}</div>
-                {manager || asset.created_by === session.user.id ? <button className="asset-remove" type="button" disabled={working} aria-label={`إزالة رابط ${asset.title}`} onClick={() => void runCommand({ action: "remove_asset", asset_id: asset.id }, "تمت إزالة الرابط من ملف المحتوى فقط؛ الملف الأصلي لم يُحذف.")}><Trash2 size={13} /> إزالة الرابط</button> : null}
+                {platformAdmin || asset.created_by === session.user.id ? <button className="asset-remove" type="button" disabled={working} aria-label={`إزالة رابط ${asset.title}`} onClick={() => void runCommand({ action: "remove_asset", asset_id: asset.id }, "تمت إزالة الرابط من ملف المحتوى فقط؛ الملف الأصلي لم يُحذف.")}><Trash2 size={13} /> إزالة الرابط</button> : null}
               </li>)}</ul> : <p className="tool-empty">لا توجد روابط بعد. أضف المادة الخام والمصادر ونسخ المراجعة هنا بدل الرسائل المتفرقة.</p>}
               {assetFormId === item.id && canAddAsset ? <form className="compact-command-form" onSubmit={(event) => void addAsset(event, item.id)}>
                 <div className="compact-form-grid"><label><span>النوع</span><select name="asset_kind" defaultValue={isSocialPost ? "image" : "raw_video"}>{assetKinds.map((kind) => <option value={kind} key={kind}>{contentAssetKindConfig[kind].label}</option>)}</select></label><label><span>مرحلة الاستخدام</span><select name="asset_stage" defaultValue={isSocialPost ? "design" : "editing"}>{workflowSteps.map((step) => <option value={step} key={step}>{contentStepConfig[step].label}</option>)}</select></label></div>
@@ -751,8 +754,8 @@ export function ContentWorkspace() {
             <section className="production-tool-panel">
               <div className="production-tool-heading"><div><MessageSquareText size={16} /><div><p className="overline">Feedback Loop</p><h4>جولات التعديل</h4></div></div>{canRequestRevision ? <button className="text-button" type="button" onClick={() => setRevisionFormId(revisionFormId === item.id ? null : item.id)}><Plus size={13} /> طلب تعديل</button> : null}</div>
               {itemRevisions.length ? <ol className="revision-list">{itemRevisions.map((revision) => {
-                const canWorkRevision = manager || revision.assigned_to === session.user.id;
-                const canCancelRevision = manager || revision.requested_by === session.user.id;
+                const canWorkRevision = platformAdmin || revision.assigned_to === session.user.id;
+                const canCancelRevision = platformAdmin || revision.requested_by === session.user.id;
                 return <li key={revision.id}>
                   <div className="revision-top"><strong>جولة {revision.round} · {contentStepConfig[revision.stage].label}</strong><StatusBadge tone={contentRevisionStatusConfig[revision.status].tone}>{contentRevisionStatusConfig[revision.status].label}</StatusBadge></div>
                   <p>{revision.instructions}</p><small>إلى {peopleById.get(revision.assigned_to)?.name ?? "صاحب المرحلة"} · {formatDate(revision.requested_at)}</small>
@@ -773,7 +776,7 @@ export function ContentWorkspace() {
             <div className="production-tool-heading"><div><CheckCircle2 size={16} /><div><p className="overline">تسليم واحد</p><h4>النتيجة تغلق المهمة وتفتح التالية تلقائيًا</h4></div></div></div>
             <div className="content-delivery-grid">{deliveryTasks.map((task) => {
               const delivery = deliveriesByTask.get(task.id);
-              const canSubmitResult = manager || task.owner_id === session.user.id;
+              const canSubmitResult = platformAdmin || task.owner_id === session.user.id;
               const isPublishing = task.content_step === "publishing";
               const canEditResult = canSubmitResult && (["ready", "in_progress", "review", "done"].includes(task.status));
               const needsUrl = Boolean(task.content_step && ["recording", "editing", "thumbnail", "design", "publishing"].includes(task.content_step));
@@ -783,8 +786,8 @@ export function ContentWorkspace() {
                 <header><div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{peopleById.get(task.owner_id)?.name ?? "عضو فريق"}</small></div><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge></header>
                 {delivery ? <div className="saved-step-result"><span>{isPublishing && task.status === "done" ? "تم النشر" : `إصدار ${delivery.version}`} · {formatDate(delivery.submitted_at)}</span>{delivery.result_note ? <p>{delivery.result_note}</p> : null}{delivery.result_url ? <a href={delivery.result_url} target="_blank" rel="noreferrer">{isPublishing ? "فتح المنشور" : "فتح التسليم"} <ExternalLink size={11} /></a> : null}</div> : <p>{isPublishing ? "لم يتم تأكيد النشر بعد. أضف رابط المنشور الحقيقي عند النشر." : task.status === "backlog" ? "تنتظر هذه المهمة اكتمال الخطوة السابقة." : "لم يسلّم صاحب المهمة النتيجة بعد."}</p>}
                 {canEditResult ? <button className="text-button delivery-primary-action" type="button" onClick={() => setDeliveryFormTaskId(deliveryFormTaskId === task.id ? null : task.id)}><Upload size={12} /> {isPublishing ? delivery ? "تحديث بيانات النشر" : "تأكيد تم النشر" : delivery ? "تحديث التسليم" : "تسليم وإغلاق المهمة"}</button> : null}
-                {manager && delivery && canReviseTask && task.status === "done" ? <div className="delivery-review-actions"><button className="text-button" type="button" onClick={() => setReviewFormTaskId(reviewFormTaskId === task.id ? null : task.id)}>طلب تعديل وإعادة فتح المهمة</button></div> : null}
-                {reviewFormTaskId === task.id && manager && canReviseTask ? <form className="compact-command-form" onSubmit={(event) => void requestTaskRevision(event, task)}><label><span>التعديل المطلوب</span><textarea name="revision_instructions" minLength={5} maxLength={5000} rows={3} required placeholder="اكتب المشكلة والنتيجة المطلوبة بوضوح." /></label><div className="form-actions"><Button type="submit" disabled={working}>إرسال التعديل لصاحب المهمة</Button><button className="text-button" type="button" onClick={() => setReviewFormTaskId(null)}>إلغاء</button></div></form> : null}
+                {(platformAdmin || contentCoordinator) && delivery && canReviseTask && task.status === "done" ? <div className="delivery-review-actions"><button className="text-button" type="button" onClick={() => setReviewFormTaskId(reviewFormTaskId === task.id ? null : task.id)}>طلب تعديل وإعادة فتح المهمة</button></div> : null}
+                {reviewFormTaskId === task.id && (platformAdmin || contentCoordinator) && canReviseTask ? <form className="compact-command-form" onSubmit={(event) => void requestTaskRevision(event, task)}><label><span>التعديل المطلوب</span><textarea name="revision_instructions" minLength={5} maxLength={5000} rows={3} required placeholder="اكتب المشكلة والنتيجة المطلوبة بوضوح." /></label><div className="form-actions"><Button type="submit" disabled={working}>إرسال التعديل لصاحب المهمة</Button><button className="text-button" type="button" onClick={() => setReviewFormTaskId(null)}>إلغاء</button></div></form> : null}
                 {deliveryFormTaskId === task.id && canEditResult ? <form className="compact-command-form" onSubmit={(event) => void submitStepDelivery(event, task)}>
                   <label><span>{task.content_step === "caption" ? "الكابشن النهائي" : isPublishing ? "ملاحظة النشر — اختياري" : "ملاحظة التسليم"}</span><textarea name="result_note" minLength={3} maxLength={10000} rows={4} defaultValue={delivery?.result_note ?? ""} placeholder={task.content_step === "scheduling" ? "المنصات وموعد الجدولة والتأكيد" : isPublishing ? "مثال: نُشر على Instagram وFacebook" : "اكتب ما تم تسليمه وما يحتاجه المراجع"} /></label>
                   <label><span>{resultUrlLabel}{needsUrl ? " — مطلوب" : " — اختياري"}</span><input name="result_url" type="url" dir="ltr" required={needsUrl} defaultValue={delivery?.result_url ?? ""} placeholder={isPublishing ? "https://instagram.com/p/..." : "https://drive.google.com/..."} /></label>

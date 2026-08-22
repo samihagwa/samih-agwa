@@ -61,3 +61,7 @@ export const visibleBoardStatuses: TaskStatus[] = [
 export function canManageTasks(role: Database["public"]["Enums"]["app_role"] | null) {
   return role === "owner" || role === "admin" || role === "manager";
 }
+
+export function canManageAllTaskExecution(role: Database["public"]["Enums"]["app_role"] | null) {
+  return role === "owner" || role === "admin";
+}

@@ -1487,6 +1487,9 @@ export type Database = {
       launches: {
         Row: {
           audience: string
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           created_at: string
           created_by: string
           currency: string
@@ -1509,6 +1512,9 @@ export type Database = {
         }
         Insert: {
           audience: string
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string
           created_by?: string
           currency?: string
@@ -1531,6 +1537,9 @@ export type Database = {
         }
         Update: {
           audience?: string
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           created_at?: string
           created_by?: string
           currency?: string
@@ -1552,6 +1561,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "launches_cancelled_by_fkey"
+            columns: ["cancelled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "launches_created_by_fkey"
             columns: ["created_by"]
@@ -2609,6 +2625,7 @@ export type Database = {
           story_bank: string[]
           updated_at: string
           updated_by: string
+          user_id: string
           voice_summary: string
           writing_rules: string[]
         }
@@ -2622,6 +2639,7 @@ export type Database = {
           story_bank?: string[]
           updated_at?: string
           updated_by: string
+          user_id: string
           voice_summary?: string
           writing_rules?: string[]
         }
@@ -2635,6 +2653,7 @@ export type Database = {
           story_bank?: string[]
           updated_at?: string
           updated_by?: string
+          user_id?: string
           voice_summary?: string
           writing_rules?: string[]
         }
@@ -2649,6 +2668,13 @@ export type Database = {
           {
             foreignKeyName: "script_voice_profiles_updated_by_fkey"
             columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "script_voice_profiles_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

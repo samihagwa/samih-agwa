@@ -144,7 +144,8 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     setForm((current) => current ? { ...current, [key]: value } : current); setNotice(null);
   }, []);
 
-  const readOnly = workspace?.script.status === "handed_off" || workspace?.script.status === "archived";
+  const assignedWriter = Boolean(workspace && session && workspace.script.assigned_to === session.user.id);
+  const readOnly = !assignedWriter || workspace?.script.status === "handed_off" || workspace?.script.status === "archived";
   const wordCount = useMemo(() => form?.spoken_script.trim().split(/\s+/).filter(Boolean).length ?? 0, [form?.spoken_script]);
   const estimatedSeconds = Math.max(0, Math.round(wordCount / 2.15));
   const writingHasUnsavedChanges = useMemo(() => {
@@ -267,7 +268,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   }
 
   async function approveVoiceSample() {
-    if (!workspace || !form || workspace.membership.role !== "owner") return;
+    if (!workspace || !form || !assignedWriter) return;
     setSaving(true); setError(null); setNotice(null);
     try {
       await invokeFunction("script-commands", { action: "approve_voice_sample", script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version });
@@ -308,7 +309,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     <div className="script-editor-topbar"><Button href="/scripts" variant="ghost"><ArrowRight size={15} /> العودة للاستوديو</Button><div><StatusBadge tone={status.tone}>{status.label}</StatusBadge><span><UserRound size={13} /> {assignee}</span><span><FileClock size={13} /> النسخة {workspace.script.edit_version.toLocaleString("ar-EG")}</span></div></div>
     {error ? <p className="form-notice error">{error}</p> : null}
     {notice ? <p className="form-notice success">{notice}</p> : null}
-    {readOnly ? <aside className="script-readonly-note"><CheckCircle2 size={18} /><div><strong>{workspace.script.status === "handed_off" ? "هذه هي النسخة التي دخلت مصنع المحتوى" : "الاسكريبت مؤرشف"}</strong><p>أي تنفيذ لاحق يتم من مصنع المحتوى وليس بتعديل هذا الأصل.</p>{workspace.script.content_item_id ? <a href={`/content#content-${workspace.script.content_item_id}`}>فتح خط الإنتاج <ExternalLink size={13} /></a> : null}</div></aside> : null}
+    {readOnly ? <aside className="script-readonly-note"><CheckCircle2 size={18} /><div><strong>{!assignedWriter ? "عرض إشرافي فقط — صاحب الاسكريبت هو من يكتب ويولّد" : workspace.script.status === "handed_off" ? "هذه هي النسخة التي دخلت مصنع المحتوى" : "الاسكريبت مؤرشف"}</strong><p>{!assignedWriter ? "يمكن للمالك متابعة النسخة، لكن لا يمكنه كشف بصمة الكاتب أو التوليد والتعديل مكانه." : "أي تنفيذ لاحق يتم من مصنع المحتوى وليس بتعديل هذا الأصل."}</p>{workspace.script.content_item_id ? <a href={`/content#content-${workspace.script.content_item_id}`}>فتح خط الإنتاج <ExternalLink size={13} /></a> : null}</div></aside> : null}
 
     <form className="script-editor-form" onSubmit={(event) => void save(event)}>
       <section className="panel script-editor-section">
@@ -346,7 +347,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
           <label className="span-2"><span>بدائل الهوك — واحد في كل سطر</span><textarea disabled={readOnly} value={form.hook_variants} onChange={(event) => update("hook_variants", event.target.value)} />{!readOnly ? <Button type="button" variant="ghost" disabled={Boolean(aiScope) || saving} onClick={() => void generateWriting(form.spoken_script ? "improve" : "idea", "hooks")}>{aiScope === "hooks" ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} إعادة توليد الهوكات فقط</Button> : null}</label>
           <label className="span-2"><span>نص الكلام النهائي</span><textarea className="spoken-script-textarea" disabled={readOnly} value={form.spoken_script} onChange={(event) => update("spoken_script", event.target.value)} placeholder="اكتب الكلام كما سيُقال فعلًا، بما فيه الدعوة للإجراء..." /></label>
         </div>
-        {owner ? <aside className="script-calibration-note"><CheckCircle2 size={18} /><div><strong>هل النص بقى أنت فعلًا بعد تعديلك؟</strong><p>احفظ تعديلك اليدوي أولًا، ثم اعتمده كعينة لصوتك.</p></div><Button type="button" variant="secondary" disabled={saving || Boolean(aiScope) || form.spoken_script.trim().length < 20 || spokenScriptHasUnsavedChanges || !latestVersionIsManual} onClick={() => void approveVoiceSample()}>{spokenScriptHasUnsavedChanges || !latestVersionIsManual ? "احفظ تعديلك أولًا" : "اعتمد النص كعينة لصوتي"}</Button></aside> : null}
+        {assignedWriter ? <aside className="script-calibration-note"><CheckCircle2 size={18} /><div><strong>هل النص بقى أنت فعلًا بعد تعديلك؟</strong><p>احفظ تعديلك اليدوي أولًا، ثم أضفه إلى بصمتك الخاصة.</p></div><Button type="button" variant="secondary" disabled={saving || Boolean(aiScope) || form.spoken_script.trim().length < 20 || spokenScriptHasUnsavedChanges || !latestVersionIsManual} onClick={() => void approveVoiceSample()}>{spokenScriptHasUnsavedChanges || !latestVersionIsManual ? "احفظ تعديلك أولًا" : "اعتمد النص كعينة لصوتي"}</Button></aside> : null}
       </section>
 
       {showProduction ? <>

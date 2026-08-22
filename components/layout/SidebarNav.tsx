@@ -17,7 +17,7 @@ const items = [
   { id: "analytics", href: "/analytics", label: "النتائج والتحليلات", icon: BarChart3 },
 ] satisfies Array<{ id: WorkspaceSection; href: string; label: string; icon: typeof LayoutDashboard }>;
 
-export function SidebarNav({ allowedSections }: { allowedSections: WorkspaceSection[] }) {
+export function SidebarNav({ allowedSections, onNavigate }: { allowedSections: WorkspaceSection[]; onNavigate?: () => void }) {
   const pathname = usePathname();
   const allowed = new Set(allowedSections);
   return (
@@ -25,11 +25,11 @@ export function SidebarNav({ allowedSections }: { allowedSections: WorkspaceSect
       <p className="nav-label">مساحة العمل</p>
       {items.filter(({ id }) => allowed.has(id)).map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === href : pathname.startsWith(href);
-        return <a key={href} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}><Icon size={19} /><span>{label}</span></a>;
+        return <a key={href} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={onNavigate}><Icon size={19} /><span>{label}</span></a>;
       })}
       {allowed.has("team") || allowed.has("settings") ? <p className="nav-label nav-label-spaced">النظام</p> : null}
-      {allowed.has("team") ? <a href="/team" className={pathname.startsWith("/team") ? "active" : ""}><UsersRound size={19} /><span>الفريق والصلاحيات</span></a> : null}
-      {allowed.has("settings") ? <a href="/settings" className={pathname.startsWith("/settings") ? "active" : ""}><Settings size={19} /><span>الإعدادات والتكاملات</span></a> : null}
+      {allowed.has("team") ? <a href="/team" className={pathname.startsWith("/team") ? "active" : ""} onClick={onNavigate}><UsersRound size={19} /><span>الفريق والصلاحيات</span></a> : null}
+      {allowed.has("settings") ? <a href="/settings" className={pathname.startsWith("/settings") ? "active" : ""} onClick={onNavigate}><Settings size={19} /><span>الإعدادات والتكاملات</span></a> : null}
     </nav>
   );
 }

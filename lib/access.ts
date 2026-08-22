@@ -24,9 +24,9 @@ const sectionSet = new Set<string>(allWorkspaceSections);
 
 export const defaultSectionsByRole: Record<Exclude<Tables<"memberships">["role"], "owner">, WorkspaceSection[]> = {
   admin: [...allWorkspaceSections],
-  manager: ["dashboard", "tasks", "planning", "content", "scripts", "publishing", "brand", "campaigns", "crm", "analytics", "team"],
-  member: ["tasks", "content", "scripts", "brand"],
-  viewer: ["tasks", "brand"],
+  manager: ["tasks", "planning"],
+  member: ["tasks"],
+  viewer: ["tasks"],
 };
 
 export function normalizeWorkspaceSections(values: readonly string[]): WorkspaceSection[] {
@@ -53,4 +53,3 @@ export function firstAllowedSectionHref(membership: WorkspaceMembership) {
   const allowed = membershipSections(membership);
   return workspaceSectionDefinitions.find((section) => allowed.includes(section.id))?.href ?? "/login";
 }
-

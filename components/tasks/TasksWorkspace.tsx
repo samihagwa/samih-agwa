@@ -21,6 +21,7 @@ import { contentStepConfig } from "../../lib/content";
 import { launchGateConfig } from "../../lib/launches";
 import {
   allowedTaskTransitions,
+  canManageAllTaskExecution,
   canManageTasks,
   taskPriorityConfig,
   taskStatusConfig,
@@ -394,6 +395,7 @@ export function TasksWorkspace() {
   }
 
   const manager = canManageTasks(workspace.membership.role);
+  const platformAdmin = canManageAllTaskExecution(workspace.membership.role);
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
   const visibleLanes = boardLanes.filter((lane) => lane.id !== "closed" || filter === "completed" || filter === "all");
   return (
@@ -453,9 +455,9 @@ export function TasksWorkspace() {
                         const owner = peopleById.get(task.owner_id);
                         const completed = taskIsClosed(task);
                         const isMine = task.owner_id === session.user.id && !completed;
-                        const canOpenAction = manager || task.owner_id === session.user.id;
+                        const canOpenAction = platformAdmin || task.owner_id === session.user.id;
                         const actionLabel = task.status === "review"
-                          ? manager ? "فتح للمراجعة والاعتماد" : "بانتظار اعتماد الإدارة"
+                          ? platformAdmin ? "فتح للمراجعة والاعتماد" : "بانتظار اعتماد الإدارة"
                           : task.content_step === "publishing"
                             ? "فتح وتأكيد النشر"
                             : "فتح وتسليم المهمة";
@@ -467,7 +469,7 @@ export function TasksWorkspace() {
                           </div>
                           <div className="content-subtask-action">
                             <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
-                            {!completed && task.status !== "backlog" && canOpenAction && !(task.status === "review" && !manager)
+                            {!completed && task.status !== "backlog" && canOpenAction && !(task.status === "review" && !platformAdmin)
                               ? <a href={`/content#content-${entry.contentItemId}`}><FileText size={12} /> {actionLabel}</a>
                               : !completed ? <small>{task.status === "backlog" ? "تفتح تلقائيًا بعد الخطوة السابقة" : actionLabel}</small> : null}
                           </div>
@@ -477,7 +479,7 @@ export function TasksWorkspace() {
                   }
                   const task = entry.tasks[0];
                   const owner = peopleById.get(task.owner_id);
-                  const canMove = !task.crm_contact_id && (manager || task.owner_id === session.user.id);
+                  const canMove = !task.crm_contact_id && (platformAdmin || task.owner_id === session.user.id);
                   const options = [task.status, ...allowedTaskTransitions[task.status]].filter((option) =>
                     (!task.launch_deliverable_id || option !== "review" || task.status === "review")
                     && (!task.content_step || !["caption", "design", "scheduling", "publishing"].includes(task.content_step)

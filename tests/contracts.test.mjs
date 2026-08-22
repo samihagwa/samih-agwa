@@ -31,6 +31,54 @@ test("status badges never rely on color alone", async () => {
   assert.match(source, /children/);
 });
 
+test("workflow execution is assignee-scoped, voice profiles are private, and mobile navigation is a drawer", async () => {
+  const [hardening, cancelFix, taskContract, tasks, content, scripts, editor, launches, launchCommands, shell, navigation, css, access] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260822030003_harden_workflow_permissions_and_private_voice_profiles.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260822032608_fix_cancel_launch_reason_ambiguity.sql", import.meta.url), "utf8"),
+    readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/launch-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../lib/access.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(hardening, /tasks_update_assignee_or_platform_admin/);
+  assert.match(hardening, /Only the assigned task owner can execute or update this task/);
+  assert.match(taskContract, /role === "owner" \|\| role === "admin"/);
+  assert.match(tasks, /canManageAllTaskExecution/);
+  assert.match(content, /contentCoordinator/);
+  assert.match(hardening, /content_items_select_involved_members/);
+  assert.match(hardening, /content_assets_select_involved_members/);
+
+  assert.match(hardening, /add primary key \(organization_id, user_id\)/);
+  assert.match(hardening, /script_voice_select_self/);
+  assert.match(hardening, /profile\.user_id = target_user_id/);
+  assert.match(hardening, /Only the assigned writer can generate this private script/);
+  assert.match(scripts, /بصمتي الخاصة/);
+  assert.match(editor, /const assignedWriter/);
+  assert.match(editor, /const readOnly = !assignedWriter/);
+
+  assert.match(launchCommands, /action === "update_launch"/);
+  assert.match(launchCommands, /action === "cancel_launch"/);
+  assert.match(launches, /إلغاء الإطلاق/);
+  assert.match(launches, /سبب الإلغاء/);
+  assert.match(cancelFix, /cancellation_reason = trim\(\$4\)/);
+
+  assert.match(shell, /mobile-nav-trigger/);
+  assert.match(shell, /mobile-nav-backdrop/);
+  assert.match(navigation, /onNavigate/);
+  assert.match(css, /\.sidebar\.mobile-open \{ transform: translateX\(0\)/);
+  assert.match(css, /\.mobile-nav-backdrop\.visible/);
+  assert.match(access, /manager: \["tasks", "planning"\]/);
+  assert.match(access, /member: \["tasks"\]/);
+});
+
 test("script studio is private by assignee, owner-visible, versioned, AI-assisted, and handed off atomically", async () => {
   const [migration, calibration, stagedAi, captionHandoff, commands, ai, workspace, editor, content, contract, navigation, presence, team, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821010000_content_script_studio.sql", import.meta.url), "utf8"),

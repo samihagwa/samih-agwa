@@ -81,7 +81,7 @@ async function invokeScriptAi(body: Record<string, unknown>) {
   return data as Record<string, unknown>;
 }
 
-function VoiceProfileForm({ profile, owner, organizationId, onSaved }: { profile: VoiceProfile | null; owner: boolean; organizationId: string; onSaved: () => Promise<void> }) {
+function VoiceProfileForm({ profile, organizationId, onSaved }: { profile: VoiceProfile | null; organizationId: string; onSaved: () => Promise<void> }) {
   const [summary, setSummary] = useState(profile?.voice_summary ?? "");
   const [rules, setRules] = useState((profile?.writing_rules ?? []).join("\n"));
   const [banned, setBanned] = useState((profile?.banned_phrases ?? []).join("\n"));
@@ -93,7 +93,6 @@ function VoiceProfileForm({ profile, owner, organizationId, onSaved }: { profile
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!owner) return;
     setSaving(true); setNotice(null);
     try {
       await invokeCommand({
@@ -108,17 +107,17 @@ function VoiceProfileForm({ profile, owner, organizationId, onSaved }: { profile
   }
 
   return <section className="panel voice-profile-panel">
-    <div className="section-heading"><div><p className="overline">بصمتي</p><h2>كيف يكتب ويتكلم Market Whales؟</h2><p>مرجع واحد لصوت المحتوى. كل الفريق يقرأه، والمالك فقط يغيره.</p></div><StatusBadge tone={owner ? "success" : "info"}>{owner ? "يمكنك التعديل" : "قراءة فقط"}</StatusBadge></div>
+    <div className="section-heading"><div><p className="overline">بصمتي الخاصة</p><h2>كيف أكتب وأتكلم أنا؟</h2><p>ملف شخصي مشفّر بالصلاحيات؛ لا يراه أي عضو آخر، ولا تظهر لك بصمة سميح أو بصمات الفريق.</p></div><StatusBadge tone="success">خاص بك فقط</StatusBadge></div>
     <aside className="script-trust-note"><ShieldCheck size={18} /><div><strong>الـAI لا يتعلم وحده من الإنترنت</strong><p>يستخدم هذه البصمة ومراجع البراند المعتمدة فقط عند ضغطك على زر التوليد. لا يوجد Apify أو سحب منافسين تلقائي في هذه المرحلة.</p></div></aside>
     <form className="voice-profile-form" onSubmit={(event) => void submit(event)}>
-      <label className="span-2"><span>ملخص الصوت والشخصية</span><textarea disabled={!owner} value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="مصري طبيعي، مباشر، عملي، يشرح التداول بدون تعقيد أو وعود..." /></label>
-      <label><span>قواعد الكتابة — قاعدة في كل سطر</span><textarea disabled={!owner} value={rules} onChange={(event) => setRules(event.target.value)} placeholder={"ابدأ بهوك يلمس مشكلة حقيقية\nمثال قبل الشرح النظري"} /></label>
-      <label><span>كلمات وعبارات ممنوعة — واحدة في كل سطر</span><textarea disabled={!owner} value={banned} onChange={(event) => setBanned(event.target.value)} placeholder={"أرباح مضمونة\nسر لن يخبرك به أحد"} /></label>
-      <label><span>بنك القصص — موقف في كل سطر</span><textarea disabled={!owner} value={stories} onChange={(event) => setStories(event.target.value)} placeholder="مواقف شخصية أو قصص عمل يمكن الرجوع لها..." /></label>
-      <label><span>مصادر التعلم والملاحظات</span><textarea disabled={!owner} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="المراجع التي تمثل منهجك وما لا يجب نسبه لك..." /></label>
-      <label className="span-2"><span>أرشيف أمثلة الصوت</span><textarea className="voice-examples" disabled={!owner} value={examples} onChange={(event) => setExamples(event.target.value)} placeholder="العينات الجديدة تُعتمد من داخل محرر الاسكريبت بعد تعديلها وحفظها يدويًا." /><small>لمنع خلط الإعلانات بصوتك الطبيعي، التوليد يستخدم فقط المقاطع المعلّمة «عينة معتمدة من سميح» التي أضفتها بزر الاعتماد داخل الاسكريبت. يمكنك حذف عينة قديمة من هنا عند الحاجة.</small></label>
+      <label className="span-2"><span>ملخص صوتك وشخصيتك</span><textarea value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="طبيعي، مباشر، عملي، وطريقتي في شرح الفكرة..." /></label>
+      <label><span>قواعد كتابتي — قاعدة في كل سطر</span><textarea value={rules} onChange={(event) => setRules(event.target.value)} placeholder={"ابدأ بهوك يلمس مشكلة حقيقية\nمثال قبل الشرح النظري"} /></label>
+      <label><span>كلمات وعبارات لا أستخدمها</span><textarea value={banned} onChange={(event) => setBanned(event.target.value)} placeholder={"عبارة لا تشبهني\nوعد لا أقوله"} /></label>
+      <label><span>بنك قصصي — موقف في كل سطر</span><textarea value={stories} onChange={(event) => setStories(event.target.value)} placeholder="مواقف شخصية حقيقية يمكن الرجوع لها..." /></label>
+      <label><span>مصادر تعلّمي وملاحظاتي</span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="المراجع التي تمثل منهجي وما لا يجب نسبه لي..." /></label>
+      <label className="span-2"><span>أمثلة معتمدة من كتابتي</span><textarea className="voice-examples" value={examples} onChange={(event) => setExamples(event.target.value)} placeholder="أضف نصوصًا حقيقية كتبتها، أو اعتمد اسكريبتًا من محرره بعد تعديله يدويًا." /><small>الـAI يستخدم أمثلتك أنت فقط عند توليد اسكريبت مسند إليك.</small></label>
       {notice ? <p className={`form-notice ${notice.startsWith("تم") ? "success" : "error"}`}>{notice}</p> : null}
-      {owner ? <div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />} حفظ بصمتي</Button></div> : null}
+      <div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />} حفظ بصمتي الخاصة</Button></div>
     </form>
   </section>;
 }
@@ -372,6 +371,6 @@ export function ScriptsWorkspace() {
       }) : emptyState(Lightbulb, "الرادار فارغ", "أضف رابط منافس أو فكرة أو مرجع مفيد، ثم استخرج منه زاوية أصلية.")}</div>
     </> : null}
 
-    {tab === "voice" ? <VoiceProfileForm key={workspace.voice?.edit_version ?? 0} profile={workspace.voice} owner={owner} organizationId={workspace.organization.id} onSaved={refresh} /> : null}
+    {tab === "voice" ? <VoiceProfileForm key={workspace.voice?.edit_version ?? 0} profile={workspace.voice} organizationId={workspace.organization.id} onSaved={refresh} /> : null}
   </section>;
 }

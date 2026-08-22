@@ -363,6 +363,83 @@ async function submitDeliverable(
   return jsonResponse({ changed: data });
 }
 
+async function updateLaunch(
+  body: Record<string, unknown>,
+  context: Awaited<ReturnType<typeof createSupabaseContext>>["data"],
+) {
+  const launchId = text(body.launch_id);
+  const expectedVersion = Number(body.expected_version);
+  const startsAt = text(body.launch_starts_at);
+  const endsAt = text(body.launch_ends_at);
+  const kind = text(body.launch_kind);
+  const currency = text(body.launch_currency).toUpperCase();
+  const leadTarget = nullableTarget(body.launch_lead_target);
+  const salesTarget = nullableTarget(body.launch_sales_target);
+  const revenueTarget = nullableTarget(body.launch_revenue_target);
+  if (!validUuid(launchId) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+    || !launchTypes.has(kind) || Number.isNaN(Date.parse(startsAt)) || Number.isNaN(Date.parse(endsAt))
+    || !leadTarget.valid || !salesTarget.valid || !revenueTarget.valid
+    || (leadTarget.value !== null && !Number.isInteger(leadTarget.value))
+    || (salesTarget.value !== null && !Number.isInteger(salesTarget.value))
+    || !/^[A-Z]{3}$/.test(currency)
+    || text(body.launch_title).length < 3 || text(body.launch_title).length > 180
+    || text(body.launch_objective).length < 5 || text(body.launch_objective).length > 1500
+    || text(body.launch_audience).length < 3 || text(body.launch_audience).length > 1000
+    || text(body.launch_offer).length < 3 || text(body.launch_offer).length > 1500
+    || text(body.launch_cta).length < 2 || text(body.launch_cta).length > 500) {
+    return jsonResponse({ message: "راجع بيانات الإطلاق والمواعيد والأهداف قبل حفظ التعديل." }, 400);
+  }
+  if ((leadTarget.value ?? 0) <= 0 && (salesTarget.value ?? 0) <= 0 && (revenueTarget.value ?? 0) <= 0) {
+    return jsonResponse({ message: "ضع مستهدفًا موجبًا واحدًا على الأقل للإطلاق." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("update_launch", {
+    target_user_id: context!.userClaims!.id,
+    target_launch_id: launchId,
+    expected_version: expectedVersion,
+    launch_title: text(body.launch_title),
+    launch_kind: kind,
+    launch_objective: text(body.launch_objective),
+    launch_audience: text(body.launch_audience),
+    launch_offer: text(body.launch_offer),
+    launch_cta: text(body.launch_cta),
+    launch_starts_at: startsAt,
+    launch_ends_at: endsAt,
+    launch_lead_target: leadTarget.value,
+    launch_sales_target: salesTarget.value,
+    launch_revenue_target: revenueTarget.value,
+    launch_currency: currency,
+  });
+  if (error) {
+    const userError = /Only |not found|read-only|changed|brief|end|dates|target|Currency|deliverable/i.test(error.message);
+    return jsonResponse({ message: userError ? error.message : "تعذّر تعديل الإطلاق." }, userError ? 400 : 500);
+  }
+  return jsonResponse({ version: data });
+}
+
+async function cancelLaunch(
+  body: Record<string, unknown>,
+  context: Awaited<ReturnType<typeof createSupabaseContext>>["data"],
+) {
+  const launchId = text(body.launch_id);
+  const expectedVersion = Number(body.expected_version);
+  const reason = text(body.cancellation_reason);
+  if (!validUuid(launchId) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+    || reason.length < 3 || reason.length > 1000) {
+    return jsonResponse({ message: "اكتب سبب إلغاء واضحًا قبل إغلاق الإطلاق." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("cancel_launch", {
+    target_user_id: context!.userClaims!.id,
+    target_launch_id: launchId,
+    expected_version: expectedVersion,
+    cancellation_reason: reason,
+  });
+  if (error) {
+    const userError = /Only |not found|changed|completed|reason/i.test(error.message);
+    return jsonResponse({ message: userError ? error.message : "تعذّر إلغاء الإطلاق." }, userError ? 400 : 500);
+  }
+  return jsonResponse({ version: data });
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") {
@@ -411,6 +488,14 @@ export default {
 
     if (body.action === "submit_deliverable") {
       return submitDeliverable(body, context);
+    }
+
+    if (body.action === "update_launch") {
+      return updateLaunch(body, context);
+    }
+
+    if (body.action === "cancel_launch") {
+      return cancelLaunch(body, context);
     }
 
     return jsonResponse({ message: "أمر الإطلاق غير معروف." }, 400);
