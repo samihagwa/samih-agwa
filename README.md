@@ -31,7 +31,7 @@ This starter does not use `wrangler.jsonc`.
 
 ## Important status
 
-The identity, owner-controlled team onboarding, task-management, deadline-reminder, quarterly content-planning, reel-production, campaign-launch, manual CRM, brand-knowledge, and Telegram publishing foundations are ready for controlled owner testing. The leadership dashboard reads live operational data and exposes an explicit readiness gate. No real team invitation has been sent, no production customers have been imported, and no sales message or external analytics integration is active.
+The identity, owner-controlled team onboarding, task-management, deadline-reminder, quarterly content-planning, reel-production, campaign-launch, reviewed CRM import, brand-knowledge, and Telegram publishing foundations are ready for controlled owner testing. The leadership dashboard reads live operational data and exposes an explicit readiness gate. No real team invitation has been sent, no production customer batch has been approved, and no sales message or external analytics integration is active. Exness storage and role-scoped lookup are prepared, but live provider synchronization stays off until the private Partner API contract is configured.
 
 ## First owner setup
 

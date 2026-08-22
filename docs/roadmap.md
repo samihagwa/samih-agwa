@@ -20,7 +20,12 @@ The planning foundation is now implemented: one active quarterly plan, content p
 3. Rotate the Telegram bot token, confirm only intended channels are allowlisted, and manually inspect any `unknown` publication result.
 4. Test the AI provider, one invited account, least-privilege visibility, one task handoff, one revision, and one completed notification flow.
 5. Review the final domain/Auth redirects and hosted-site access policy before inviting a real employee.
-6. Keep analytics, imports, customer messaging, Meta publishing, and direct uploads visibly off until each trusted integration is approved and verified.
+6. Customer import is available only to owner/admin through a reviewed, reversible batch. Keep customer messaging, Meta publishing, direct uploads, and any live broker synchronization off until each trusted integration is approved and verified.
+
+## CRM migration and Exness status
+
+- Telegram customer import is implemented with local parsing, row validation, duplicate detection, a server-side atomic command, an audit record per row, and safe rollback that refuses to delete a contact changed after import.
+- The Exness owner-only schema, synchronization ledger, and restricted Sales lookup are implemented. Live synchronization remains off until the private Partner API contract is supplied; no generic credential form is allowed to guess the provider's authentication shape.
 
 ## Current raw-material contract
 

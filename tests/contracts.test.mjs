@@ -419,7 +419,8 @@ test("quarterly planning, readiness, and deadline reminders are database-governe
   assert.match(planning, /لن تُنشأ أي مهام تلقائيًا/);
   assert.match(planning, /ربط بمصنع المحتوى/);
   assert.match(dashboard, /بوابة حقيقية من البيانات/);
-  assert.match(dashboard, /تدوير توكن Telegram/);
+  assert.match(dashboard, /قرار إدخال الفريق يعتمد على البيانات أعلاه/);
+  assert.match(dashboard, /تكامل Exness ليس شرطًا/);
   assert.match(navigation, /href: "\/planning"/);
   assert.match(presence, /\["\/planning", "planning"\]/);
   assert.match(packageJson, /"lint": "eslint/);
@@ -749,7 +750,7 @@ test("application shell does not impersonate an authenticated owner", async () =
 });
 
 test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task system", async () => {
-  const [migration, contextMigration, scaleMigration, importMigration, edgeFunction, workspace, taskWorkspace, contract, roadmap] = await Promise.all([
+  const [migration, contextMigration, scaleMigration, importMigration, edgeFunction, workspace, taskWorkspace, contract, importParser, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817033924_crm_foundation.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817151104_crm_contact_context_and_chat_links.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260817205723_crm_search_multi_identity_owner_performance.sql", import.meta.url), "utf8"),
@@ -758,6 +759,7 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
     readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/crm.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/crm-import.ts", import.meta.url), "utf8"),
     readFile(new URL("../docs/roadmap.md", import.meta.url), "utf8"),
   ]);
 
@@ -815,9 +817,46 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(importMigration, /contact\.version = imported_row\.contact_version_at_import/);
   assert.match(edgeFunction, /import_telegram_batch/);
   assert.match(workspace, /الأرشيف/);
+  assert.match(workspace, /استيراد عملاء Telegram/);
+  assert.match(workspace, /تحليل ومعاينة/);
+  assert.match(workspace, /التراجع الآمن عن الدفعة/);
+  assert.match(workspace, /crm_import_batches/);
+  assert.match(importParser, /parseTelegramCustomerImport/);
+  assert.match(importParser, /أيمن\|ايمن\|ayman\|aiman/);
+  assert.match(importParser, /أسماء\|اسماء\|asmaa\|asma/);
+  assert.match(importParser, /duplicate_count/);
   assert.match(roadmap, /Telegram scheduled publishing foundation — implemented/);
   assert.match(roadmap, /unique database claim/);
   assert.match(roadmap, /never retried automatically/);
+});
+
+test("Exness agency foundation separates owner financial data from Sales lookup", async () => {
+  const [migration, edgeFunction, settingsWorkspace, crmWorkspace, roadmap] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260822182732_exness_agency_integration_foundation.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/broker-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/settings/ExnessIntegrationWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../docs/operating-roadmap.md", import.meta.url), "utf8"),
+  ]);
+
+  for (const table of ["broker_integrations", "broker_client_accounts", "broker_sync_runs"]) {
+    assert.match(migration, new RegExp(`create table public\\.${table}`));
+    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(migration, new RegExp(`grant select on table public\\.${table} to authenticated`));
+    assert.doesNotMatch(migration, new RegExp(`grant (insert|update|delete) on table public\\.${table} to authenticated`, "i"));
+  }
+  assert.match(migration, /broker_client_accounts_owner_select/);
+  assert.match(migration, /membership\.allowed_sections && array\['crm'\]/);
+  assert.match(migration, /function public\.lookup_exness_account/);
+  assert.match(migration, /grant execute on function public\.lookup_exness_account\(uuid, uuid, text\) to service_role/);
+  assert.doesNotMatch(migration, /grant execute on function public\.lookup_exness_account[^;]+to authenticated/i);
+  assert.match(edgeFunction, /createSupabaseContext/);
+  assert.match(edgeFunction, /auth: "user"/);
+  assert.match(edgeFunction, /context\.supabaseAdmin\.rpc\("lookup_exness_account"/);
+  assert.match(settingsWorkspace, /المالك فقط يرى الملف واللوتات والعمولة/);
+  assert.match(crmWorkspace, /فحص سريع بدون كشف بيانات الوكالة/);
+  assert.match(crmWorkspace, /لا تعتبر الحساب غير موجود قبل إكمال ربط Exness/);
+  assert.match(roadmap, /live Exness adapter remains deliberately unconfigured/i);
 });
 
 test("Edge Function errors expose safe server messages through one shared parser", async () => {

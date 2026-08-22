@@ -3,12 +3,15 @@
 import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
+  Building2,
   CalendarClock,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CircleUserRound,
   ContactRound,
+  Database as DatabaseIcon,
+  Download,
   ExternalLink,
   FileClock,
   History,
@@ -20,10 +23,13 @@ import {
   RefreshCw,
   Route,
   Search,
+  SearchCheck,
   ShieldCheck,
+  Undo2,
+  Upload,
   UserRoundCheck,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   allowedCrmTransitions,
   crmActivityKindConfig,
@@ -41,6 +47,7 @@ import {
   type CrmLeadStage,
   type CrmSource,
 } from "../../lib/crm";
+import { parseTelegramCustomerImport, type TelegramImportPreview, type TelegramImportSignal } from "../../lib/crm-import";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Database, Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -56,13 +63,30 @@ type ConversationLink = Tables<"crm_conversation_links">;
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
+type ImportBatch = Tables<"crm_import_batches">;
+type ImportRow = Tables<"crm_import_rows">;
 type OwnerPerformance = Database["public"]["Functions"]["get_crm_owner_performance"]["Returns"][number];
+type BrokerLookupResult = Database["public"]["Functions"]["lookup_exness_account"]["Returns"][number];
 type TeamPerson = { id: string; name: string; role: Membership["role"] };
 type Workspace = { organization: Organization; membership: Membership; people: TeamPerson[] };
 type Filter = "all" | "mine" | "overdue";
 type BoardView = "current" | "archive";
 
 const PAGE_SIZE = 60;
+
+const importSignalConfig: Record<TelegramImportSignal, { label: string; tone: "neutral" | "info" | "success" | "warning" }> = {
+  pending: { label: "بانتظار المتابعة", tone: "neutral" },
+  contacted: { label: "تواصلت أسماء", tone: "info" },
+  activated: { label: "فعّله أيمن", tone: "success" },
+  needs_account_correction: { label: "حساب يحتاج تصحيح", tone: "warning" },
+};
+
+const importBatchStatusConfig: Record<ImportBatch["status"], { label: string; tone: "neutral" | "info" | "success" | "warning" }> = {
+  processing: { label: "قيد المعالجة", tone: "info" },
+  completed: { label: "مكتملة", tone: "success" },
+  rolled_back: { label: "تم التراجع", tone: "neutral" },
+  partially_rolled_back: { label: "تراجع جزئي", tone: "warning" },
+};
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -97,11 +121,22 @@ export function CrmWorkspace() {
   const [conversationLinks, setConversationLinks] = useState<ConversationLink[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [ownerPerformance, setOwnerPerformance] = useState<OwnerPerformance[]>([]);
+  const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(configured);
   const [crmLoading, setCrmLoading] = useState(false);
   const [working, setWorking] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importSourceText, setImportSourceText] = useState("");
+  const [importFileName, setImportFileName] = useState("");
+  const [importPreview, setImportPreview] = useState<TelegramImportPreview | null>(null);
+  const [importDefaultOwner, setImportDefaultOwner] = useState("");
+  const [importReviewed, setImportReviewed] = useState(false);
+  const [brokerLookupInput, setBrokerLookupInput] = useState("");
+  const [brokerLookupResult, setBrokerLookupResult] = useState<BrokerLookupResult | null>(null);
+  const [brokerLookupWorking, setBrokerLookupWorking] = useState(false);
   const [activityFormId, setActivityFormId] = useState<string | null>(null);
   const [identityFormId, setIdentityFormId] = useState<string | null>(null);
   const [activityStage, setActivityStage] = useState<CrmLeadStage>("new");
@@ -132,6 +167,8 @@ export function CrmWorkspace() {
     setConversationLinks([]);
     setTasks([]);
     setOwnerPerformance([]);
+    setImportBatches([]);
+    setImportRows([]);
     setTotalCount(0);
     setActivityFormId(null);
     setIdentityFormId(null);
@@ -148,7 +185,7 @@ export function CrmWorkspace() {
     const supabase = getSupabaseBrowserClient();
     setCrmLoading(true);
     try {
-      const [searchResult, performanceResult] = await Promise.all([
+      const [searchResult, performanceResult, batchesResult] = await Promise.all([
         supabase.rpc("search_crm_contacts_v2", {
           target_organization_id: organizationId,
           search_query: searchQuery,
@@ -162,14 +199,25 @@ export function CrmWorkspace() {
         manager
           ? supabase.rpc("get_crm_owner_performance", { target_organization_id: organizationId, target_range_days: performanceRange })
           : Promise.resolve({ data: [] as OwnerPerformance[], error: null }),
+        platformAdmin
+          ? supabase.from("crm_import_batches").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(12)
+          : Promise.resolve({ data: [] as ImportBatch[], error: null }),
       ]);
       if (searchResult.error) throw searchResult.error;
       if (performanceResult.error) throw performanceResult.error;
+      if (batchesResult.error) throw batchesResult.error;
 
       const matches = searchResult.data ?? [];
       const contactIds = matches.map((match) => match.contact_id);
       setTotalCount(Number(matches[0]?.total_count ?? 0));
       setOwnerPerformance(performanceResult.data ?? []);
+      const batches = batchesResult.data ?? [];
+      setImportBatches(batches);
+      if (platformAdmin && batches.length) {
+        const rowsResult = await supabase.from("crm_import_rows").select("*").eq("organization_id", organizationId).in("batch_id", batches.map((batch) => batch.id)).order("id", { ascending: true });
+        if (rowsResult.error) throw rowsResult.error;
+        setImportRows(rowsResult.data ?? []);
+      } else setImportRows([]);
       if (!contactIds.length) {
         setContacts([]);
         setIdentities([]);
@@ -198,7 +246,7 @@ export function CrmWorkspace() {
     } finally {
       setCrmLoading(false);
     }
-  }, [boardView, filter, manager, ownerFilter, page, performanceRange, searchQuery, stageFilter]);
+  }, [boardView, filter, manager, ownerFilter, page, performanceRange, platformAdmin, searchQuery, stageFilter]);
 
   const refreshSafely = useCallback(async (organizationId: string) => {
     try {
@@ -283,10 +331,10 @@ export function CrmWorkspace() {
   }, [refreshSafely, workspace]);
 
   useEffect(() => {
-    if (!showCreate) return;
+    if (!showCreate && !showImport) return;
     const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowCreate(false);
+      if (event.key === "Escape") { setShowCreate(false); setShowImport(false); }
     };
     const focusFrame = window.requestAnimationFrame(() => createNameInputRef.current?.focus());
     document.body.style.overflow = "hidden";
@@ -296,7 +344,7 @@ export function CrmWorkspace() {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [showCreate]);
+  }, [showCreate, showImport]);
 
   const identitiesByContact = useMemo(() => {
     const grouped = new Map<string, Identity[]>();
@@ -415,6 +463,102 @@ export function CrmWorkspace() {
     }
   }
 
+  function resetImportDraft() {
+    setImportSourceText("");
+    setImportFileName("");
+    setImportPreview(null);
+    setImportReviewed(false);
+  }
+
+  async function readImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError("ملف الاستيراد أكبر من 5MB. صدّر موضوع العملاء فقط أو قسّمه إلى دفعات أصغر.");
+      event.target.value = "";
+      return;
+    }
+    try {
+      const source = await file.text();
+      setImportSourceText(source);
+      setImportFileName(file.name);
+      setImportPreview(parseTelegramCustomerImport(source));
+      setImportReviewed(false);
+      setError(null);
+    } catch (fileError) {
+      setError(getErrorMessage(fileError));
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  function analyzeImportSource() {
+    const preview = parseTelegramCustomerImport(importSourceText);
+    setImportPreview(preview);
+    setImportReviewed(false);
+    setError(preview.rows.length ? null : "لم أجد أي عميل في النص أو الملف. استخدم قالب الأعمدة الموضح أو ملف Telegram JSON.");
+  }
+
+  function downloadImportTemplate() {
+    const columns = "message_id,full_name,phone,email,tradingview,registered_at,signal\n";
+    const example = "9507,اسم العميل,+201000000000,name@example.com,tradingview_user,2026-08-22T12:00:00+03:00,pending\n";
+    const url = URL.createObjectURL(new Blob([columns, example], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "telegram-customers-template.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importTelegramCustomers() {
+    if (!workspace || !importPreview) return;
+    if (importPreview.invalid_count || !importPreview.valid_rows.length) {
+      setError("أصلح الصفوف المعلّمة أولًا. الدفعة لن تُحفظ جزئيًا من شاشة المعاينة.");
+      return;
+    }
+    if (!importDefaultOwner) {
+      setError("اختر مسؤول المتابعة الافتراضي للعملاء الجدد.");
+      return;
+    }
+    if (!importReviewed) {
+      setError("أكد أنك راجعت المعاينة قبل اعتماد الدفعة.");
+      return;
+    }
+    const imported = await invokeCrm({
+      action: "import_telegram_batch",
+      organization_id: workspace.organization.id,
+      default_owner_id: importDefaultOwner,
+      rows: importPreview.valid_rows,
+    }, `تم اعتماد دفعة من ${importPreview.valid_rows.length} عميل. راجع النتيجة في سجل الاستيراد.`);
+    if (imported) resetImportDraft();
+  }
+
+  async function rollbackImport(batch: ImportBatch) {
+    const confirmed = window.confirm(`سيحاول النظام حذف ${batch.created_rows} ملفًا أنشأتها هذه الدفعة فقط. أي ملف تم تعديله بعد الاستيراد سيبقى محفوظًا. هل تريد المتابعة؟`);
+    if (!confirmed) return;
+    await invokeCrm({ action: "rollback_import_batch", batch_id: batch.id }, "اكتمل فحص التراجع. الملفات المعدلة يدويًا لم تُحذف.");
+  }
+
+  async function lookupBrokerAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspace) return;
+    const clean = brokerLookupInput.trim();
+    if (!/^[A-Za-z0-9._-]{3,160}$/.test(clean)) {
+      setError("اكتب رقم حساب Exness أو المعرّف التعريفي للعميل بشكل صحيح.");
+      return;
+    }
+    setBrokerLookupWorking(true);
+    setBrokerLookupResult(null);
+    setError(null);
+    const { data, error: lookupError } = await getSupabaseBrowserClient().functions.invoke("broker-commands", { body: { action: "lookup_exness_account", organization_id: workspace.organization.id, lookup_value: clean } });
+    setBrokerLookupWorking(false);
+    if (lookupError) {
+      setError(await getSupabaseFunctionErrorMessage(lookupError, "تعذّر فحص حساب Exness."));
+      return;
+    }
+    setBrokerLookupResult(data as BrokerLookupResult);
+  }
+
   if (loading) return <section className="workspace-state" aria-live="polite"><LoaderCircle className="spin" size={24} /><div><h2>جارٍ تحميل CRM</h2><p>نتحقق من الصلاحيات وملفات العملاء ومهام المتابعة.</p></div></section>;
   if (!session) return <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><p className="overline">دخول موحد</p><h2>سجّل الدخول أولًا من قسم المهام</h2><p>بيانات العملاء لا تظهر دون جلسة موثقة وصلاحية داخل الشركة.</p></div><Button href="/tasks"><Link2 size={16} /> الانتقال لتسجيل الدخول</Button></section>;
   if (!workspace) return <section className="workspace-state workspace-onboarding"><Route size={27} /><div><p className="overline">مساحة العمل مطلوبة</p><h2>أنشئ مساحة الشركة مرة واحدة</h2><p>ابدأ من قسم المهام، ثم ارجع هنا لإدارة المتابعات.</p></div><Button href="/tasks"><Link2 size={16} /> فتح قسم المهام</Button></section>;
@@ -437,6 +581,7 @@ export function CrmWorkspace() {
       <div className="toolbar-actions">
         <button className="icon-button" type="button" aria-label="تحديث CRM" disabled={crmLoading} onClick={() => void refreshSafely(workspace.organization.id)}><RefreshCw className={crmLoading ? "spin" : ""} size={17} /></button>
         <Button href="/tasks" variant="secondary"><Route size={16} /> مهام المتابعة</Button>
+        {platformAdmin ? <Button type="button" variant="secondary" onClick={() => { setImportDefaultOwner(importDefaultOwner || session.user.id); setShowImport(true); }}><Upload size={16} /> استيراد عملاء Telegram</Button> : null}
         {canCreate ? <Button type="button" aria-expanded={showCreate} aria-controls="crm-create-dialog" onClick={() => setShowCreate(true)}><Plus size={16} /> عميل محتمل جديد</Button> : null}
       </div>
     </div>
@@ -463,6 +608,8 @@ export function CrmWorkspace() {
       <div className="crm-filter-row" role="group" aria-label="نطاق العملاء">{(["all", "mine", ...(boardView === "current" ? ["overdue"] : [])] as Filter[]).map((value) => <button className={filter === value ? "active" : ""} type="button" key={value} onClick={() => { setFilter(value); setPage(0); }}>{value === "all" ? "كل المتاح" : value === "mine" ? "مسؤوليتي" : "متابعة متأخرة"}</button>)}</div>
       <p>{searchInput.trim().length === 1 ? "اكتب حرفين على الأقل لبدء البحث." : `يعرض ${contacts.length} من ${totalCount} نتيجة مطابقة.`}</p>
     </section>
+
+    {canCreate ? <form className="broker-lookup-panel" onSubmit={(event) => void lookupBrokerAccount(event)}><span className="broker-lookup-icon"><Building2 size={18} /></span><div><p className="overline">Exness agency lookup</p><strong>فحص سريع بدون كشف بيانات الوكالة</strong><small>النتيجة للـSales: موجود أو غير موجود، ونشط أو غير نشط فقط.</small></div><label><span>رقم الحساب أو معرّف العميل</span><input dir="ltr" value={brokerLookupInput} onChange={(event) => { setBrokerLookupInput(event.target.value); setBrokerLookupResult(null); }} minLength={3} maxLength={160} placeholder="Account / Client ID" /></label><Button type="submit" variant="secondary" disabled={brokerLookupWorking}>{brokerLookupWorking ? <LoaderCircle className="spin" size={15} /> : <SearchCheck size={15} />} فحص</Button>{brokerLookupResult ? <div className={`broker-lookup-result ${!brokerLookupResult.integration_ready ? "pending" : brokerLookupResult.under_agency ? "found" : "missing"}`}>{!brokerLookupResult.integration_ready ? <><AlertTriangle size={15} /><span><strong>المزامنة غير مفعّلة بعد</strong><small>لا تعتبر الحساب غير موجود قبل إكمال ربط Exness.</small></span></> : brokerLookupResult.under_agency ? <><CheckCircle2 size={15} /><span><strong>العميل تحت الوكالة</strong><small>{brokerLookupResult.is_active ? "الحساب نشط" : "الحساب غير نشط حاليًا"}</small></span></> : <><AlertTriangle size={15} /><span><strong>غير موجود في آخر مزامنة</strong><small>راجع رقم الحساب قبل التواصل مع العميل.</small></span></>}</div> : null}</form> : null}
 
     {manager ? <section className="panel crm-performance-panel">
       <div className="section-heading"><div><p className="overline">أرقام قابلة للمراجعة</p><h2>أداء مسؤولي العملاء</h2><p>لا يوجد تقييم شخصي؛ الأرقام مبنية على الصفقات والأنشطة والمواعيد المسجلة.</p></div><label><span>الفترة</span><select value={performanceRange} onChange={(event) => setPerformanceRange(Number(event.target.value))}><option value={7}>7 أيام</option><option value={30}>30 يومًا</option><option value={90}>90 يومًا</option></select></label></div>
@@ -503,6 +650,33 @@ export function CrmWorkspace() {
       </form>
     </div> : null}
 
+    {showImport && platformAdmin ? <div className="crm-create-dialog-backdrop">
+      <button className="crm-create-dialog-dismiss" type="button" aria-label="إغلاق نافذة استيراد العملاء" onClick={() => setShowImport(false)} />
+      <section className="panel crm-create-form crm-import-dialog" role="dialog" aria-modal="true" aria-labelledby="crm-import-dialog-title">
+        <div className="section-heading"><div><p className="overline">مراجعة محلية + دفعة قابلة للتراجع</p><h2 id="crm-import-dialog-title">استيراد عملاء «أدمن الحيتان»</h2><p>اقرأ ملف Telegram JSON أو CSV أو الصق الرسائل كما هي. لن يخرج الملف الخام من جهازك؛ السيرفر يستقبل الصفوف التي وافقت عليها فقط.</p></div><button className="text-button" type="button" onClick={() => setShowImport(false)}>إغلاق</button></div>
+        <div className="crm-safety-note"><ShieldCheck size={18} /><div><strong>لا رسائل ولا تفعيل تلقائي</strong><p>الاستيراد ينشئ ملفات CRM ومهام متابعة فقط، ويمنع التكرار بالهاتف والبريد وTradingView ومعرّف رسالة Telegram.</p></div></div>
+        <div className="crm-import-source-grid">
+          <label className="crm-import-file"><Upload size={18} /><span><strong>{importFileName || "اختر ملف Telegram أو CSV"}</strong><small>JSON / CSV / TSV / TXT — حد أقصى 5MB</small></span><input type="file" accept=".json,.csv,.tsv,.txt,application/json,text/csv,text/plain" onChange={(event) => void readImportFile(event)} /></label>
+          <button className="crm-template-button" type="button" onClick={downloadImportTemplate}><Download size={16} /><span><strong>تنزيل قالب CSV</strong><small>لو ستجهّز الدفعة يدويًا</small></span></button>
+        </div>
+        <label className="crm-import-paste"><span>أو الصق رسائل العملاء / بيانات الأعمدة</span><textarea rows={7} value={importSourceText} onChange={(event) => { setImportSourceText(event.target.value); setImportFileName(""); setImportPreview(null); setImportReviewed(false); }} placeholder={"الاسم: محمد أحمد\nرقم الهاتف: +2010…\nالبريد الإلكتروني: name@example.com\nحساب TradingView: username\nتاريخ التسجيل: 2026-08-20"} /></label>
+        <div className="form-actions crm-import-analyze"><Button type="button" variant="secondary" disabled={!importSourceText.trim()} onClick={analyzeImportSource}><Search size={15} /> تحليل ومعاينة</Button>{importSourceText ? <button className="text-button" type="button" onClick={resetImportDraft}>مسح المسودة</button> : null}</div>
+
+        {importPreview ? <section className="crm-import-preview" aria-label="معاينة دفعة العملاء">
+          <div className="crm-import-summary"><div><strong>{importPreview.rows.length}</strong><span>إجمالي الصفوف</span></div><div><strong>{importPreview.valid_rows.length}</strong><span>صالحة</span></div><div className={importPreview.invalid_count ? "attention" : ""}><strong>{importPreview.invalid_count}</strong><span>تحتاج تصحيحًا</span></div><div><strong>{importPreview.duplicate_count}</strong><span>مكررة داخل الملف</span></div></div>
+          <div className="crm-import-signals">{(Object.keys(importSignalConfig) as TelegramImportSignal[]).map((signal) => <span key={signal}><StatusBadge tone={importSignalConfig[signal].tone}>{importSignalConfig[signal].label}</StatusBadge><strong>{importPreview.signal_counts[signal]}</strong></span>)}</div>
+          <div className="crm-import-table-wrap"><table><thead><tr><th>#</th><th>العميل</th><th>الهاتف والبريد</th><th>TradingView</th><th>حالة Telegram</th><th>الفحص</th></tr></thead><tbody>{importPreview.rows.slice(0, 500).map((row) => <tr className={row.errors.length ? "invalid" : "valid"} key={`${row.message_id}-${row.row_number}`}><td>{row.row_number}</td><td><strong>{row.full_name || "—"}</strong><small>رسالة {row.message_id || "—"}</small></td><td dir="ltr"><span>{row.phone || "—"}</span><small>{row.email || "—"}</small></td><td dir="ltr">{row.tradingview || "—"}</td><td><StatusBadge tone={importSignalConfig[row.signal].tone}>{importSignalConfig[row.signal].label}</StatusBadge></td><td>{row.errors.length ? <ul>{row.errors.map((rowError) => <li key={rowError}>{rowError}</li>)}</ul> : <span className="crm-import-valid"><CheckCircle2 size={14} /> صالح</span>}</td></tr>)}</tbody></table></div>
+          <div className="crm-import-approval"><label><span>مسؤول المتابعة الافتراضي</span><select value={importDefaultOwner} onChange={(event) => setImportDefaultOwner(event.target.value)}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label className="crm-checkbox"><input type="checkbox" checked={importReviewed} onChange={(event) => setImportReviewed(event.target.checked)} /><span>راجعت الصفوف والحالات، وأفهم أن العملية لا ترسل أي رسالة للعميل.</span></label><Button type="button" disabled={working || Boolean(importPreview.invalid_count) || !importPreview.valid_rows.length || !importReviewed} onClick={() => void importTelegramCustomers()}>{working ? <LoaderCircle className="spin" size={15} /> : <DatabaseIcon size={15} />} اعتماد {importPreview.valid_rows.length} عميل</Button></div>
+        </section> : null}
+
+        <section className="crm-import-history"><div className="section-heading"><div><p className="overline">سجل تدقيق لا يُمحى</p><h3>آخر دفعات الاستيراد</h3></div><StatusBadge tone="neutral">{importBatches.length} دفعة</StatusBadge></div>{importBatches.length ? <div>{importBatches.map((batch) => {
+          const batchRows = importRows.filter((row) => row.batch_id === batch.id);
+          const status = importBatchStatusConfig[batch.status];
+          return <details key={batch.id}><summary><div><strong>{formatDate(batch.created_at)}</strong><span>{batch.created_rows} جديد · {batch.duplicate_rows} مكرر · {batch.error_rows} خطأ</span></div><StatusBadge tone={status?.tone ?? "neutral"}>{status?.label ?? batch.status}</StatusBadge></summary><div className="crm-import-batch-body"><ul>{batchRows.map((row) => <li key={row.id}><span>رسالة {row.external_id}</span><strong>{row.result === "created" ? "تم الإنشاء" : row.result === "duplicate" ? "مكرر" : row.result === "rolled_back" ? "تم التراجع" : row.result === "rollback_blocked" ? "محفوظ لأنه عُدّل" : "خطأ"}</strong>{row.error_message ? <small>{row.error_message}</small> : null}</li>)}</ul>{batch.status === "completed" && batch.created_rows > 0 ? <Button type="button" variant="secondary" className="crm-import-rollback" disabled={working} onClick={() => void rollbackImport(batch)}><Undo2 size={14} /> التراجع الآمن عن الدفعة</Button> : null}</div></details>;
+        })}</div> : <p className="empty-proof"><DatabaseIcon size={15} /> لم تُعتمد أي دفعة حتى الآن.</p>}</section>
+      </section>
+    </div> : null}
+
     {contacts.length ? <div className="crm-pipeline" aria-label="خط مبيعات العملاء المحتملين">{visibleStages.map((stage) => {
       const stageContacts = contacts.filter((contact) => contact.stage === stage);
       return <section className="crm-stage-column" key={stage} aria-labelledby={`crm-stage-${stage}`}><header><StatusBadge tone={crmLeadStageConfig[stage].tone}>{crmLeadStageConfig[stage].shortLabel}</StatusBadge><strong id={`crm-stage-${stage}`}>{stageContacts.length}</strong></header><div className="crm-stage-stack workflow-entity-list">{stageContacts.map((contact) => {
@@ -534,6 +708,6 @@ export function CrmWorkspace() {
     })}</div> : <section className="panel empty-state"><span className="empty-visual">{hasFilters ? <Search size={20} /> : <ContactRound size={20} />}</span><div><h2>{hasFilters ? "لا توجد نتائج مطابقة" : "CRM جاهز بدون بيانات وهمية"}</h2><p>{hasFilters ? "غيّر كلمة البحث أو المسؤول أو المرحلة أو نطاق المتابعة." : "أدخل ملفًا واحدًا بنفسك عند الجاهزية، وسيظهر معه موعد المتابعة ومهمته في البورد."}</p></div><span className="empty-proof"><ShieldCheck size={15} /> لا يوجد استيراد تلقائي</span></section>}
 
     {totalCount > PAGE_SIZE ? <nav className="crm-pagination" aria-label="صفحات نتائج العملاء"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}><ChevronRight size={15} /> السابق</button><span>صفحة {page + 1} من {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)}>التالي <ChevronLeft size={15} /></button></nav> : null}
-    <aside className="automation-note"><LockKeyhole size={17} /><div><strong>{platformAdmin ? "استيراد Telegram محكوم بسجل دفعة ورجوع" : "التكاملات تحت تحكم إدارة المنصة"}</strong><p>{platformAdmin ? "أي استيراد يتحقق من الهاتف والبريد وTradingView، يمنع التكرار، ويسجل نتيجة كل صف. لا يرسل النظام أي رسالة للعميل." : "لن تظهر لك أدوات الاستيراد أو مفاتيح التكامل؛ ترى فقط العملاء المسموح لك بمتابعتهم."}</p></div></aside>
+    <aside className="automation-note"><LockKeyhole size={17} /><div><strong>{platformAdmin ? "استيراد Telegram متاح لك وحدك من زر أعلى الصفحة" : "التكاملات تحت تحكم إدارة المنصة"}</strong><p>{platformAdmin ? "حلّل الملف، راجع كل صف، ثم اعتمد الدفعة. السجل يحفظ نتيجة كل عميل ويتيح تراجعًا آمنًا." : "لن تظهر لك أدوات الاستيراد أو مفاتيح التكامل؛ ترى فقط العملاء المسموح لك بمتابعتهم."}</p></div></aside>
   </section>;
 }

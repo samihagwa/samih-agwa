@@ -233,6 +233,215 @@ export type Database = {
           },
         ]
       }
+      broker_client_accounts: {
+        Row: {
+          account_number: string
+          client_profile: Json
+          commission: number
+          commission_currency: string
+          created_at: string
+          crm_contact_id: string | null
+          external_client_id: string
+          id: string
+          integration_id: string
+          is_active: boolean
+          last_activity_at: string | null
+          last_synced_at: string
+          lots: number
+          organization_id: string
+          registered_at: string | null
+          source_hash: string
+          updated_at: string
+        }
+        Insert: {
+          account_number: string
+          client_profile?: Json
+          commission?: number
+          commission_currency?: string
+          created_at?: string
+          crm_contact_id?: string | null
+          external_client_id: string
+          id?: string
+          integration_id: string
+          is_active?: boolean
+          last_activity_at?: string | null
+          last_synced_at: string
+          lots?: number
+          organization_id: string
+          registered_at?: string | null
+          source_hash: string
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string
+          client_profile?: Json
+          commission?: number
+          commission_currency?: string
+          created_at?: string
+          crm_contact_id?: string | null
+          external_client_id?: string
+          id?: string
+          integration_id?: string
+          is_active?: boolean
+          last_activity_at?: string | null
+          last_synced_at?: string
+          lots?: number
+          organization_id?: string
+          registered_at?: string | null
+          source_hash?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_client_accounts_crm_contact_id_fkey"
+            columns: ["crm_contact_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_client_accounts_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "broker_integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_client_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broker_integrations: {
+        Row: {
+          account_lookup_enabled: boolean
+          base_url: string | null
+          created_at: string
+          created_by: string
+          display_name: string
+          id: string
+          last_error: string | null
+          last_sync_at: string | null
+          organization_id: string
+          provider: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          account_lookup_enabled?: boolean
+          base_url?: string | null
+          created_at?: string
+          created_by: string
+          display_name: string
+          id?: string
+          last_error?: string | null
+          last_sync_at?: string | null
+          organization_id: string
+          provider: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          account_lookup_enabled?: boolean
+          base_url?: string | null
+          created_at?: string
+          created_by?: string
+          display_name?: string
+          id?: string
+          last_error?: string | null
+          last_sync_at?: string | null
+          organization_id?: string
+          provider?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_integrations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_integrations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      broker_sync_runs: {
+        Row: {
+          completed_at: string | null
+          error_message: string | null
+          error_rows: number
+          fetched_rows: number
+          id: string
+          integration_id: string
+          organization_id: string
+          request_key: string
+          started_at: string
+          status: string
+          triggered_by: string | null
+          upserted_rows: number
+        }
+        Insert: {
+          completed_at?: string | null
+          error_message?: string | null
+          error_rows?: number
+          fetched_rows?: number
+          id?: string
+          integration_id: string
+          organization_id: string
+          request_key: string
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+          upserted_rows?: number
+        }
+        Update: {
+          completed_at?: string | null
+          error_message?: string | null
+          error_rows?: number
+          fetched_rows?: number
+          id?: string
+          integration_id?: string
+          organization_id?: string
+          request_key?: string
+          started_at?: string
+          status?: string
+          triggered_by?: string | null
+          upserted_rows?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "broker_sync_runs_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "broker_integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_sync_runs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "broker_sync_runs_triggered_by_fkey"
+            columns: ["triggered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_assets: {
         Row: {
           content_item_id: string
@@ -4229,6 +4438,19 @@ export type Database = {
           target_user_id: string
         }
         Returns: string
+      }
+      lookup_exness_account: {
+        Args: {
+          lookup_value: string
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: {
+          integration_ready: boolean
+          is_active: boolean
+          last_synced_at: string
+          under_agency: boolean
+        }[]
       }
       manage_team_membership: {
         Args: {
