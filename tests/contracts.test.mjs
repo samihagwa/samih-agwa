@@ -1296,3 +1296,35 @@ test("CRM customer files save communication results atomically and create the ne
   assert.match(types, /crm_sales_profiles:/);
   assert.match(types, /record_crm_activity_v2:/);
 });
+
+test("CRM customer directory keeps every source filter permission-scoped and links exact records", async () => {
+  const [migration, directory, page, nav, crmContract, types, css] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260823014440_crm_customer_directory_sources.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmCustomerDirectory.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/crm/customers/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmSectionNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/crm.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  for (const source of ["market_whales_dashboard", "harmonic_book", "facebook", "whatsapp", "email"]) {
+    assert.match(migration, new RegExp(`'${source}'`));
+  }
+  for (const source of ["market_whales_dashboard", "market_whales_app", "harmonic_book", "facebook", "whatsapp", "email"]) {
+    assert.match(crmContract, new RegExp(`${source}:`));
+    assert.match(types, new RegExp(`"${source}"`));
+  }
+  assert.match(migration, /function public\.search_crm_contacts_v3/);
+  assert.match(migration, /security invoker/);
+  assert.match(migration, /target_source is null or contact\.source = target_source/);
+  assert.match(migration, /target_view = 'all'/);
+  assert.match(migration, /grant execute on function public\.search_crm_contacts_v3[\s\S]*to authenticated/);
+  assert.match(directory, /rpc\("search_crm_contacts_v3"/);
+  assert.match(directory, /crmContactDeepLink\(contact\.id\)/);
+  assert.match(directory, /taskDeepLink\(openTask\.id\)/);
+  assert.match(directory, /crmSourceConfig\[contact\.source\]\.label/);
+  assert.match(page, /دليل موحّد لكل العملاء/);
+  assert.match(nav, /href: "\/crm\/customers"/);
+  assert.match(css, /\.crm-directory-table-wrap \{[^}]+overflow: auto/);
+});

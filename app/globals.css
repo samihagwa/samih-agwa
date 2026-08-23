@@ -1727,6 +1727,53 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .readiness-grid .status-badge { grid-column: 2; justify-self: start; }
 }
 
+/* CRM directory — table view using the existing CRM visual tokens. */
+.crm-section-nav { width: fit-content; max-width: 100%; padding: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.crm-section-nav a { min-height: 36px; padding: 7px 11px; display: inline-flex; align-items: center; gap: 6px; border-radius: 9px; color: var(--ink-600); font-size: 11px; font-weight: 900; }
+.crm-section-nav a.active { background: var(--ink-950); color: white; }
+.crm-directory-workspace { min-width: 0; display: grid; gap: 14px; }
+.crm-directory-filters { padding: 16px; display: grid; gap: 11px; }
+.crm-directory-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.crm-directory-filter-grid label { min-width: 0; display: grid; gap: 5px; }
+.crm-directory-filter-grid label > span { color: var(--ink-700); font-size: 10px; font-weight: 900; }
+.crm-directory-filters > p { margin: 0; color: var(--ink-500); font-size: 10px; }
+.crm-directory-table-wrap { width: 100%; min-width: 0; max-width: 100%; overflow: auto; overscroll-behavior-inline: contain; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); -webkit-overflow-scrolling: touch; }
+.crm-directory-table { width: 100%; min-width: 1280px; border-collapse: collapse; background: var(--paper); }
+.crm-directory-table th { position: sticky; z-index: 1; top: 0; padding: 10px 11px; border-bottom: 1px solid var(--line-strong); background: var(--ink-950); color: white; font-size: 10px; text-align: right; white-space: nowrap; }
+.crm-directory-table td { min-width: 110px; padding: 11px; border-bottom: 1px solid var(--line); color: var(--ink-700); font-size: 10px; vertical-align: middle; }
+.crm-directory-table tbody tr:last-child td { border-bottom: 0; }
+.crm-directory-table tbody tr:hover td { background: var(--teal-100); }
+.crm-directory-table tbody tr.overdue td { background: #fff8f7; }
+.crm-directory-table td > strong, .crm-directory-table td > small { display: block; }
+.crm-directory-table td > small { margin-top: 3px; color: var(--ink-500); }
+.crm-directory-customer-link { display: grid; gap: 3px; color: var(--teal-700); }
+.crm-directory-customer-link strong { font-size: 11px; }
+.crm-directory-customer-link small { color: var(--ink-400); font-size: 9px; }
+.crm-directory-identities { display: grid; gap: 5px; }
+.crm-directory-identities span { display: grid; gap: 2px; }
+.crm-directory-identities small { color: var(--ink-500); font-size: 9px; }
+.crm-directory-identities b { color: var(--ink-800); font-size: 10px; overflow-wrap: anywhere; }
+.crm-directory-overdue, .crm-directory-muted { display: inline-flex; align-items: flex-start; gap: 5px; }
+.crm-directory-overdue { color: var(--red-700); }
+.crm-directory-overdue svg, .crm-directory-muted svg { flex: 0 0 auto; margin-top: 1px; }
+.crm-directory-muted { color: var(--ink-500); }
+.crm-directory-task-link { display: inline-flex; align-items: flex-start; gap: 5px; color: var(--teal-700); }
+.crm-directory-task-link > span { display: grid; gap: 2px; }
+.crm-directory-task-link small { color: var(--ink-500); font-size: 9px; }
+.crm-directory-table .icon-button { width: 39px; height: 39px; }
+
+@media (max-width: 980px) {
+  .crm-directory-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .crm-section-nav { width: 100%; }
+  .crm-section-nav a { min-width: 0; flex: 1; justify-content: center; }
+  .crm-directory-filter-grid { grid-template-columns: 1fr; }
+  .crm-directory-filters { padding: 14px; }
+  .crm-directory-table { min-width: 1040px; }
+}
+
 .secure-login-page { min-height: 100vh; padding: clamp(24px, 5vw, 64px); display: grid; grid-template-rows: auto 1fr auto; place-items: center; gap: 30px; background: radial-gradient(circle at 12% 12%, rgba(11,108,99,.13), transparent 32rem), var(--canvas); }
 .secure-login-brand { display: flex; align-items: center; gap: 12px; direction: ltr; }
 .secure-login-brand strong, .secure-login-brand small { display: block; }

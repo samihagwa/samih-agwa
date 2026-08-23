@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CrmWorkspace } from "../../components/crm/CrmWorkspace";
+import { CrmSectionNav } from "../../components/crm/CrmSectionNav";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 
@@ -14,6 +15,7 @@ export default function CrmPage() {
         description="ملف موحّد للمصدر والاهتمام ووسيلة التواصل، مع سجل متابعة ومهمة تلقائية من غير استيراد أو رسائل قبل الاعتماد."
         actions={<StatusBadge tone="success">مرتبط ببورد المهام</StatusBadge>}
       />
+      <CrmSectionNav />
       <CrmWorkspace />
     </main>
   );
