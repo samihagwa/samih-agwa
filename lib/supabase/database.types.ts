@@ -1320,6 +1320,72 @@ export type Database = {
           },
         ]
       }
+      crm_sales_profiles: {
+        Row: {
+          contact_id: string
+          organization_id: string
+          lead_temperature: string
+          preferred_contact_method: string | null
+          preferred_contact_time: string | null
+          needs: string | null
+          objections: string | null
+          next_action: string | null
+          tags: string[]
+          version: number
+          created_by: string
+          updated_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          contact_id: string
+          organization_id: string
+          lead_temperature?: string
+          preferred_contact_method?: string | null
+          preferred_contact_time?: string | null
+          needs?: string | null
+          objections?: string | null
+          next_action?: string | null
+          tags?: string[]
+          version?: number
+          created_by: string
+          updated_by: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          contact_id?: string
+          organization_id?: string
+          lead_temperature?: string
+          preferred_contact_method?: string | null
+          preferred_contact_time?: string | null
+          needs?: string | null
+          objections?: string | null
+          next_action?: string | null
+          tags?: string[]
+          version?: number
+          created_by?: string
+          updated_by?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_sales_profiles_contact_org_fkey"
+            columns: ["contact_id", "organization_id"]
+            isOneToOne: true
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "crm_sales_profiles_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_conversation_links: {
         Row: {
           channel: Database["public"]["Enums"]["crm_conversation_channel"]
@@ -4687,6 +4753,44 @@ export type Database = {
           target_user_id: string
         }
         Returns: boolean
+      }
+      record_crm_activity_v2: {
+        Args: {
+          activity_kind: Database["public"]["Enums"]["crm_activity_kind"]
+          activity_summary: string
+          expected_contact_version: number
+          next_stage: Database["public"]["Enums"]["crm_lead_stage"]
+          target_contact_id: string
+          target_next_follow_up_at: string | null
+          target_user_id: string
+        }
+        Returns: Json
+      }
+      save_crm_sales_profile: {
+        Args: {
+          expected_profile_version: number
+          target_contact_id: string
+          target_lead_temperature: string
+          target_needs: string
+          target_next_action: string
+          target_objections: string
+          target_preferred_contact_method: string
+          target_preferred_contact_time: string
+          target_tags: string[]
+          target_user_id: string
+        }
+        Returns: Json
+      }
+      add_crm_conversation_link: {
+        Args: {
+          make_primary?: boolean
+          target_channel: Database["public"]["Enums"]["crm_conversation_channel"]
+          target_contact_id: string
+          target_label: string
+          target_url: string
+          target_user_id: string
+        }
+        Returns: string
       }
       record_member_presence: {
         Args: { target_organization_id: string; target_section: string }

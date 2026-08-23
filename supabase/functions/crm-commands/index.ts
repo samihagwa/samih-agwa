@@ -10,6 +10,8 @@ const consentStatuses = new Set(["unknown", "granted", "denied"]);
 const activityKinds = new Set(["call", "message", "email", "note"]);
 const leadStages = new Set(["new", "contacted", "qualified", "follow_up", "won", "lost", "do_not_contact"]);
 const activeStages = new Set(["new", "contacted", "qualified", "follow_up"]);
+const leadTemperatures = new Set(["cold", "warm", "hot"]);
+const preferredContactMethods = new Set(["phone", "email", "telegram", "whatsapp", "instagram", "facebook", "messenger", "other"]);
 
 type Context = Awaited<ReturnType<typeof createSupabaseContext>>["data"];
 type ContactIdentity = { kind: string; value: string; is_primary: boolean };
@@ -44,6 +46,9 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/each CRM identity kind only once/i, "يمكن إضافة هاتف واحد وبريد واحد واسم Telegram واحد عند إنشاء الملف."],
     [/exactly one primary CRM identity/i, "اختر وسيلة تواصل أساسية واحدة."],
     [/Only the CRM owner or organization leadership/i, "إضافة وسيلة تواصل متاحة لمسؤول العميل أو إدارة الشركة فقط."],
+    [/CRM contact changed/i, "بيانات العميل اتغيرت من عضو آخر. حدّث الملف ثم أعد المحاولة."],
+    [/CRM sales profile changed/i, "ملخص السيلز اتغير من عضو آخر. حدّث الملف ثم أعد المحاولة."],
+    [/Conversation link must be/i, "لينك المحادثة غير صحيح. استخدم رابطًا يبدأ بـ http أو https."],
   ];
   const translated = friendlyMessages.find(([pattern]) => pattern.test(error.message))?.[1];
   if (translated) return jsonResponse({ message: translated }, 400);
@@ -204,15 +209,85 @@ async function recordActivity(body: Record<string, unknown>, context: Context) {
     return jsonResponse({ message: "سبب الإغلاق يجب ألا يزيد عن 1000 حرف." }, 400);
   }
 
-  const { data, error } = await context!.supabaseAdmin.rpc("record_crm_activity", {
+  const expectedVersion = Number(body.expected_version);
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+    return jsonResponse({ message: "حدّث ملف العميل ثم أعد تسجيل النتيجة." }, 409);
+  }
+
+  const { data, error } = await context!.supabaseAdmin.rpc("record_crm_activity_v2", {
     target_user_id: context!.userClaims!.id,
     target_contact_id: contactId,
+    expected_contact_version: expectedVersion,
     activity_kind: kind,
     next_stage: nextStage,
     activity_summary: summary,
     target_next_follow_up_at: activeStages.has(nextStage) ? nextFollowUpAt : null,
   });
   return commandError(error, "تعذّر تسجيل نتيجة المتابعة.") ?? jsonResponse({ changed: data });
+}
+
+async function saveSalesProfile(body: Record<string, unknown>, context: Context) {
+  const contactId = text(body.contact_id);
+  const expectedVersion = Number(body.expected_version ?? 0);
+  const leadTemperature = text(body.lead_temperature) || "warm";
+  const preferredContactMethod = text(body.preferred_contact_method);
+  const tags = Array.isArray(body.tags)
+    ? body.tags.map((tag) => text(tag)).filter(Boolean)
+    : [];
+
+  if (!contactId || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0 || !leadTemperatures.has(leadTemperature)) {
+    return jsonResponse({ message: "بيانات ملخص السيلز غير صالحة." }, 400);
+  }
+  if (preferredContactMethod && !preferredContactMethods.has(preferredContactMethod)) {
+    return jsonResponse({ message: "طريقة التواصل المفضلة غير صالحة." }, 400);
+  }
+  if (tags.length > 20 || tags.some((tag) => tag.length > 40)) {
+    return jsonResponse({ message: "أضف بحد أقصى 20 تصنيفًا، كل تصنيف حتى 40 حرفًا." }, 400);
+  }
+
+  const fields = {
+    preferred_contact_time: text(body.preferred_contact_time),
+    needs: text(body.needs),
+    objections: text(body.objections),
+    next_action: text(body.next_action),
+  };
+  if (fields.preferred_contact_time.length > 120 || fields.needs.length > 4000 || fields.objections.length > 4000 || fields.next_action.length > 1000) {
+    return jsonResponse({ message: "أحد حقول ملخص السيلز أطول من الحد المسموح." }, 400);
+  }
+
+  const { data, error } = await context!.supabaseAdmin.rpc("save_crm_sales_profile", {
+    target_user_id: context!.userClaims!.id,
+    target_contact_id: contactId,
+    expected_profile_version: expectedVersion,
+    target_lead_temperature: leadTemperature,
+    target_preferred_contact_method: preferredContactMethod,
+    target_preferred_contact_time: fields.preferred_contact_time,
+    target_needs: fields.needs,
+    target_objections: fields.objections,
+    target_next_action: fields.next_action,
+    target_tags: tags,
+  });
+  return commandError(error, "تعذّر حفظ ملخص السيلز.") ?? jsonResponse(data);
+}
+
+async function addConversationLink(body: Record<string, unknown>, context: Context) {
+  const contactId = text(body.contact_id);
+  const channel = text(body.channel);
+  const url = text(body.url);
+  const label = text(body.label);
+  if (!contactId || !conversationChannels.has(channel) || !validHttpUrl(url) || label.length > 80) {
+    return jsonResponse({ message: "اختر المنصة وأضف لينك محادثة صحيحًا." }, 400);
+  }
+
+  const { data, error } = await context!.supabaseAdmin.rpc("add_crm_conversation_link", {
+    target_user_id: context!.userClaims!.id,
+    target_contact_id: contactId,
+    target_channel: channel,
+    target_url: url,
+    target_label: label,
+    make_primary: body.make_primary === true,
+  });
+  return commandError(error, "تعذّرت إضافة لينك المحادثة.") ?? jsonResponse({ linkId: data }, 201);
 }
 
 async function importTelegramBatch(body: Record<string, unknown>, context: Context) {
@@ -339,6 +414,8 @@ export default {
     if (body.action === "create_lead") return createLead(body, context);
     if (body.action === "add_identity") return addIdentity(body, context);
     if (body.action === "record_activity") return recordActivity(body, context);
+    if (body.action === "save_sales_profile") return saveSalesProfile(body, context);
+    if (body.action === "add_conversation_link") return addConversationLink(body, context);
     if (body.action === "import_telegram_batch") return importTelegramBatch(body, context);
     if (body.action === "import_whales_zone_sheet_batch") return importWhalesZoneSheetBatch(body, context);
     if (body.action === "rollback_import_batch") return rollbackImportBatch(body, context);

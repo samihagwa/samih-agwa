@@ -228,7 +228,7 @@ export default {
         .select("id, full_name, stage, owner_id, next_follow_up_at, last_contacted_at, source, source_reason")
         .eq("organization_id", organizationId).not("stage", "in", "(won,lost,do_not_contact)")
         .order("next_follow_up_at", { ascending: true, nullsFirst: false }).limit(40);
-      workspaceContext.crm_pipeline = (data ?? []).map((contact) => ({ ...contact, url: `/crm?contact=${contact.id}#crm-${contact.id}` }));
+      workspaceContext.crm_pipeline = (data ?? []).map((contact) => ({ ...contact, url: `/crm/${contact.id}` }));
     })());
 
     await Promise.all(queries);

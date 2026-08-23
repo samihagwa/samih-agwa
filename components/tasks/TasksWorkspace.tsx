@@ -515,7 +515,7 @@ export function TasksWorkspace() {
                       {task.launch_deliverable_id ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · بند تنفيذي</span> : null}
                       {task.launch_deliverable_id ? <a className="task-production-link" href={`/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`}><FileText size={12} /> فتح التفاصيل وتسليم النتيجة</a> : null}
                       {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> CRM · متابعة عميل</span> : null}
-                      {task.crm_contact_id ? <a className="task-production-link" href={`/crm?contact=${task.crm_contact_id}#crm-${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
+                      {task.crm_contact_id ? <a className="task-production-link" href={`/crm/${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
                       <h3>{task.title}</h3>
                       {task.description ? <CollapsibleText text={task.description} maxCharacters={170} className="task-description" /> : null}
                       <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong><CollapsibleText text={task.acceptance_criteria} maxCharacters={130} /></span></div>

@@ -40,7 +40,12 @@ export function taskReference(taskId: string) {
 
 export function crmContactDeepLink(contactId: string) {
   const id = encoded(contactId);
-  return `/crm?contact=${id}#crm-${id}`;
+  return `/crm/${id}`;
+}
+
+export function crmContactReference(contactId: string) {
+  const compact = contactId.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase();
+  return `CRM-${compact || "CONTACT"}`;
 }
 
 export function contentDeepLink(contentId: string) {

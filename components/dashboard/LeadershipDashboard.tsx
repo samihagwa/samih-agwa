@@ -1,6 +1,7 @@
 "use client";
 
 import type { Session } from "@supabase/supabase-js";
+import Link from "next/link";
 import {
   AlertTriangle, CalendarRange, CheckCircle2, CircleDashed, Clapperboard,
   LoaderCircle, LockKeyhole, Rocket, ShieldCheck, UsersRound,
@@ -153,7 +154,7 @@ export function LeadershipDashboard() {
 
       <article className="panel dashboard-risk-card">
         <header><div><p className="overline">المخاطر الآن</p><h2>ما الذي يحتاج تدخلك؟</h2></div>{metrics.overdueTasks || metrics.crmDue ? <AlertTriangle size={22} /> : <CheckCircle2 size={22} />}</header>
-        <div className="dashboard-risk-list"><a href="/tasks?filter=overdue"><span><AlertTriangle size={15} /> مهام متأخرة</span><strong>{metrics.overdueTasks}</strong></a><a href="/crm"><span><UsersRound size={15} /> متابعات عملاء متأخرة</span><strong>{metrics.crmDue}</strong></a><a href="/campaigns"><span><Rocket size={15} /> إطلاقات مفتوحة</span><strong>{metrics.activeLaunches}</strong></a><a href="/content"><span><Clapperboard size={15} /> محتوى داخل التنفيذ</span><strong>{metrics.activeContent}</strong></a></div>
+        <div className="dashboard-risk-list"><a href="/tasks?filter=overdue"><span><AlertTriangle size={15} /> مهام متأخرة</span><strong>{metrics.overdueTasks}</strong></a><Link href="/crm"><span><UsersRound size={15} /> متابعات عملاء متأخرة</span><strong>{metrics.crmDue}</strong></Link><a href="/campaigns"><span><Rocket size={15} /> إطلاقات مفتوحة</span><strong>{metrics.activeLaunches}</strong></a><a href="/content"><span><Clapperboard size={15} /> محتوى داخل التنفيذ</span><strong>{metrics.activeContent}</strong></a></div>
       </article>
     </div>
 

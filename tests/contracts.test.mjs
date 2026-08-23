@@ -1260,3 +1260,39 @@ test("entity links open the exact card across notifications, tasks, revisions, c
   assert.match(assistant, /\/tasks\?task=\$\{id\}#task-\$\{id\}/);
   assert.match(assistant, /دي المهام المفتوحة المسندة مباشرة لحسابك فقط/);
 });
+
+test("CRM customer files save communication results atomically and create the next follow-up task", async () => {
+  const [migration, edge, workspace, listWorkspace, deepLinks, types] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260823004942_crm_customer_workspace_and_follow_up_atomicity.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmCustomerWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/deep-links.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /function public\.record_crm_activity_v2/);
+  assert.match(migration, /contact_record\.version <> expected_contact_version/);
+  assert.match(migration, /follow_up_required = active_follow_up/);
+  assert.match(migration, /insert into public\.crm_activities/);
+  assert.match(migration, /insert into public\.tasks/);
+  assert.match(migration, /returning id into follow_up_task_id/);
+  assert.match(migration, /'crm\.follow_up_recorded'/);
+  assert.match(migration, /crm_sales_profiles_select_contact_access/);
+  assert.match(migration, /section_scope_crm_sales_profiles/);
+  assert.match(migration, /when 'crm_contact' then[\s\S]*'\/crm\/' \|\| new\.entity_id/);
+
+  assert.match(edge, /rpc\("record_crm_activity_v2"/);
+  assert.match(edge, /expected_contact_version: expectedVersion/);
+  assert.match(edge, /action === "save_sales_profile"/);
+  assert.match(edge, /action === "add_conversation_link"/);
+  assert.match(workspace, /expected_version: data\.contact\.version/);
+  assert.match(workspace, /حفظ النتيجة والمتابعة/);
+  assert.match(workspace, /taskDeepLink\(task\.id\)/);
+  assert.match(workspace, /ملخص السيلز/);
+  assert.match(listWorkspace, /expected_version: contact\.version/);
+  assert.match(listWorkspace, /crmContactDeepLink\(contact\.id\)/);
+  assert.match(deepLinks, /return `\/crm\/\$\{id\}`/);
+  assert.match(types, /crm_sales_profiles:/);
+  assert.match(types, /record_crm_activity_v2:/);
+});
