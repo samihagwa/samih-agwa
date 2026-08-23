@@ -74,14 +74,14 @@ type Filter = "all" | "mine" | "overdue";
 type BoardView = "current" | "archive";
 type ImportMode = "telegram" | "whales_zone_sheet";
 type IntakeHealth = Database["public"]["Functions"]["get_whales_zone_intake_health"]["Returns"][number];
-type LeadRoutingMember = {
+type IndicatorRoutingMember = {
   user_id: string;
   full_name: string;
   email: string;
   role: Membership["role"];
-  selected: boolean;
-  route_position: number | null;
-  assigned_live_leads: number;
+  is_activation_owner: boolean;
+  is_sales_owner: boolean;
+  sales_follow_up_delay_hours: number;
 };
 
 const PAGE_SIZE = 60;
@@ -136,8 +136,10 @@ export function CrmWorkspace() {
   const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [intakeHealth, setIntakeHealth] = useState<IntakeHealth | null>(null);
-  const [leadRoutingMembers, setLeadRoutingMembers] = useState<LeadRoutingMember[]>([]);
-  const [leadRoutingSelection, setLeadRoutingSelection] = useState<string[]>([]);
+  const [indicatorRoutingMembers, setIndicatorRoutingMembers] = useState<IndicatorRoutingMember[]>([]);
+  const [activationOwnerId, setActivationOwnerId] = useState("");
+  const [salesOwnerId, setSalesOwnerId] = useState("");
+  const [salesFollowUpDelayHours, setSalesFollowUpDelayHours] = useState(24);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(configured);
   const [crmLoading, setCrmLoading] = useState(false);
@@ -188,8 +190,10 @@ export function CrmWorkspace() {
     setImportBatches([]);
     setImportRows([]);
     setIntakeHealth(null);
-    setLeadRoutingMembers([]);
-    setLeadRoutingSelection([]);
+    setIndicatorRoutingMembers([]);
+    setActivationOwnerId("");
+    setSalesOwnerId("");
+    setSalesFollowUpDelayHours(24);
     setTotalCount(0);
     setActivityFormId(null);
     setIdentityFormId(null);
@@ -227,8 +231,8 @@ export function CrmWorkspace() {
           ? supabase.rpc("get_whales_zone_intake_health", { target_organization_id: organizationId })
           : Promise.resolve({ data: [] as IntakeHealth[], error: null }),
         platformAdmin
-          ? supabase.functions.invoke("crm-commands", { body: { action: "get_lead_routing", organization_id: organizationId } })
-          : Promise.resolve({ data: { members: [] as LeadRoutingMember[] }, error: null }),
+          ? supabase.functions.invoke("crm-commands", { body: { action: "get_indicator_routing", organization_id: organizationId } })
+          : Promise.resolve({ data: { members: [] as IndicatorRoutingMember[] }, error: null }),
       ]);
       if (searchResult.error) throw searchResult.error;
       if (performanceResult.error) throw performanceResult.error;
@@ -248,10 +252,12 @@ export function CrmWorkspace() {
       setTotalCount(matchedCount);
       setOwnerPerformance(performanceResult.data ?? []);
       setIntakeHealth(intakeHealthResult.data?.[0] ?? null);
-      const routingMembers = ((routingResult.data as { members?: LeadRoutingMember[] } | null)?.members ?? [])
-        .map((member) => ({ ...member, assigned_live_leads: Number(member.assigned_live_leads), route_position: member.route_position === null ? null : Number(member.route_position) }));
-      setLeadRoutingMembers(routingMembers);
-      setLeadRoutingSelection(routingMembers.filter((member) => member.selected).sort((a, b) => (a.route_position ?? 99) - (b.route_position ?? 99)).map((member) => member.user_id));
+      const routingMembers = ((routingResult.data as { members?: IndicatorRoutingMember[] } | null)?.members ?? [])
+        .map((member) => ({ ...member, sales_follow_up_delay_hours: Number(member.sales_follow_up_delay_hours) }));
+      setIndicatorRoutingMembers(routingMembers);
+      setActivationOwnerId(routingMembers.find((member) => member.is_activation_owner)?.user_id ?? "");
+      setSalesOwnerId(routingMembers.find((member) => member.is_sales_owner)?.user_id ?? "");
+      setSalesFollowUpDelayHours(routingMembers[0]?.sales_follow_up_delay_hours ?? 24);
       const batches = batchesResult.data ?? [];
       setImportBatches(batches);
       if (platformAdmin && batches.length) {
@@ -436,26 +442,26 @@ export function CrmWorkspace() {
     return true;
   }
 
-  async function saveLeadRouting() {
+  async function saveIndicatorRouting() {
     if (!workspace) return;
     setWorking(true);
     setError(null);
     setNotice(null);
     const { error: routingError } = await getSupabaseBrowserClient().functions.invoke("crm-commands", {
       body: {
-        action: "save_lead_routing",
+        action: "save_indicator_routing",
         organization_id: workspace.organization.id,
-        user_ids: leadRoutingSelection,
+        activation_owner_id: activationOwnerId,
+        sales_owner_id: salesOwnerId,
+        sales_follow_up_delay_hours: salesFollowUpDelayHours,
       },
     });
     setWorking(false);
     if (routingError) {
-      setError(await getSupabaseFunctionErrorMessage(routingError, "تعذّر حفظ توزيع تسجيلات Whales Zone."));
+      setError(await getSupabaseFunctionErrorMessage(routingError, "تعذّر حفظ مسار تفعيل المؤشر والسيلز."));
       return;
     }
-    setNotice(leadRoutingSelection.length
-      ? "تم حفظ حسابات استقبال التسجيلات الجديدة. كل عميل جديد سيذهب للأقل تحميلًا بينهم مع مهمة وإشعار مباشر."
-      : "تم إلغاء التوزيع المخصص. التسجيل الجديد سيذهب لحساب مالك المنصة كخيار آمن.");
+    setNotice("تم حفظ المسار: مهمة تفعيل فورية لمسؤول التفعيل، ومهمة متابعة مستقلة لمسؤول السيلز في موعدها.");
     await refreshSafely(workspace.organization.id);
   }
 
@@ -702,13 +708,14 @@ export function CrmWorkspace() {
       <dl><div><dt>تسجيلات مباشرة</dt><dd>{intakeHealth.live_events}</dd></div><div><dt>صفوف تاريخية</dt><dd>{intakeHealth.historical_events}</dd></div><div><dt>تم دمجها</dt><dd>{intakeHealth.deduplicated_events}</dd></div><div><dt>تعثر نسخ الشيت</dt><dd>{intakeHealth.failed_mirrors}</dd></div></dl>
     </section> : null}
 
-    {platformAdmin && leadRoutingMembers.length ? <section className="panel crm-lead-routing" aria-label="توزيع تسجيلات Whales Zone الجديدة">
-      <div className="section-heading"><div><p className="overline">Whales Zone · تسجيلات جديدة فقط</p><h2>مين يستلم العميل والمهمة؟</h2><p>اختر حسابًا أو أكثر بالبريد. كل تسجيل جديد يتوزع تلقائيًا على الأقل تحميلًا بينهم، ويصل لصاحبه إشعار يفتح نفس المهمة. العملاء التاريخيون لا يدخلون هذا التوزيع ولا ينشئون مهام.</p></div><StatusBadge tone={leadRoutingSelection.length ? "success" : "warning"}>{leadRoutingSelection.length ? `${leadRoutingSelection.length} مستلم` : "المالك افتراضيًا"}</StatusBadge></div>
-      <div className="crm-lead-routing-grid">{leadRoutingMembers.map((member) => {
-        const checked = leadRoutingSelection.includes(member.user_id);
-        return <label className={checked ? "selected" : ""} key={member.user_id}><input type="checkbox" checked={checked} onChange={(event) => setLeadRoutingSelection((current) => event.target.checked ? [...current, member.user_id] : current.filter((id) => id !== member.user_id))} /><span><strong>{member.full_name}</strong><small dir="ltr">{member.email}</small><small>{member.assigned_live_leads.toLocaleString("ar-EG")} تسجيلات مباشرة مسندة حتى الآن</small></span><StatusBadge tone={checked ? "success" : "neutral"}>{checked ? "يستلم" : "غير مختار"}</StatusBadge></label>;
-      })}</div>
-      <div className="form-actions"><Button type="button" disabled={working} onClick={() => void saveLeadRouting()}>{working ? <LoaderCircle className="spin" size={15} /> : <UserRoundCheck size={15} />} حفظ توزيع التسجيلات الجديدة</Button><small>ترتيب الاختيار لا يرسل نفس العميل لأكثر من شخص؛ لكل عميل مسؤول واحد فقط.</small></div>
+    {platformAdmin && indicatorRoutingMembers.length ? <section className="panel crm-lead-routing" aria-label="مسار تسجيلات Whales Zone الجديدة">
+      <div className="section-heading"><div><p className="overline">Whales Zone · تسجيلات جديدة فقط</p><h2>التفعيل منفصل عن متابعة السيلز</h2><p>كل تسجيل جديد ينشئ فورًا مهمتين مستقلتين وإشعارين بروابط مباشرة. إن أعيد إرسال نفس التسجيل، لن تتكرر أي مهمة.</p></div><StatusBadge tone={activationOwnerId && salesOwnerId ? "success" : "warning"}>{activationOwnerId && salesOwnerId ? "المسار جاهز" : "اختر المسؤولين"}</StatusBadge></div>
+      <div className="form-grid">
+        <label><span>مسؤول تفعيل المؤشر</span><select value={activationOwnerId} onChange={(event) => setActivationOwnerId(event.target.value)}><option value="">اختر المسؤول</option>{indicatorRoutingMembers.map((member) => <option value={member.user_id} key={member.user_id}>{member.full_name} — {member.email}</option>)}</select><small>تصل له فورًا مهمة «عملية تفعيل المؤشر» بموعد خلال ساعة.</small></label>
+        <label><span>مسؤول متابعة السيلز</span><select value={salesOwnerId} onChange={(event) => setSalesOwnerId(event.target.value)}><option value="">اختر المسؤول</option>{indicatorRoutingMembers.map((member) => <option value={member.user_id} key={member.user_id}>{member.full_name} — {member.email}</option>)}</select><small>له ملف العميل ومهمة متابعة منفصلة عن التفعيل.</small></label>
+        <label><span>المتابعة بعد التسجيل</span><select value={salesFollowUpDelayHours} onChange={(event) => setSalesFollowUpDelayHours(Number(event.target.value))}><option value={1}>بعد ساعة</option><option value={2}>بعد ساعتين</option><option value={4}>بعد 4 ساعات</option><option value={8}>بعد 8 ساعات</option><option value={24}>بعد يوم</option><option value={48}>بعد يومين</option><option value={72}>بعد 3 أيام</option></select><small>المهمة تُنشأ فورًا، وهذا هو موعد تنفيذها.</small></label>
+      </div>
+      <div className="form-actions"><Button type="button" disabled={working || !activationOwnerId || !salesOwnerId} onClick={() => void saveIndicatorRouting()}>{working ? <LoaderCircle className="spin" size={15} /> : <UserRoundCheck size={15} />} حفظ مسار عميل المؤشر</Button><small>العملاء التاريخيون المستوردون لا ينشئون مهام جديدة.</small></div>
     </section> : null}
 
     <div className="workspace-view-switch">

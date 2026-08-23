@@ -396,6 +396,35 @@ async function saveLeadRouting(body: Record<string, unknown>, context: Context) 
   return commandError(error, "تعذّر حفظ توزيع تسجيلات Whales Zone.") ?? jsonResponse({ selectedCount: data ?? 0 });
 }
 
+async function getIndicatorRouting(body: Record<string, unknown>, context: Context) {
+  const organizationId = text(body.organization_id);
+  if (!organizationId) return jsonResponse({ message: "اختر مساحة عمل صحيحة." }, 400);
+  const { data, error } = await context!.supabaseAdmin.rpc("get_crm_indicator_workflow_settings", {
+    target_user_id: context!.userClaims!.id,
+    target_organization_id: organizationId,
+  });
+  return commandError(error, "تعذّر تحميل مسؤولي تفعيل المؤشر والسيلز.") ?? jsonResponse({ members: data ?? [] });
+}
+
+async function saveIndicatorRouting(body: Record<string, unknown>, context: Context) {
+  const organizationId = text(body.organization_id);
+  const activationOwnerId = text(body.activation_owner_id);
+  const salesOwnerId = text(body.sales_owner_id);
+  const delayHours = Number(body.sales_follow_up_delay_hours);
+  if (!organizationId || !/^[0-9a-f-]{36}$/i.test(activationOwnerId) || !/^[0-9a-f-]{36}$/i.test(salesOwnerId)
+    || !Number.isInteger(delayHours) || delayHours < 1 || delayHours > 168) {
+    return jsonResponse({ message: "اختر مسؤول التفعيل ومسؤول السيلز وموعد المتابعة بشكل صحيح." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("save_crm_indicator_workflow_settings", {
+    target_user_id: context!.userClaims!.id,
+    target_organization_id: organizationId,
+    target_activation_owner_id: activationOwnerId,
+    target_sales_owner_id: salesOwnerId,
+    target_sales_follow_up_delay_hours: delayHours,
+  });
+  return commandError(error, "تعذّر حفظ مسار عميل المؤشر.") ?? jsonResponse({ saved: data === true });
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -421,6 +450,8 @@ export default {
     if (body.action === "rollback_import_batch") return rollbackImportBatch(body, context);
     if (body.action === "get_lead_routing") return getLeadRouting(body, context);
     if (body.action === "save_lead_routing") return saveLeadRouting(body, context);
+    if (body.action === "get_indicator_routing") return getIndicatorRouting(body, context);
+    if (body.action === "save_indicator_routing") return saveIndicatorRouting(body, context);
     return jsonResponse({ message: "أمر CRM غير معروف." }, 400);
   },
 };

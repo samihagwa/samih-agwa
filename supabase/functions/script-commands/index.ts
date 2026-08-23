@@ -51,8 +51,8 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/Save a manual edit before approving a writing voice sample/i, "عدّل النص بطريقتك واحفظه يدويًا أولًا، وبعدها اعتمده كعينة لصوتك."],
     [/Script already approved as a writing voice sample/i, "الاسكريبت ده معتمد بالفعل كعينة لصوتك."],
     [/Writing voice examples are full/i, "مساحة أمثلة الصوت امتلأت؛ احذف عينة قديمة من «بصمتي» ثم حاول تاني."],
-    [/Only the organization owner can hand off scripts/i, "تسليم الاسكريبت لمصنع المحتوى متاح للمالك فقط."],
-    [/Only the organization owner can permanently delete scripts/i, "الحذف النهائي متاح لمالك المنصة فقط."],
+    [/Only the assigned writer can hand off/i, "صاحب الاسكريبت فقط يقدر يسلّمه لمصنع المحتوى."],
+    [/Only the assigned writer can permanently delete/i, "صاحب الاسكريبت فقط يقدر يحذفه نهائيًا بعد الأرشفة."],
     [/Archive the script before permanently deleting it/i, "انقل الاسكريبت إلى الأرشيف أولًا قبل الحذف النهائي."],
     [/linked to the Content Factory cannot be permanently deleted/i, "هذا الاسكريبت دخل مصنع المحتوى؛ يمكن أرشفته لكن لا يمكن حذف سجل التنفيذ."],
     [/linked to research cannot be permanently deleted/i, "هذا الاسكريبت مرتبط بفكرة أو بحث؛ يمكن أرشفته لكن لا يمكن حذف أصل المرجع."],
@@ -99,6 +99,9 @@ async function createScript(body: Record<string, unknown>, context: Context) {
   const parsed = parseScript(body);
   if (!organizationId || !assignedTo || parsed.error || !parsed.data) {
     return jsonResponse({ message: parsed.error ?? "مساحة العمل أو مسؤول الاسكريبت غير محدد." }, 400);
+  }
+  if (assignedTo !== context!.userClaims!.id) {
+    return jsonResponse({ message: "كل عضو ينشئ الاسكريبت داخل مساحته الخاصة فقط." }, 403);
   }
   const { data, error } = await context!.supabaseAdmin.rpc("create_script_draft", {
     target_user_id: context!.userClaims!.id,
@@ -190,6 +193,9 @@ async function deleteScript(body: Record<string, unknown>, context: Context) {
 async function createResearch(body: Record<string, unknown>, context: Context) {
   const organizationId = text(body.organization_id);
   const assignedTo = text(body.assigned_to);
+  if (assignedTo !== context!.userClaims!.id) {
+    return jsonResponse({ message: "كل عضو يحفظ أفكاره ومراجعه داخل مساحته الخاصة فقط." }, 403);
+  }
   const kind = text(body.kind);
   const title = text(body.title);
   const sourceUrl = text(body.source_url);

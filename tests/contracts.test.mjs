@@ -123,8 +123,10 @@ test("team community chat is private, realtime, command-written, and permission 
 });
 
 test("workspace assistant answers personal work from the current account and keeps team context separate", async () => {
-  const [migration, edgeFunction, providerHelpers, component, shell, config] = await Promise.all([
+  const [migration, memory, indexes, edgeFunction, providerHelpers, component, shell, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822171303_team_chat_workspace_assistant.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260823025207_workspace_assistant_conversation_memory.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260823032808_optimize_assistant_indicator_indexes.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/workspace-assistant/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/_shared/ai-provider.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/assistant/WorkspaceAssistant.tsx", import.meta.url), "utf8"),
@@ -135,6 +137,17 @@ test("workspace assistant answers personal work from the current account and kee
   assert.match(migration, /vault\.decrypted_secrets/);
   assert.match(migration, /to service_role/);
   assert.doesNotMatch(migration, /grant execute on function public\.get_workspace_assistant_provider_runtime[^;]+authenticated/s);
+  for (const table of ["assistant_conversations", "assistant_messages"]) {
+    assert.match(memory, new RegExp(`create table public\\.${table}`));
+    assert.match(memory, new RegExp(`alter table public\\.${table} enable row level security`));
+  }
+  assert.match(memory, /user_id = \(select auth\.uid\(\)\)/);
+  assert.match(memory, /function public\.get_or_create_assistant_conversation/);
+  assert.match(memory, /function public\.append_assistant_exchange/);
+  assert.match(memory, /memory_summary = right\(/);
+  assert.doesNotMatch(memory, /grant (insert|update|delete) on table public\.assistant_/i);
+  assert.match(indexes, /assistant_messages_conversation_owner_idx/);
+  assert.match(indexes, /crm_indicator_workflows_contact_org_idx/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
   assert.match(edgeFunction, /allowed_sections/);
@@ -148,9 +161,18 @@ test("workspace assistant answers personal work from the current account and kee
   assert.match(edgeFunction, /ممنوع اختراع مهمة أو عميل أو موعد أو رابط/);
   assert.match(edgeFunction, /fetchProviderJson/);
   assert.match(edgeFunction, /assistant\.request_started/);
+  assert.match(edgeFunction, /get_or_create_assistant_conversation/);
+  assert.match(edgeFunction, /append_assistant_exchange/);
+  assert.match(edgeFunction, /\.eq\("assigned_to", actorId\)/);
+  assert.match(edgeFunction, /collectAllowedLinks/);
+  assert.match(edgeFunction, /verifiedAnswerLinks/);
   assert.match(providerHelpers, /Array\.isArray\(message\?\.content\)/);
   assert.doesNotMatch(edgeFunction, /api_key[^]*jsonResponse\(\{ answer/s);
   assert.match(component, /functions\.invoke\("workspace-assistant"/);
+  assert.match(component, /from\("assistant_conversations"\)/);
+  assert.match(component, /from\("assistant_messages"\)/);
+  assert.match(component, /conversation_id/);
+  assert.match(component, /assistant-message-links/);
   assert.match(component, /payload\.source\?\.label/);
   assert.match(component, /لا يغيّر أي بيانات/);
   assert.match(shell, /WorkspaceAssistant/);
@@ -165,13 +187,15 @@ test("team workspace contains mobile overflow inside the report instead of float
   assert.match(css, /\.team-workspace \.presence-grid dl > div \{ align-items: flex-start; flex-direction: column/);
 });
 
-test("script studio is private by assignee, owner-visible, versioned, AI-assisted, and handed off atomically", async () => {
-  const [migration, calibration, stagedAi, captionHandoff, archiveDelete, commands, ai, workspace, editor, content, contract, navigation, presence, team, types, config] = await Promise.all([
+test("script studio is private to each assignee, versioned, AI-assisted, and explicitly handed off", async () => {
+  const [migration, calibration, stagedAi, captionHandoff, archiveDelete, strictPrivacy, policyGrant, commands, ai, workspace, editor, content, contract, navigation, presence, team, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821010000_content_script_studio.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821023326_script_voice_calibration.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821032746_stage_script_ai_and_production_pack.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821122852_carry_selected_caption_to_content.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260823023146_script_archive_delete_controls.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260823030130_strict_private_scripts_and_self_handoff.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260823032533_grant_script_policy_helper_execution.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
@@ -218,7 +242,13 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(commands, /delete_archived_script/);
   assert.match(commands, /body\.action === "delete_script"/);
   assert.match(archiveDelete, /function public\.delete_archived_script/);
-  assert.match(archiveDelete, /Only the organization owner can permanently delete scripts/);
+  assert.match(strictPrivacy, /script\.assigned_to = \(select auth\.uid\(\)\)/);
+  assert.match(strictPrivacy, /target_assigned_to = target_user_id/);
+  assert.match(strictPrivacy, /Only the assigned writer can hand off this private script/);
+  assert.match(strictPrivacy, /Only the assigned writer can permanently delete this private script/);
+  assert.doesNotMatch(strictPrivacy, /private\.is_org_owner_actor\(target_user_id/);
+  assert.match(policyGrant, /grant execute on function private\.actor_can_access_any_section\(uuid, uuid, text\[\]\)/);
+  assert.match(policyGrant, /to authenticated/);
   assert.match(archiveDelete, /status <> 'archived'/);
   assert.match(archiveDelete, /content_item_id is not null/);
   assert.match(archiveDelete, /script_research_items/);
@@ -226,6 +256,8 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(archiveDelete, /from public, anon, authenticated/);
   assert.match(archiveDelete, /to service_role/);
   assert.match(types, /delete_archived_script:/);
+  assert.match(workspace, /لا يستطيع أي عضو آخر، بما في ذلك مدير المنصة/);
+  assert.match(editor, /assignedWriter/);
   assert.match(ai, /get_script_ai_provider_runtime/);
   assert.match(ai, /openai_responses/);
   assert.match(ai, /response_format/);
@@ -271,7 +303,7 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(workspace, /changeScriptStatus\(script, "archived"\)/);
   assert.match(editor, /تسليم لمصنع المحتوى/);
   assert.match(editor, /حذف نهائي/);
-  assert.match(editor, /إما يُنشأ أصل المحتوى/);
+  assert.match(editor, /إما تُنشأ كل المهام معًا/);
   assert.match(editor, /functions\.invoke/);
   assert.match(editor, /بدون قصة شخصية — الافتراضي/);
   assert.match(editor, /generation_direction/);
@@ -365,10 +397,11 @@ test("browser configuration cannot declare a service role variable", async () =>
 });
 
 test("Whales Zone registrations are idempotent, CRM-first, historically importable, and publicly hardened", async () => {
-  const [migration, reimportFix, ambiguityFix, intake, commands, parser, workspace, landing, types, config] = await Promise.all([
+  const [migration, reimportFix, ambiguityFix, splitWorkflow, intake, commands, parser, workspace, landing, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822191033_whales_zone_lead_intake.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260822193056_make_whales_zone_reimport_safe.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260822193245_disambiguate_whales_zone_reimport.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260823030656_whales_zone_activation_and_sales_routing.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/lead-intake/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/crm-import.ts", import.meta.url), "utf8"),
@@ -390,6 +423,14 @@ test("Whales Zone registrations are idempotent, CRM-first, historically importab
   assert.match(reimportFix, /existing_intake/);
   assert.match(ambiguityFix, /row_external_id/);
   assert.doesNotMatch(ambiguityFix, /intake\.external_id = external_id\b/);
+  assert.match(splitWorkflow, /crm_work_kind/);
+  assert.match(splitWorkflow, /tasks_one_open_crm_work_kind_idx/);
+  assert.match(splitWorkflow, /create table public\.crm_indicator_workflow_settings/);
+  assert.match(splitWorkflow, /create table public\.crm_indicator_workflows/);
+  assert.match(splitWorkflow, /intake_event_id uuid primary key/);
+  assert.match(splitWorkflow, /عملية تفعيل المؤشر/);
+  assert.match(splitWorkflow, /متابعة سيلز/);
+  assert.match(splitWorkflow, /on conflict \(intake_event_id\) do nothing/);
 
   assert.match(intake, /allowedOrigins/);
   assert.match(intake, /company/);
@@ -398,16 +439,25 @@ test("Whales Zone registrations are idempotent, CRM-first, historically importab
   assert.match(intake, /complete_whales_zone_sheet_mirror/);
   assert.match(intake, /sheetMirrorUrl/);
   assert.match(commands, /import_whales_zone_sheet_batch/);
+  assert.match(commands, /get_indicator_routing/);
+  assert.match(commands, /save_indicator_routing/);
   assert.match(parser, /parseWhalesZoneSheetImport/);
   assert.match(parser, /اليوزرنيم/);
   assert.match(workspace, /Google Sheet · Whales Zone/);
   assert.match(workspace, /get_whales_zone_intake_health/);
   assert.match(workspace, /Whales Zone مرتبط بالـCRM/);
+  assert.match(workspace, /مسؤول تفعيل المؤشر/);
+  assert.match(workspace, /مسؤول متابعة السيلز/);
+  assert.match(workspace, /المتابعة بعد التسجيل/);
   assert.match(landing, /functions\/v1\/lead-intake/);
   assert.match(landing, /await fetch/);
   assert.doesNotMatch(landing, /mode:\s*["']no-cors["']/);
   assert.match(types, /crm_lead_intake_events:/);
   assert.match(types, /get_whales_zone_intake_health:/);
+  assert.match(types, /crm_indicator_workflow_settings:/);
+  assert.match(types, /crm_indicator_workflows:/);
+  assert.match(types, /get_crm_indicator_workflow_settings:/);
+  assert.match(types, /save_crm_indicator_workflow_settings:/);
   assert.match(config, /\[functions\.lead-intake\][\s\S]*verify_jwt = false/);
   assert.match(config, /\[functions\.crm-commands\][\s\S]*verify_jwt = true/);
 });

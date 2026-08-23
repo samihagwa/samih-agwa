@@ -79,6 +79,108 @@ export type Database = {
           },
         ]
       }
+      assistant_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string | null
+          memory_summary: string
+          message_count: number
+          organization_id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          memory_summary?: string
+          message_count?: number
+          organization_id: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          memory_summary?: string
+          message_count?: number
+          organization_id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_conversations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assistant_messages: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          id: number
+          links: Json
+          organization_id: string
+          provider_label: string | null
+          role: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          conversation_id: string
+          created_at?: string
+          id?: never
+          links?: Json
+          organization_id: string
+          provider_label?: string | null
+          role: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          id?: never
+          links?: Json
+          organization_id?: string
+          provider_label?: string | null
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_events: {
         Row: {
           action: string
@@ -1698,6 +1800,151 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_indicator_workflow_settings: {
+        Row: {
+          activation_owner_id: string
+          created_at: string
+          organization_id: string
+          sales_follow_up_delay_hours: number
+          sales_owner_id: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          activation_owner_id: string
+          created_at?: string
+          organization_id: string
+          sales_follow_up_delay_hours?: number
+          sales_owner_id: string
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          activation_owner_id?: string
+          created_at?: string
+          organization_id?: string
+          sales_follow_up_delay_hours?: number
+          sales_owner_id?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_indicator_workflow_settings_activation_owner_id_fkey"
+            columns: ["activation_owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_indicator_workflow_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_indicator_workflow_settings_sales_owner_id_fkey"
+            columns: ["sales_owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_indicator_workflow_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_indicator_workflows: {
+        Row: {
+          activation_owner_id: string
+          activation_task_id: string | null
+          completed_at: string | null
+          contact_id: string
+          created_at: string
+          intake_event_id: string
+          organization_id: string
+          sales_owner_id: string
+          sales_task_id: string | null
+        }
+        Insert: {
+          activation_owner_id: string
+          activation_task_id?: string | null
+          completed_at?: string | null
+          contact_id: string
+          created_at?: string
+          intake_event_id: string
+          organization_id: string
+          sales_owner_id: string
+          sales_task_id?: string | null
+        }
+        Update: {
+          activation_owner_id?: string
+          activation_task_id?: string | null
+          completed_at?: string | null
+          contact_id?: string
+          created_at?: string
+          intake_event_id?: string
+          organization_id?: string
+          sales_owner_id?: string
+          sales_task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_indicator_workflows_activation_owner_id_fkey"
+            columns: ["activation_owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_indicator_workflows_activation_task_id_fkey"
+            columns: ["activation_task_id"]
+            isOneToOne: true
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_indicator_workflows_contact_org_fkey"
+            columns: ["contact_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "crm_indicator_workflows_intake_event_id_fkey"
+            columns: ["intake_event_id"]
+            isOneToOne: true
+            referencedRelation: "crm_lead_intake_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_indicator_workflows_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_indicator_workflows_sales_owner_id_fkey"
+            columns: ["sales_owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_indicator_workflows_sales_task_id_fkey"
+            columns: ["sales_task_id"]
+            isOneToOne: true
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
         ]
@@ -3481,6 +3728,7 @@ export type Database = {
           created_at: string
           created_by: string
           crm_contact_id: string | null
+          crm_work_kind: string | null
           description: string | null
           due_at: string
           id: string
@@ -3505,6 +3753,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           crm_contact_id?: string | null
+          crm_work_kind?: string | null
           description?: string | null
           due_at: string
           id?: string
@@ -3529,6 +3778,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           crm_contact_id?: string | null
+          crm_work_kind?: string | null
           description?: string | null
           due_at?: string
           id?: string
@@ -3804,6 +4054,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      append_assistant_exchange: {
+        Args: {
+          assistant_answer: string
+          assistant_links?: Json
+          assistant_provider_label: string
+          target_conversation_id: string
+          target_organization_id: string
+          target_user_id: string
+          user_question: string
+        }
+        Returns: {
+          assistant_message_id: number
+          conversation_id: string
+          user_message_id: number
+        }[]
+      }
       accept_team_invitation: {
         Args: {
           plain_token: string
@@ -4541,6 +4807,28 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_crm_indicator_workflow_settings: {
+        Args: { target_organization_id: string; target_user_id: string }
+        Returns: {
+          email: string
+          full_name: string
+          is_activation_owner: boolean
+          is_sales_owner: boolean
+          role: Database["public"]["Enums"]["app_role"]
+          sales_follow_up_delay_hours: number
+          user_id: string
+        }[]
+      }
+      get_or_create_assistant_conversation: {
+        Args: { target_organization_id: string; target_user_id: string }
+        Returns: {
+          conversation_id: string
+          last_message_at: string | null
+          memory_summary: string
+          message_count: number
+          title: string
+        }[]
+      }
       get_crm_owner_performance: {
         Args: { target_organization_id: string; target_range_days: number }
         Returns: {
@@ -4687,8 +4975,8 @@ export type Database = {
         Returns: {
           contact_id: string | null
           event_id: string
-          mirror_status: string
           outcome: string
+          sheet_mirror_status: string
           should_mirror: boolean
         }[]
       }
@@ -4900,6 +5188,16 @@ export type Database = {
           target_user_id: string
         }
         Returns: number
+      }
+      save_crm_indicator_workflow_settings: {
+        Args: {
+          target_activation_owner_id: string
+          target_organization_id: string
+          target_sales_follow_up_delay_hours: number
+          target_sales_owner_id: string
+          target_user_id: string
+        }
+        Returns: boolean
       }
       save_launch_gate_document: {
         Args: {

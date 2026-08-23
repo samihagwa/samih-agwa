@@ -135,7 +135,6 @@ export function ScriptsWorkspace() {
     return new URL(window.location.href).searchParams.get("tab") === "radar" || currentUuidDeepLink("research", "research") ? "radar" : "scripts";
   });
   const [search, setSearch] = useState("");
-  const [personFilter, setPersonFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("active");
   const [showCreateScript, setShowCreateScript] = useState(false);
   const [showCreateResearch, setShowCreateResearch] = useState(false);
@@ -156,9 +155,9 @@ export function ScriptsWorkspace() {
   const loadRows = useCallback(async (base: Omit<Workspace, "scripts" | "research" | "voice" | "productionTasks">) => {
     const supabase = getSupabaseBrowserClient();
     const [scriptsResult, researchResult, voiceResult] = await Promise.all([
-      supabase.from("scripts").select("*").eq("organization_id", base.organization.id).order("updated_at", { ascending: false }),
-      supabase.from("script_research_items").select("*").eq("organization_id", base.organization.id).order("updated_at", { ascending: false }),
-      supabase.from("script_voice_profiles").select("*").eq("organization_id", base.organization.id).maybeSingle(),
+      supabase.from("scripts").select("*").eq("organization_id", base.organization.id).eq("assigned_to", base.membership.user_id).order("updated_at", { ascending: false }),
+      supabase.from("script_research_items").select("*").eq("organization_id", base.organization.id).eq("assigned_to", base.membership.user_id).order("updated_at", { ascending: false }),
+      supabase.from("script_voice_profiles").select("*").eq("organization_id", base.organization.id).eq("user_id", base.membership.user_id).maybeSingle(),
     ]);
     if (scriptsResult.error) throw scriptsResult.error;
     if (researchResult.error) throw researchResult.error;
@@ -234,17 +233,16 @@ export function ScriptsWorkspace() {
     const query = search.trim().toLocaleLowerCase("ar");
     return workspace.scripts.filter((script) => {
       const matchesSearch = !query || [script.title, script.objective, script.spoken_script, script.caption, script.content_pillar ?? ""].some((value) => value.toLocaleLowerCase("ar").includes(query));
-      const matchesPerson = personFilter === "all" || script.assigned_to === personFilter;
       const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? script.status !== "archived" : script.status === statusFilter);
-      return matchesSearch && matchesPerson && matchesStatus;
+      return matchesSearch && matchesStatus;
     });
-  }, [personFilter, search, statusFilter, workspace]);
+  }, [search, statusFilter, workspace]);
 
   async function createScript(event: FormEvent) {
-    event.preventDefault(); if (!workspace) return;
+    event.preventDefault(); if (!workspace || !session) return;
     setSaving(true); setError(null); setNotice(null);
     try {
-      const result = await invokeCommand({ action: "create_script", organization_id: workspace.organization.id, assigned_to: assignedTo, ...scriptForm, duration_seconds: Number(scriptForm.duration_seconds) });
+      const result = await invokeCommand({ action: "create_script", organization_id: workspace.organization.id, assigned_to: session.user.id, ...scriptForm, duration_seconds: Number(scriptForm.duration_seconds) });
       setScriptForm(initialScriptForm); setShowCreateScript(false);
       await refresh();
       const id = String(result.scriptId ?? "");
@@ -276,10 +274,10 @@ export function ScriptsWorkspace() {
   }
 
   async function createResearch(event: FormEvent) {
-    event.preventDefault(); if (!workspace) return;
+    event.preventDefault(); if (!workspace || !session) return;
     setSaving(true); setError(null); setNotice(null);
     try {
-      await invokeCommand({ action: "create_research", organization_id: workspace.organization.id, assigned_to: researchAssignedTo, ...researchForm, original_angles: lines(researchForm.original_angles) });
+      await invokeCommand({ action: "create_research", organization_id: workspace.organization.id, assigned_to: session.user.id, ...researchForm, original_angles: lines(researchForm.original_angles) });
       setResearchForm({ kind: "idea", title: "", source_url: "", raw_notes: "", transcript: "", hook: "", transferable_principle: "", why_it_works: "", original_angles: "", performance_signal: "", brand_fit: "", freshness: "" });
       setShowCreateResearch(false); setNotice("تم حفظ العنصر في الرادار اليدوي."); await refresh();
     } catch (createError) { setError(createError instanceof Error ? createError.message : "تعذّر حفظ الفكرة."); }
@@ -341,7 +339,6 @@ export function ScriptsWorkspace() {
   if (!session) return <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><h2>سجّل الدخول أولًا</h2><p>الاسكريبتات خاصة ومحمية بحساب كل عضو.</p></div><Button href="/tasks">تسجيل الدخول</Button></section>;
   if (!workspace) return <section className="workspace-state"><UsersRound size={27} /><div><h2>لا توجد مساحة عمل</h2><p>أنشئ مساحة الشركة من قسم المهام أولًا.</p></div></section>;
 
-  const owner = workspace.membership.role === "owner";
   return <section className="scripts-workspace">
     <div className="scripts-tabs" role="tablist" aria-label="أقسام استوديو الاسكريبتات">
       <button type="button" role="tab" aria-selected={tab === "scripts"} className={tab === "scripts" ? "active" : ""} onClick={() => setTab("scripts")}><FilePenLine size={16} /> اسكريبتاتي</button>
@@ -354,12 +351,12 @@ export function ScriptsWorkspace() {
 
     {tab === "scripts" ? <>
       <section className="panel scripts-control-panel">
-        <div className="section-heading"><div><p className="overline">المساحة الخاصة</p><h2>{owner ? "اسكريبتات الفريق" : "اسكريبتاتي"}</h2><p>{owner ? "ترى الجميع بصفتك المالك. كل عضو آخر يرى ملفاته وحده." : "لا يستطيع أي عضو آخر فتح اسكريبتاتك. المالك فقط لديه رؤية تشغيلية كاملة."}</p></div><Button type="button" onClick={() => setShowCreateScript((value) => !value)}><Plus size={15} /> اسكريبت جديد</Button></div>
-        <div className="scripts-filters"><label className="search-field"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث في العنوان أو النص أو الكابشن..." /></label>{owner ? <select aria-label="تصفية حسب العضو" value={personFilter} onChange={(event) => setPersonFilter(event.target.value)}><option value="all">كل الأعضاء</option>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select> : null}<select aria-label="تصفية حسب الحالة" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="active">العمل الحالي</option><option value="draft">قيد الكتابة</option><option value="ready_to_record">جاهز للتصوير</option><option value="handed_off">متابعة التنفيذ</option><option value="archived">الأرشيف</option><option value="all">كل الحالات</option></select></div>
+        <div className="section-heading"><div><p className="overline">المساحة الخاصة</p><h2>اسكريبتاتي</h2><p>لا يستطيع أي عضو آخر، بما في ذلك مدير المنصة، فتح اسكريبتاتك أو بصمتك. عند التسليم فقط تُنشأ نسخة تشغيلية مشتركة في مصنع المحتوى.</p></div><Button type="button" onClick={() => setShowCreateScript((value) => !value)}><Plus size={15} /> اسكريبت جديد</Button></div>
+        <div className="scripts-filters"><label className="search-field"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث في العنوان أو النص أو الكابشن..." /></label><select aria-label="تصفية حسب الحالة" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="active">العمل الحالي</option><option value="draft">قيد الكتابة</option><option value="ready_to_record">جاهز للتصوير</option><option value="handed_off">متابعة التنفيذ</option><option value="archived">الأرشيف</option><option value="all">كل الحالات</option></select></div>
         {showCreateScript ? <form className="script-create-form" onSubmit={(event) => void createScript(event)}>
           <label><span>عنوان الاسكريبت</span><input required minLength={3} value={scriptForm.title} onChange={(event) => setScriptForm((form) => ({ ...form, title: event.target.value }))} /></label>
           <label><span>طريقة البداية</span><select value={scriptForm.input_mode} onChange={(event) => setScriptForm((form) => ({ ...form, input_mode: event.target.value }))}>{Object.entries(scriptInputModeConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label><span>مسؤول الاسكريبت</span><select value={assignedTo} disabled={!owner} onChange={(event) => setAssignedTo(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+          <label><span>مسؤول الاسكريبت</span><select value={assignedTo} disabled>{workspace.people.filter((person) => person.id === session.user.id).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select><small>المسودة تُحفظ تلقائيًا في مساحتك الخاصة.</small></label>
           <label><span>المنصة</span><select value={scriptForm.platform} onChange={(event) => setScriptForm((form) => ({ ...form, platform: event.target.value }))}><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="telegram">Telegram</option><option value="other">أخرى</option></select></label>
           <label><span>المدة المتوقعة بالثواني</span><input type="number" min={10} max={1800} value={scriptForm.duration_seconds} onChange={(event) => setScriptForm((form) => ({ ...form, duration_seconds: event.target.value }))} /></label>
           <label><span>سلسلة أو عمود محتوى — اختياري</span><input value={scriptForm.content_pillar} onChange={(event) => setScriptForm((form) => ({ ...form, content_pillar: event.target.value }))} /></label>
@@ -370,12 +367,12 @@ export function ScriptsWorkspace() {
           <div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <FilePenLine size={15} />} إنشاء وفتح المحرر</Button><Button type="button" variant="ghost" onClick={() => setShowCreateScript(false)}>إلغاء</Button></div>
         </form> : null}
       </section>
-      {statusFilter === "archived" ? <aside className="script-archive-note"><Archive size={17} /><div><strong>الأرشيف خارج ضغط الشغل اليومي</strong><p>تقدر تسترجع أي اسكريبت غير مُسلّم. الحذف النهائي للمالك فقط، ولا يشمل أي اسكريبت مرتبط بالإنتاج أو بمرجع.</p></div></aside> : null}
+      {statusFilter === "archived" ? <aside className="script-archive-note"><Archive size={17} /><div><strong>الأرشيف خارج ضغط الشغل اليومي</strong><p>تقدر تسترجع أو تحذف نهائيًا اسكريبتاتك غير المرتبطة بالإنتاج أو بمرجع محفوظ.</p></div></aside> : null}
       <div className="scripts-grid">{filteredScripts.length ? filteredScripts.map((script) => {
         const config = scriptCardStatus(script, workspace.productionTasks);
         const working = workingScriptId === script.id;
-        const canArchive = script.status !== "archived" && (script.status !== "handed_off" || owner);
-        return <article className="script-card" data-status={script.status} key={script.id}><header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{script.objective}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header><dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl><footer><span>{formatScriptDate(script.updated_at)}</span><div className="script-card-actions"><a className="button button-secondary" href={`/scripts/${script.id}`}>{script.status === "handed_off" ? "متابعة التنفيذ" : "فتح الاسكريبت"}</a>{canArchive ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "archived")}>{working ? <LoaderCircle className="spin" size={14} /> : <Archive size={14} />} أرشفة</button> : null}{script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} استرجاع</button> : null}{owner && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button danger-text" disabled={working} onClick={() => void deleteScript(script)}><Trash2 size={14} /> حذف نهائي</button> : null}</div></footer></article>;
+        const canArchive = script.status !== "archived";
+        return <article className="script-card" data-status={script.status} key={script.id}><header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{script.objective}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header><dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl><footer><span>{formatScriptDate(script.updated_at)}</span><div className="script-card-actions"><a className="button button-secondary" href={`/scripts/${script.id}`}>{script.status === "handed_off" ? "متابعة التنفيذ" : "فتح الاسكريبت"}</a>{canArchive ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "archived")}>{working ? <LoaderCircle className="spin" size={14} /> : <Archive size={14} />} أرشفة</button> : null}{script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} استرجاع</button> : null}{script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button danger-text" disabled={working} onClick={() => void deleteScript(script)}><Trash2 size={14} /> حذف نهائي</button> : null}</div></footer></article>;
       }) : emptyState(Archive, "لا توجد اسكريبتات مطابقة", statusFilter === "active" ? "ابدأ باسكريبت جديد أو غيّر البحث والفلترة." : "غيّر الفلترة لرؤية العمل الحالي أو الأرشيف.")}</div>
     </> : null}
 
@@ -385,7 +382,7 @@ export function ScriptsWorkspace() {
         <aside className="script-trust-note"><Bot size={18} /><div><strong>لا يوجد اشتراك مدفوع أو سحب خفي</strong><p>الصق الرابط أو الفكرة يدويًا الآن. سنضيف الأتمتة لاحقًا بدون تغيير شكل بنك الأفكار أو خصوصيته.</p></div></aside>
         {showCreateResearch ? <form className="research-create-form" onSubmit={(event) => void createResearch(event)}>
           <label><span>النوع</span><select value={researchForm.kind} onChange={(event) => setResearchForm((form) => ({ ...form, kind: event.target.value }))}>{Object.entries(scriptResearchKindConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label><span>المسؤول</span><select value={researchAssignedTo} disabled={!owner} onChange={(event) => setResearchAssignedTo(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+          <label><span>المسؤول</span><select value={researchAssignedTo} disabled>{workspace.people.filter((person) => person.id === session.user.id).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select><small>الفكرة خاصة بحسابك.</small></label>
           <label className="span-2"><span>عنوان الفكرة</span><input required minLength={3} value={researchForm.title} onChange={(event) => setResearchForm((form) => ({ ...form, title: event.target.value }))} /></label>
           <label className="span-2"><span>رابط المصدر — اختياري</span><input type="url" value={researchForm.source_url} onChange={(event) => setResearchForm((form) => ({ ...form, source_url: event.target.value }))} /></label>
           <label><span>الهوك الأصلي</span><textarea value={researchForm.hook} onChange={(event) => setResearchForm((form) => ({ ...form, hook: event.target.value }))} /></label>
