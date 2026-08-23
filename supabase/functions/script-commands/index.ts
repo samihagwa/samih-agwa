@@ -52,6 +52,10 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/Script already approved as a writing voice sample/i, "الاسكريبت ده معتمد بالفعل كعينة لصوتك."],
     [/Writing voice examples are full/i, "مساحة أمثلة الصوت امتلأت؛ احذف عينة قديمة من «بصمتي» ثم حاول تاني."],
     [/Only the organization owner can hand off scripts/i, "تسليم الاسكريبت لمصنع المحتوى متاح للمالك فقط."],
+    [/Only the organization owner can permanently delete scripts/i, "الحذف النهائي متاح لمالك المنصة فقط."],
+    [/Archive the script before permanently deleting it/i, "انقل الاسكريبت إلى الأرشيف أولًا قبل الحذف النهائي."],
+    [/linked to the Content Factory cannot be permanently deleted/i, "هذا الاسكريبت دخل مصنع المحتوى؛ يمكن أرشفته لكن لا يمكن حذف سجل التنفيذ."],
+    [/linked to research cannot be permanently deleted/i, "هذا الاسكريبت مرتبط بفكرة أو بحث؛ يمكن أرشفته لكن لا يمكن حذف أصل المرجع."],
     [/changed in another session/i, "الاسكريبت اتعدل من جلسة أخرى. حدّث الصفحة قبل الحفظ."],
     [/Handed-off or archived scripts are read-only/i, "الاسكريبت المُسلّم أو المؤرشف للقراءة فقط."],
     [/Mark the script ready to record/i, "حوّل الاسكريبت إلى «جاهز للتسجيل» قبل تسليمه للمصنع."],
@@ -167,6 +171,20 @@ async function changeStatus(body: Record<string, unknown>, context: Context) {
     expected_edit_version: expectedVersion,
   });
   return commandError(error, "تعذّر تغيير حالة الاسكريبت.") ?? jsonResponse({ editVersion: data });
+}
+
+async function deleteScript(body: Record<string, unknown>, context: Context) {
+  const scriptId = text(body.script_id);
+  const expectedVersion = Number(body.expected_edit_version);
+  if (!scriptId || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+    return jsonResponse({ message: "الاسكريبت أو رقم نسخته غير صالح." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("delete_archived_script", {
+    target_user_id: context!.userClaims!.id,
+    target_script_id: scriptId,
+    expected_edit_version: expectedVersion,
+  });
+  return commandError(error, "تعذّر حذف الاسكريبت نهائيًا.") ?? jsonResponse({ deleted: data === true });
 }
 
 async function createResearch(body: Record<string, unknown>, context: Context) {
@@ -297,6 +315,7 @@ export default {
     if (body.action === "create_script") return createScript(body, context);
     if (body.action === "save_script") return saveScript(body, context);
     if (body.action === "change_status") return changeStatus(body, context);
+    if (body.action === "delete_script") return deleteScript(body, context);
     if (body.action === "create_research") return createResearch(body, context);
     if (body.action === "research_to_script") return researchToScript(body, context);
     if (body.action === "research_variant_to_script") return researchVariantToScript(body, context);

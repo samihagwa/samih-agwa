@@ -166,11 +166,12 @@ test("team workspace contains mobile overflow inside the report instead of float
 });
 
 test("script studio is private by assignee, owner-visible, versioned, AI-assisted, and handed off atomically", async () => {
-  const [migration, calibration, stagedAi, captionHandoff, commands, ai, workspace, editor, content, contract, navigation, presence, team, types, config] = await Promise.all([
+  const [migration, calibration, stagedAi, captionHandoff, archiveDelete, commands, ai, workspace, editor, content, contract, navigation, presence, team, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821010000_content_script_studio.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821023326_script_voice_calibration.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821032746_stage_script_ai_and_production_pack.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821122852_carry_selected_caption_to_content.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260823023146_script_archive_delete_controls.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
@@ -214,6 +215,17 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(commands, /createSupabaseContext/);
   assert.match(commands, /auth: "user"/);
   assert.match(commands, /handoff_script_to_content/);
+  assert.match(commands, /delete_archived_script/);
+  assert.match(commands, /body\.action === "delete_script"/);
+  assert.match(archiveDelete, /function public\.delete_archived_script/);
+  assert.match(archiveDelete, /Only the organization owner can permanently delete scripts/);
+  assert.match(archiveDelete, /status <> 'archived'/);
+  assert.match(archiveDelete, /content_item_id is not null/);
+  assert.match(archiveDelete, /script_research_items/);
+  assert.match(archiveDelete, /'script\.deleted'/);
+  assert.match(archiveDelete, /from public, anon, authenticated/);
+  assert.match(archiveDelete, /to service_role/);
+  assert.match(types, /delete_archived_script:/);
   assert.match(ai, /get_script_ai_provider_runtime/);
   assert.match(ai, /openai_responses/);
   assert.match(ai, /response_format/);
@@ -254,7 +266,11 @@ test("script studio is private by assignee, owner-visible, versioned, AI-assiste
   assert.match(workspace, /الأفكار والرادار/);
   assert.match(workspace, /بصمتي/);
   assert.match(workspace, /Apify/);
+  assert.match(workspace, /حذف نهائي/);
+  assert.match(workspace, /window\.confirm/);
+  assert.match(workspace, /changeScriptStatus\(script, "archived"\)/);
   assert.match(editor, /تسليم لمصنع المحتوى/);
+  assert.match(editor, /حذف نهائي/);
   assert.match(editor, /إما يُنشأ أصل المحتوى/);
   assert.match(editor, /functions\.invoke/);
   assert.match(editor, /بدون قصة شخصية — الافتراضي/);
@@ -1063,10 +1079,12 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
 });
 
 test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {
-  const [migration, commands, teamWorkspace, joinWorkspace, joinPage, config, readme] = await Promise.all([
+  const [migration, commands, teamWorkspace, onboardingGate, appShell, joinWorkspace, joinPage, config, readme] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821220304_team_onboarding_and_access_control.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/team-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/team/TeamWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/team/MemberOnboardingGate.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/team/JoinWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/join/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
@@ -1099,6 +1117,11 @@ test("team onboarding is owner-controlled, email-bound, auditable, and sends not
   assert.match(teamWorkspace, /لم نرسل بريدًا أو رسالة لأي شخص/);
   assert.match(teamWorkspace, /إيقاف الوصول/);
   assert.match(teamWorkspace, /3 اتفاقات قبل استلام الشغل/);
+  assert.match(onboardingGate, /3 اتفاقات قبل استلام الشغل/);
+  assert.match(onboardingGate, /acknowledge_onboarding/);
+  assert.match(onboardingGate, /لا يغيّر دورك أو صلاحياتك/);
+  assert.match(appShell, /!membership\.onboarding_completed_at/);
+  assert.match(appShell, /MemberOnboardingGate/);
   assert.match(joinWorkspace, /request-access-link/);
   assert.match(joinWorkspace, /invitation_token/);
   assert.match(joinWorkspace, /accept_invitation/);
@@ -1126,7 +1149,7 @@ test("workspace is invite-only, section-scoped, and enforced before rendering or
   ]);
 
   assert.match(shell, /\.from\("memberships"\)/);
-  assert.match(shell, /\.select\("role, status, allowed_sections"\)/);
+  assert.match(shell, /\.select\("organization_id, role, status, allowed_sections, onboarding_acknowledgements, onboarding_completed_at"\)/);
   assert.match(shell, /if \(!session\) return <LoginWorkspace/);
   assert.match(shell, /sectionAllowed \? children/);
   assert.match(shell, /<SidebarNav allowedSections=\{allowedSections\}/);

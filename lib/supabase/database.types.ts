@@ -3918,6 +3918,14 @@ export type Database = {
         }
         Returns: number
       }
+      delete_archived_script: {
+        Args: {
+          expected_edit_version: number
+          target_script_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
       change_timeline_cue: {
         Args: {
           target_completed: boolean

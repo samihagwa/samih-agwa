@@ -562,6 +562,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .team-workspace .presence-grid > article, .team-workspace .presence-privacy-note > div,
 .team-workspace .team-report-panel { min-width: 0; max-width: 100%; }
 .team-onboarding-panel { border-color: #e4cc8c; background: linear-gradient(135deg, #fffaf0, rgba(255,255,255,.94)); }
+.team-onboarding-gate { width: 100%; padding-inline: 18px; }
+.team-onboarding-gate .team-onboarding-panel { width: min(980px, 100%); }
+.team-onboarding-gate .team-onboarding-panel > .button-ghost { margin-top: 12px; }
 .onboarding-step-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .onboarding-step-grid > article { min-width: 0; padding: 14px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 9px; border: 1px solid var(--line); border-radius: 13px; background: var(--paper); }
 .onboarding-step-grid > article.complete { border-color: #b3dbd5; background: #f3faf7; }
@@ -660,6 +663,12 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .script-card > footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .script-card > footer > span { color: var(--ink-500); font-size: 10px; }
 .script-card > footer .button { min-height: 34px; padding: 6px 10px; font-size: 11px; }
+.script-card-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
+.script-card-actions .text-button { min-height: 34px; padding: 6px 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; }
+.script-archive-note { margin-bottom: 13px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 9px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--canvas); color: var(--ink-700); }
+.script-archive-note > svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal-700); }
+.script-archive-note strong { display: block; color: var(--ink-900); font-size: 13px; }
+.script-archive-note p { margin: 2px 0 0; font-size: 11px; line-height: 1.7; }
 .scripts-empty { min-height: 190px; grid-column: 1 / -1; padding: 25px; display: grid; place-items: center; align-content: center; gap: 7px; border: 1px dashed var(--line-strong); border-radius: 15px; background: rgba(255,255,255,.45); text-align: center; }
 .scripts-empty svg { color: var(--teal-700); }
 .scripts-empty strong { font-size: 14px; }

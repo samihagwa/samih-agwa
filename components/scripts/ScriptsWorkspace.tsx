@@ -1,7 +1,7 @@
 "use client";
 
 import type { Session } from "@supabase/supabase-js";
-import { Archive, Bot, FilePenLine, Lightbulb, LoaderCircle, LockKeyhole, Plus, Radar, Search, ShieldCheck, Sparkles, UserRound, UsersRound } from "lucide-react";
+import { Archive, Bot, FilePenLine, Lightbulb, LoaderCircle, LockKeyhole, Plus, Radar, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, UserRound, UsersRound } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentUuidDeepLink } from "../../lib/deep-links";
 import { formatScriptDate, lines, scriptInputModeConfig, scriptResearchKindConfig, scriptStatusConfig } from "../../lib/scripts";
@@ -144,6 +144,7 @@ export function ScriptsWorkspace() {
   const [researchForm, setResearchForm] = useState({ kind: "idea", title: "", source_url: "", raw_notes: "", transcript: "", hook: "", transferable_principle: "", why_it_works: "", original_angles: "", performance_signal: "", brand_fit: "", freshness: "" });
   const [researchAssignedTo, setResearchAssignedTo] = useState("");
   const [saving, setSaving] = useState(false);
+  const [workingScriptId, setWorkingScriptId] = useState<string | null>(null);
   const [researchAiLoading, setResearchAiLoading] = useState<string | null>(null);
   const [researchPreview, setResearchPreview] = useState<{ researchId: string; variants: ScriptVariant[]; hooks: string[] } | null>(null);
   const [researchAiDirection, setResearchAiDirection] = useState("");
@@ -253,6 +254,27 @@ export function ScriptsWorkspace() {
     finally { setSaving(false); }
   }
 
+  async function changeScriptStatus(script: Script, status: "draft" | "archived") {
+    setWorkingScriptId(script.id); setError(null); setNotice(null);
+    try {
+      await invokeCommand({ action: "change_status", script_id: script.id, expected_edit_version: script.edit_version, status });
+      setNotice(status === "archived" ? "تم نقل الاسكريبت إلى الأرشيف." : "تم استعادة الاسكريبت إلى قيد الكتابة.");
+      await refresh();
+    } catch (statusError) { setError(statusError instanceof Error ? statusError.message : "تعذّر تغيير حالة الاسكريبت."); }
+    finally { setWorkingScriptId(null); }
+  }
+
+  async function deleteScript(script: Script) {
+    if (!window.confirm(`حذف «${script.title}» نهائيًا؟\n\nلن يمكن استرجاع النص أو نسخه المحفوظة بعد الحذف.`)) return;
+    setWorkingScriptId(script.id); setError(null); setNotice(null);
+    try {
+      await invokeCommand({ action: "delete_script", script_id: script.id, expected_edit_version: script.edit_version });
+      setNotice("تم حذف الاسكريبت المؤرشف نهائيًا.");
+      await refresh();
+    } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : "تعذّر حذف الاسكريبت."); }
+    finally { setWorkingScriptId(null); }
+  }
+
   async function createResearch(event: FormEvent) {
     event.preventDefault(); if (!workspace) return;
     setSaving(true); setError(null); setNotice(null);
@@ -348,9 +370,12 @@ export function ScriptsWorkspace() {
           <div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <FilePenLine size={15} />} إنشاء وفتح المحرر</Button><Button type="button" variant="ghost" onClick={() => setShowCreateScript(false)}>إلغاء</Button></div>
         </form> : null}
       </section>
+      {statusFilter === "archived" ? <aside className="script-archive-note"><Archive size={17} /><div><strong>الأرشيف خارج ضغط الشغل اليومي</strong><p>تقدر تسترجع أي اسكريبت غير مُسلّم. الحذف النهائي للمالك فقط، ولا يشمل أي اسكريبت مرتبط بالإنتاج أو بمرجع.</p></div></aside> : null}
       <div className="scripts-grid">{filteredScripts.length ? filteredScripts.map((script) => {
         const config = scriptCardStatus(script, workspace.productionTasks);
-        return <article className="script-card" data-status={script.status} key={script.id}><header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{script.objective}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header><dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl><footer><span>{formatScriptDate(script.updated_at)}</span><a className="button button-secondary" href={`/scripts/${script.id}`}>{script.status === "handed_off" ? "متابعة التنفيذ" : "فتح الاسكريبت"}</a></footer></article>;
+        const working = workingScriptId === script.id;
+        const canArchive = script.status !== "archived" && (script.status !== "handed_off" || owner);
+        return <article className="script-card" data-status={script.status} key={script.id}><header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{script.objective}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header><dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl><footer><span>{formatScriptDate(script.updated_at)}</span><div className="script-card-actions"><a className="button button-secondary" href={`/scripts/${script.id}`}>{script.status === "handed_off" ? "متابعة التنفيذ" : "فتح الاسكريبت"}</a>{canArchive ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "archived")}>{working ? <LoaderCircle className="spin" size={14} /> : <Archive size={14} />} أرشفة</button> : null}{script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} استرجاع</button> : null}{owner && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button danger-text" disabled={working} onClick={() => void deleteScript(script)}><Trash2 size={14} /> حذف نهائي</button> : null}</div></footer></article>;
       }) : emptyState(Archive, "لا توجد اسكريبتات مطابقة", statusFilter === "active" ? "ابدأ باسكريبت جديد أو غيّر البحث والفلترة." : "غيّر الفلترة لرؤية العمل الحالي أو الأرشيف.")}</div>
     </> : null}
 

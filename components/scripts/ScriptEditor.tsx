@@ -3,7 +3,7 @@
 import type { Session } from "@supabase/supabase-js";
 import {
   Archive, ArrowRight, Bot, CheckCircle2, ExternalLink, Factory, FileClock, FilePenLine,
-  History, Lightbulb, LoaderCircle, LockKeyhole, RefreshCw, Save, Sparkles, UserRound, WandSparkles,
+  History, Lightbulb, LoaderCircle, LockKeyhole, RefreshCw, Save, Sparkles, Trash2, UserRound, WandSparkles,
 } from "lucide-react";
 import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { formatScriptDate, lines, scriptInputModeConfig, scriptPlatformConfig, scriptStatusConfig } from "../../lib/scripts";
@@ -192,6 +192,16 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
       await refresh();
     } catch (statusError) { setError(statusError instanceof Error ? statusError.message : "تعذّر تغيير الحالة."); }
     finally { setSaving(false); }
+  }
+
+  async function deleteScript() {
+    if (!workspace || workspace.script.status !== "archived" || workspace.script.content_item_id) return;
+    if (!window.confirm(`حذف «${workspace.script.title}» نهائيًا؟\n\nلن يمكن استرجاع النص أو سجل نسخه بعد الحذف.`)) return;
+    setSaving(true); setError(null); setNotice(null);
+    try {
+      await invokeFunction("script-commands", { action: "delete_script", script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version });
+      window.location.assign("/scripts");
+    } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : "تعذّر حذف الاسكريبت."); setSaving(false); }
   }
 
   async function generateWriting(mode: WritingMode, scope: "script_variants" | "hooks") {
@@ -393,6 +403,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         {workspace.script.status === "ready_to_record" ? <><Button type="button" variant="secondary" disabled={saving} onClick={() => void changeStatus("draft")}><RefreshCw size={15} /> إرجاع لقيد الكتابة</Button>{owner ? <Button type="button" onClick={() => setShowHandoff((value) => !value)}><Factory size={15} /> تسليم لمصنع المحتوى</Button> : <span className="script-owner-action-note">المالك يحدد فريق الإنتاج والموعد.</span>}</> : null}
         {workspace.script.status !== "archived" ? <Button type="button" variant="ghost" disabled={saving} onClick={() => void changeStatus("archived")}><Archive size={15} /> أرشفة</Button> : null}
         {workspace.script.status === "archived" && !workspace.script.content_item_id ? <Button type="button" variant="secondary" disabled={saving} onClick={() => void changeStatus("draft")}><RefreshCw size={15} /> استعادة لقيد الكتابة</Button> : null}
+        {owner && workspace.script.status === "archived" && !workspace.script.content_item_id ? <Button type="button" variant="ghost" className="danger-text" disabled={saving} onClick={() => void deleteScript()}><Trash2 size={15} /> حذف نهائي</Button> : null}
       </div>
       {showHandoff && owner ? <form className="script-handoff-form" onSubmit={(event) => void handoff(event)}><div className="script-handoff-heading"><Factory size={19} /><div><strong>التسليم الذري</strong><p>إما يُنشأ أصل المحتوى ومهام التسجيل والمونتاج والغلاف والنشر معًا، أو لا يُحفظ شيء.</p></div></div><div className="script-fields-grid"><label><span>موعد النشر</span><input required type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} /></label><label><span>التسجيل وصناعة المحتوى</span><select value={contentCreatorId} onChange={(event) => setContentCreatorId(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>المونتاج</span><select value={editingOwnerId} onChange={(event) => setEditingOwnerId(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>الغلاف</span><select value={thumbnailOwnerId} onChange={(event) => setThumbnailOwnerId(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>النشر</span><select value={publishingOwnerId} onChange={(event) => setPublishingOwnerId(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></div><div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Factory size={15} />} إنشاء خط الإنتاج</Button><Button type="button" variant="ghost" onClick={() => setShowHandoff(false)}>إلغاء</Button></div></form> : null}
     </section>

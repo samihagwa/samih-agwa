@@ -2,7 +2,7 @@
 
 import type { Session } from "@supabase/supabase-js";
 import { LoaderCircle, LockKeyhole, LogOut, Menu, ShieldCheck, X } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   canAccessWorkspaceSection,
@@ -18,6 +18,7 @@ import { PresenceReporter } from "../auth/PresenceReporter";
 import { NotificationCenter } from "../auth/NotificationCenter";
 import { Button } from "../ui/Button";
 import { WorkspaceAssistant } from "../assistant/WorkspaceAssistant";
+import { MemberOnboardingGate } from "../team/MemberOnboardingGate";
 import { SidebarNav } from "./SidebarNav";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -28,19 +29,23 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [membership, setMembership] = useState<WorkspaceMembership | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(configured ? null : "خدمة الدخول غير متاحة مؤقتًا.");
+  const loadedUserId = useRef<string | null>(null);
 
   const loadAccess = useCallback(async (nextSession: Session | null) => {
+    const nextUserId = nextSession?.user.id ?? null;
+    if (loadedUserId.current !== nextUserId) setMembership(null);
+    loadedUserId.current = nextUserId;
     setSession(nextSession);
-    setMembership(null);
     setAccessError(null);
     if (!nextSession) {
+      setMembership(null);
       setReady(true);
       return;
     }
 
     const { data, error } = await getSupabaseBrowserClient()
       .from("memberships")
-      .select("role, status, allowed_sections")
+      .select("organization_id, role, status, allowed_sections, onboarding_acknowledgements, onboarding_completed_at")
       .eq("user_id", nextSession.user.id)
       .limit(1)
       .maybeSingle();
@@ -116,6 +121,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Button type="button" variant="secondary" onClick={() => void getSupabaseBrowserClient().auth.signOut()}><LogOut size={16} /> تسجيل الخروج</Button>
     </section>
   </main>;
+
+  if (!membership.onboarding_completed_at) {
+    return <MemberOnboardingGate membership={membership} onChanged={() => loadAccess(session)} />;
+  }
 
   if (pathname === "/login") {
     return <main className="secure-login-page secure-loading"><LoaderCircle className="spin" size={26} /><h1>جارٍ فتح مساحة عملك</h1></main>;

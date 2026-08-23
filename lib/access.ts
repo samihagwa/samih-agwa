@@ -17,7 +17,7 @@ export const workspaceSectionDefinitions = [
 ] as const;
 
 export type WorkspaceSection = typeof workspaceSectionDefinitions[number]["id"];
-export type WorkspaceMembership = Pick<Tables<"memberships">, "role" | "status" | "allowed_sections">;
+export type WorkspaceMembership = Pick<Tables<"memberships">, "organization_id" | "role" | "status" | "allowed_sections" | "onboarding_acknowledgements" | "onboarding_completed_at">;
 
 export const allWorkspaceSections = workspaceSectionDefinitions.map((section) => section.id);
 
