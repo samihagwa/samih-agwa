@@ -1233,6 +1233,7 @@ export type Database = {
           converted_at: string | null
           created_at: string
           created_by: string
+          follow_up_required: boolean
           full_name: string
           id: string
           interest: Database["public"]["Enums"]["crm_interest"]
@@ -1255,6 +1256,7 @@ export type Database = {
           converted_at?: string | null
           created_at?: string
           created_by: string
+          follow_up_required?: boolean
           full_name: string
           id?: string
           interest: Database["public"]["Enums"]["crm_interest"]
@@ -1277,6 +1279,7 @@ export type Database = {
           converted_at?: string | null
           created_at?: string
           created_by?: string
+          follow_up_required?: boolean
           full_name?: string
           id?: string
           interest?: Database["public"]["Enums"]["crm_interest"]
@@ -1629,6 +1632,55 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_lead_routing_members: {
+        Row: {
+          created_at: string
+          created_by: string
+          organization_id: string
+          position: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          organization_id: string
+          position: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          organization_id?: string
+          position?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_lead_routing_members_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_lead_routing_members_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_lead_routing_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -4403,6 +4455,18 @@ export type Database = {
         }
         Returns: Json
       }
+      get_crm_lead_routing: {
+        Args: { target_organization_id: string; target_user_id: string }
+        Returns: {
+          assigned_live_leads: number
+          email: string
+          full_name: string
+          role: Database["public"]["Enums"]["app_role"]
+          route_position: number
+          selected: boolean
+          user_id: string
+        }[]
+      }
       get_crm_owner_performance: {
         Args: { target_organization_id: string; target_range_days: number }
         Returns: {
@@ -4713,6 +4777,14 @@ export type Database = {
           generated_thumbnail_notes: string
           generation_scope: string
           target_script_id: string
+          target_user_id: string
+        }
+        Returns: number
+      }
+      save_crm_lead_routing: {
+        Args: {
+          route_user_ids: string[]
+          target_organization_id: string
           target_user_id: string
         }
         Returns: number

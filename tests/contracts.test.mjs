@@ -1219,3 +1219,44 @@ test("content team AI choices remain explicit, version fenced, role scoped, and 
   assert.match(config, /\[functions\.script-ai\][\s\S]*verify_jwt = true/);
   assert.doesNotMatch(migration, /status\s*=\s*'done'/);
 });
+
+test("entity links open the exact card across notifications, tasks, revisions, campaigns, chat, and AI", async () => {
+  const [migration, deepLinks, tasks, content, crm, scripts, publishing, campaigns, chat, team, assistant] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260822233859_canonical_deep_links_and_whales_zone_routing.sql", import.meta.url), "utf8"),
+    readFile(new URL("../lib/deep-links.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/publishing/PublishingWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/chat/ChatWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/team/TeamWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/workspace-assistant/index.ts", import.meta.url), "utf8"),
+  ]);
+
+  for (const entity of ["task", "crm_contact", "content_item", "content_revision", "script", "script_research", "publishing_occurrence", "launch", "launch_deliverable", "membership"]) {
+    assert.match(migration, new RegExp(`when '${entity}' then`));
+  }
+  assert.match(migration, /before insert or update of entity_type, entity_id, url on public\.notifications/);
+  assert.match(migration, /update public\.notifications notification set url = notification\.url/);
+  assert.match(migration, /source_system = 'google_sheet_whales_zone'/);
+  assert.match(migration, /follow_up_required = false/);
+  assert.match(migration, /crm_lead_routing_members/);
+  assert.match(migration, /private\.pick_crm_lead_route/);
+
+  assert.match(deepLinks, /\/tasks\?task=\$\{id\}#task-\$\{id\}/);
+  for (const workspace of [tasks, content, crm, scripts, publishing, campaigns, chat, team]) {
+    assert.match(workspace, /data-direct-target/);
+  }
+  assert.match(tasks, /taskDomId\(task\.id\)/);
+  assert.match(content, /revision-\$\{revision\.id\}/);
+  assert.match(crm, /crm-\$\{contact\.id\}/);
+  assert.match(scripts, /research-\$\{item\.id\}/);
+  assert.match(publishing, /occurrence-\$\{occurrence\.id\}/);
+  assert.match(campaigns, /deliverable-\$\{deliverable\.id\}/);
+  assert.match(chat, /message-\$\{message\.id\}/);
+  assert.match(team, /member-\$\{person\.id\}/);
+  assert.match(assistant, /\/tasks\?task=\$\{id\}#task-\$\{id\}/);
+  assert.match(assistant, /دي المهام المفتوحة المسندة مباشرة لحسابك فقط/);
+});

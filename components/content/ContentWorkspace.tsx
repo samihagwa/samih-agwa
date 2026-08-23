@@ -39,6 +39,7 @@ import {
 } from "../../lib/content";
 import { formatTimelineSeconds } from "../../lib/content-intake";
 import { brandCategoryConfig } from "../../lib/brand";
+import { currentUuidDeepLink } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -126,6 +127,8 @@ export function ContentWorkspace() {
   const [reviewFormTaskId, setReviewFormTaskId] = useState<string | null>(null);
   const [deliveryFormTaskId, setDeliveryFormTaskId] = useState<string | null>(null);
   const [contentFilter, setContentFilter] = useState<ContentFilter>("active");
+  const [linkedContentId] = useState(() => currentUuidDeepLink("content", "content"));
+  const [linkedRevisionId] = useState(() => currentUuidDeepLink("revision", "revision"));
   const [captionChoices, setCaptionChoices] = useState<Record<string, AiChoiceSet<CaptionOption>>>({});
   const [thumbnailChoices, setThumbnailChoices] = useState<Record<string, AiChoiceSet<ThumbnailOption>>>({});
   const [aiWorking, setAiWorking] = useState<string | null>(null);
@@ -296,19 +299,27 @@ export function ContentWorkspace() {
   const brandArticlesById = useMemo(() => new Map(brandArticles.map((article) => [article.id, article])), [brandArticles]);
   const approvedBrandArticles = useMemo(() => brandArticles.filter((article) => article.status === "approved"), [brandArticles]);
   const visibleItems = useMemo(() => {
+    if (linkedContentId) return items.filter((item) => item.id === linkedContentId);
     if (contentFilter === "active") return items.filter((item) => !["published", "cancelled"].includes(item.status));
     if (contentFilter === "scheduled") return items.filter((item) => item.status === "scheduled");
     return items.filter((item) => ["published", "cancelled"].includes(item.status));
-  }, [contentFilter, items]);
+  }, [contentFilter, items, linkedContentId]);
 
   useEffect(() => {
-    if (!items.length) return;
-    const contentId = window.location.hash.match(/^#content-([0-9a-f-]+)$/i)?.[1];
-    if (!contentId || openedContentHash.current === contentId || !items.some((item) => item.id === contentId)) return;
-    openedContentHash.current = contentId;
-    setExpandedContentIds((current) => new Set(current).add(contentId));
-    window.requestAnimationFrame(() => document.getElementById(`content-${contentId}`)?.scrollIntoView({ block: "start" }));
-  }, [items]);
+    if (!linkedContentId || openedContentHash.current === `${linkedContentId}:${linkedRevisionId ?? ""}` || !items.some((item) => item.id === linkedContentId)) return;
+    setExpandedContentIds((current) => new Set(current).add(linkedContentId));
+    const frame = window.requestAnimationFrame(() => {
+      const targetId = linkedRevisionId && revisions.some((revision) => revision.id === linkedRevisionId)
+        ? `revision-${linkedRevisionId}`
+        : `content-${linkedContentId}`;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      openedContentHash.current = `${linkedContentId}:${linkedRevisionId ?? ""}`;
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [items, linkedContentId, linkedRevisionId, revisions]);
 
   async function runCommand(body: Record<string, unknown>, successMessage: string) {
     if (!workspace) return false;
@@ -572,6 +583,7 @@ export function ContentWorkspace() {
 
       {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+      {linkedContentId && visibleItems.length ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح {linkedRevisionId ? "طلب التعديل" : "ملف المحتوى"} المطلوب مباشرة وإظهار تفاصيله.</p> : linkedContentId ? <p className="form-notice error" role="alert">ملف المحتوى المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
 
       {showQuickIntake && manager ? <QuickIntakeForm
         currentUserId={session.user.id}
@@ -661,7 +673,7 @@ export function ContentWorkspace() {
         const itemCaptionChoices = captionChoices[item.id];
         const itemThumbnailChoices = thumbnailChoices[item.id];
 
-        return <article className="panel content-card workflow-entity-card" data-card-state={item.status} id={`content-${item.id}`} key={item.id}>
+        return <article className="panel content-card workflow-entity-card" data-card-state={item.status} data-direct-target={linkedContentId === item.id && !linkedRevisionId || undefined} tabIndex={linkedContentId === item.id && !linkedRevisionId ? -1 : undefined} id={`content-${item.id}`} key={item.id}>
           <header>
             <div className="content-card-title"><span className="icon-tile"><Film size={17} /></span><div><p className="overline">{isSocialPost ? "Social Post" : "Reel"} · {platformLabel} · v{item.version}</p><h3 className="workflow-card-heading">{item.title}</h3></div></div>
             <div className="content-card-actions"><div className="content-card-badges"><StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>{openRevisions.length ? <StatusBadge tone="warning">{openRevisions.length} تعديل مفتوح</StatusBadge> : null}{openCueCount ? <StatusBadge tone="info">{openCueCount} تعليمة تنفيذ</StatusBadge> : null}</div><button className="content-expand-button" type="button" aria-expanded={expanded} onClick={() => setExpandedContentIds((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}>{expanded ? "إخفاء التفاصيل" : "فتح التفاصيل"}<ChevronDown className={expanded ? "expanded" : ""} size={14} /></button></div>
@@ -755,8 +767,9 @@ export function ContentWorkspace() {
               {itemRevisions.length ? <ol className="revision-list">{itemRevisions.map((revision) => {
                 const canWorkRevision = platformAdmin || revision.assigned_to === session.user.id;
                 const canCancelRevision = platformAdmin || revision.requested_by === session.user.id;
-                return <li key={revision.id}>
+                return <li key={revision.id} id={`revision-${revision.id}`} data-direct-target={linkedRevisionId === revision.id || undefined} tabIndex={linkedRevisionId === revision.id ? -1 : undefined}>
                   <div className="revision-top"><strong>جولة {revision.round} · {contentStepConfig[revision.stage].label}</strong><StatusBadge tone={contentRevisionStatusConfig[revision.status].tone}>{contentRevisionStatusConfig[revision.status].label}</StatusBadge></div>
+                  {linkedRevisionId === revision.id ? <span className="direct-target-label"><Route size={11} /> ده التعديل المطلوب</span> : null}
                   <p>{revision.instructions}</p><small>إلى {peopleById.get(revision.assigned_to)?.name ?? "صاحب المرحلة"} · {formatDate(revision.requested_at)}</small>
                   {revision.status === "requested" && canWorkRevision ? <Button type="button" variant="secondary" disabled={working} onClick={() => void runCommand({ action: "start_revision", revision_id: revision.id }, "بدأ تنفيذ التعديل وأعيد فتح مهمة المرحلة.")}>بدء التنفيذ</Button> : null}
                   {revision.status === "in_progress" && canWorkRevision ? <Button type="button" variant="secondary" disabled={working} onClick={() => void runCommand({ action: "resolve_revision", revision_id: revision.id }, "تم إرسال التعديل للمراجعة.")}>تم التنفيذ وإرسال للمراجعة</Button> : null}

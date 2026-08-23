@@ -21,7 +21,8 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { currentUuidDeepLink } from "../../lib/deep-links";
 import {
   launchGateConfig,
   launchGates,
@@ -125,11 +126,14 @@ export function CampaignsWorkspace() {
   const [deliverableKindsByLaunch, setDeliverableKindsByLaunch] = useState<Record<string, LaunchDeliverableKind>>({});
   const [submissionFormId, setSubmissionFormId] = useState<string | null>(null);
   const [launchView, setLaunchView] = useState<LaunchView>("current");
+  const [linkedLaunchId] = useState(() => currentUuidDeepLink("launch", "launch"));
+  const [linkedDeliverableId] = useState(() => currentUuidDeepLink("deliverable", "deliverable"));
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
   const [renderNow] = useState(() => Date.now());
   const [defaultStart] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)));
   const [defaultEnd] = useState(() => toLocalDateTimeInput(new Date(Date.now() + (30 * 24 + 2) * 60 * 60 * 1000)));
+  const openedCampaignLink = useRef<string | null>(null);
 
   const clearWorkspace = useCallback(() => {
     setWorkspace(null);
@@ -265,6 +269,29 @@ export function CampaignsWorkspace() {
     setLoading,
     clearTransientState,
   });
+
+  useEffect(() => {
+    const linkedDeliverable = linkedDeliverableId ? deliverables.find((deliverable) => deliverable.id === linkedDeliverableId) ?? null : null;
+    const targetLaunchId = linkedLaunchId ?? linkedDeliverable?.launch_id ?? null;
+    if (!targetLaunchId) return;
+    const targetLaunch = launches.find((launch) => launch.id === targetLaunchId);
+    if (!targetLaunch) return;
+    const targetView = ["completed", "cancelled"].includes(targetLaunch.status) ? "archive" : "current";
+    if (launchView !== targetView) {
+      const frame = window.requestAnimationFrame(() => setLaunchView(targetView));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    const targetKey = linkedDeliverableId ?? targetLaunchId;
+    if (openedCampaignLink.current === targetKey) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(linkedDeliverableId ? `deliverable-${linkedDeliverableId}` : `launch-${targetLaunchId}`);
+      if (!target) return;
+      openedCampaignLink.current = targetKey;
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [deliverables, launchView, launches, linkedDeliverableId, linkedLaunchId]);
 
   useEffect(() => {
     if (!workspace) return;
@@ -612,7 +639,10 @@ export function CampaignsWorkspace() {
   const contentById = new Map(contentItems.map((item) => [item.id, item]));
   const archivedLaunches = launches.filter((launch) => ["completed", "cancelled"].includes(launch.status));
   const currentLaunches = launches.filter((launch) => !["completed", "cancelled"].includes(launch.status));
-  const visibleLaunches = launchView === "current" ? currentLaunches : archivedLaunches;
+  const linkedDeliverable = linkedDeliverableId ? deliverables.find((deliverable) => deliverable.id === linkedDeliverableId) ?? null : null;
+  const targetLaunchId = linkedLaunchId ?? linkedDeliverable?.launch_id ?? null;
+  const targetedLaunch = targetLaunchId ? launches.find((launch) => launch.id === targetLaunchId) ?? null : null;
+  const visibleLaunches = targetedLaunch ? [targetedLaunch] : launchView === "current" ? currentLaunches : archivedLaunches;
 
   return (
     <section className="campaigns-workspace">
@@ -628,6 +658,7 @@ export function CampaignsWorkspace() {
 
       {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+      {targetedLaunch ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح {linkedDeliverableId ? "البند التنفيذي" : "الإطلاق"} المطلوب مباشرة.</p> : targetLaunchId ? <p className="form-notice error" role="alert">العنصر المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
 
       <div className="workspace-view-switch">
         <div><p className="overline">تنظيم الغرفة</p><strong>الإطلاق المكتمل أو الملغي ينتقل للأرشيف تلقائيًا.</strong></div>
@@ -720,9 +751,9 @@ export function CampaignsWorkspace() {
             const workingPeople = workspace.people.filter((person) => person.role !== "viewer");
 
             return (
-              <article className="panel launch-card workflow-entity-card" data-card-state={launch.status} key={launch.id}>
+              <article className="panel launch-card workflow-entity-card" data-card-state={launch.status} data-direct-target={(linkedLaunchId === launch.id && !linkedDeliverableId) || undefined} tabIndex={linkedLaunchId === launch.id && !linkedDeliverableId ? -1 : undefined} id={`launch-${launch.id}`} key={launch.id}>
                 <header>
-                  <div className="content-card-title"><span className="icon-tile"><Route size={17} /></span><div><p className="overline">{launchTypeConfig[launch.type].label} · v{launch.version}</p><h3 className="workflow-card-heading">{launch.title}</h3></div></div>
+                  <div className="content-card-title"><span className="icon-tile"><Route size={17} /></span><div><p className="overline">{launchTypeConfig[launch.type].label} · v{launch.version}</p><h3 className="workflow-card-heading">{launch.title}</h3>{linkedLaunchId === launch.id && !linkedDeliverableId ? <span className="direct-target-label"><Route size={11} /> ده الإطلاق المطلوب</span> : null}</div></div>
                   <div className="launch-admin-actions"><StatusBadge tone={launchStatusConfig[launch.status].tone}>{launchStatusConfig[launch.status].label}</StatusBadge>{platformAdmin && !["cancelled", "completed"].includes(launch.status) ? <><button className="text-button" type="button" onClick={() => setEditFormId(editFormId === launch.id ? null : launch.id)}><Pencil size={13} /> تعديل</button><button className="text-button danger-text" type="button" disabled={working} onClick={() => void cancelLaunch(launch)}><Trash2 size={13} /> إلغاء الإطلاق</button></> : null}</div>
                 </header>
 
@@ -835,7 +866,7 @@ export function CampaignsWorkspace() {
                       .map((link) => contentById.get(link.content_item_id))
                       .filter((item): item is ContentItem => Boolean(item));
                     const publishedItems = generatedItems.filter((item) => item.status === "published").length;
-                    return <article key={deliverable.id} id={`deliverable-${deliverable.id}`}><header><div><span className="launch-deliverable-kind">{deliverable.planned_quantity} × {launchDeliverableKindConfig[deliverable.kind].label}</span><h5>{deliverable.title}</h5></div>{task ? <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusConfig[task.status].label}</StatusBadge> : null}</header><p>{deliverable.brief}</p><dl><div><dt>المسؤول</dt><dd>{peopleById.get(deliverable.owner_id)?.name ?? "عضو فريق"}</dd></div><div><dt>الموعد</dt><dd>{formatDate(deliverable.due_at)}</dd></div><div><dt>القناة / المكان</dt><dd>{[deliverable.channel, deliverable.destination].filter(Boolean).join(" · ") || "غير محدد"}</dd></div><div><dt>{launchBudgetCategoryConfig[deliverable.budget_category].label}</dt><dd>{formatTarget(Number(deliverable.budget_amount), deliverable.currency)}</dd></div></dl>{deliverable.workflow_template === "social_post" ? <div className="generated-content-summary"><div><strong>{publishedItems}/{generatedItems.length}</strong><span>بوستات منشورة</span></div><div className="content-progress-track"><span style={{ width: `${generatedItems.length ? Math.round((publishedItems / generatedItems.length) * 100) : 0}%` }} /></div><div className="generated-content-links">{generatedItems.map((item) => <a href={`/content#content-${item.id}`} key={item.id}>{item.title} <Link2 size={11} /></a>)}</div><small>{task?.status === "backlog" ? "اعتماد الدفعة يفتح تلقائيًا بعد نشر وتوثيق كل البوستات." : "كل كروت البوستات منشورة؛ الدفعة جاهزة للاعتماد."}</small></div> : null}{dependencies.length ? <p className="launch-dependency-note"><Route size={12} /> يبدأ بعد: {dependencies.map((dependency) => dependency.title).join(" + ")}</p> : null}{deliverable.delivered_at ? <div className="launch-delivery-result"><strong>التسليم المحفوظ</strong>{deliverable.result_note ? <p>{deliverable.result_note}</p> : null}{deliverable.result_url ? <a href={deliverable.result_url} target="_blank" rel="noreferrer">فتح التسليم <Link2 size={12} /></a> : null}<small>{formatDate(deliverable.delivered_at)}</small></div> : null}{canSubmit && submittable ? <button className="text-button" type="button" onClick={() => setSubmissionFormId(submissionFormId === deliverable.id ? null : deliverable.id)}><Upload size={12} /> {deliverable.delivered_at ? "تحديث التسليم" : deliverable.workflow_template === "social_post" ? "اعتماد دفعة البوستات" : "تسليم النتيجة"}</button> : null}{submissionFormId === deliverable.id && canSubmit && submittable ? <form className="launch-submission-form" onSubmit={(event) => void submitDeliverable(event, deliverable)}><label><span>ملاحظة النتيجة</span><textarea name="result_note" maxLength={5000} rows={3} placeholder="ما الذي تم؟ وما الذي يجب أن يراجعه المدير؟" /></label><label><span>رابط التسليم — اختياري إذا كتبت ملاحظة</span><input name="result_url" type="url" dir="ltr" maxLength={2000} placeholder="https://drive.google.com/..." /></label><div className="form-actions"><Button type="submit" disabled={working}>حفظ وإرسال للمراجعة</Button><button className="text-button" type="button" onClick={() => setSubmissionFormId(null)}>إلغاء</button></div></form> : null}</article>;
+                    return <article key={deliverable.id} id={`deliverable-${deliverable.id}`} data-direct-target={linkedDeliverableId === deliverable.id || undefined} tabIndex={linkedDeliverableId === deliverable.id ? -1 : undefined}><header><div><span className="launch-deliverable-kind">{deliverable.planned_quantity} × {launchDeliverableKindConfig[deliverable.kind].label}</span><h5>{deliverable.title}</h5>{linkedDeliverableId === deliverable.id ? <span className="direct-target-label"><Route size={11} /> ده البند المطلوب</span> : null}</div>{task ? <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusConfig[task.status].label}</StatusBadge> : null}</header><p>{deliverable.brief}</p><dl><div><dt>المسؤول</dt><dd>{peopleById.get(deliverable.owner_id)?.name ?? "عضو فريق"}</dd></div><div><dt>الموعد</dt><dd>{formatDate(deliverable.due_at)}</dd></div><div><dt>القناة / المكان</dt><dd>{[deliverable.channel, deliverable.destination].filter(Boolean).join(" · ") || "غير محدد"}</dd></div><div><dt>{launchBudgetCategoryConfig[deliverable.budget_category].label}</dt><dd>{formatTarget(Number(deliverable.budget_amount), deliverable.currency)}</dd></div></dl>{deliverable.workflow_template === "social_post" ? <div className="generated-content-summary"><div><strong>{publishedItems}/{generatedItems.length}</strong><span>بوستات منشورة</span></div><div className="content-progress-track"><span style={{ width: `${generatedItems.length ? Math.round((publishedItems / generatedItems.length) * 100) : 0}%` }} /></div><div className="generated-content-links">{generatedItems.map((item) => <a href={`/content?content=${item.id}#content-${item.id}`} key={item.id}>{item.title} <Link2 size={11} /></a>)}</div><small>{task?.status === "backlog" ? "اعتماد الدفعة يفتح تلقائيًا بعد نشر وتوثيق كل البوستات." : "كل كروت البوستات منشورة؛ الدفعة جاهزة للاعتماد."}</small></div> : null}{dependencies.length ? <p className="launch-dependency-note"><Route size={12} /> يبدأ بعد: {dependencies.map((dependency) => dependency.title).join(" + ")}</p> : null}{deliverable.delivered_at ? <div className="launch-delivery-result"><strong>التسليم المحفوظ</strong>{deliverable.result_note ? <p>{deliverable.result_note}</p> : null}{deliverable.result_url ? <a href={deliverable.result_url} target="_blank" rel="noreferrer">فتح التسليم <Link2 size={12} /></a> : null}<small>{formatDate(deliverable.delivered_at)}</small></div> : null}{canSubmit && submittable ? <button className="text-button" type="button" onClick={() => setSubmissionFormId(submissionFormId === deliverable.id ? null : deliverable.id)}><Upload size={12} /> {deliverable.delivered_at ? "تحديث التسليم" : deliverable.workflow_template === "social_post" ? "اعتماد دفعة البوستات" : "تسليم النتيجة"}</button> : null}{submissionFormId === deliverable.id && canSubmit && submittable ? <form className="launch-submission-form" onSubmit={(event) => void submitDeliverable(event, deliverable)}><label><span>ملاحظة النتيجة</span><textarea name="result_note" maxLength={5000} rows={3} placeholder="ما الذي تم؟ وما الذي يجب أن يراجعه المدير؟" /></label><label><span>رابط التسليم — اختياري إذا كتبت ملاحظة</span><input name="result_url" type="url" dir="ltr" maxLength={2000} placeholder="https://drive.google.com/..." /></label><div className="form-actions"><Button type="submit" disabled={working}>حفظ وإرسال للمراجعة</Button><button className="text-button" type="button" onClick={() => setSubmissionFormId(null)}>إلغاء</button></div></form> : null}</article>;
                   })}</div> : <p className="launch-assets-empty">لا توجد بنود تنفيذية بعد. مثال مناسب للبداية: 6 ريلز + 12 ستوري + 4 تصميمات + 3 إعلانات، لكن الأرقام تعتمد على الاستراتيجية التي تعتمدها أنت.</p>}
                 </section>
 

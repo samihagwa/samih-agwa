@@ -288,7 +288,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         editing_owner_id: editingOwnerId, thumbnail_owner_id: thumbnailOwnerId, publishing_owner_id: publishingOwnerId,
       });
       setNotice("تم إنشاء خط الإنتاج كاملًا داخل مصنع المحتوى."); setShowHandoff(false); await refresh();
-      const contentId = String(result.contentId ?? ""); if (contentId) window.location.assign(`/content#content-${contentId}`);
+      const contentId = String(result.contentId ?? ""); if (contentId) window.location.assign(`/content?content=${contentId}#content-${contentId}`);
     } catch (handoffError) { setError(handoffError instanceof Error ? handoffError.message : "تعذّر تسليم الاسكريبت."); }
     finally { setSaving(false); }
   }
@@ -309,7 +309,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     <div className="script-editor-topbar"><Button href="/scripts" variant="ghost"><ArrowRight size={15} /> العودة للاستوديو</Button><div><StatusBadge tone={status.tone}>{status.label}</StatusBadge><span><UserRound size={13} /> {assignee}</span><span><FileClock size={13} /> النسخة {workspace.script.edit_version.toLocaleString("ar-EG")}</span></div></div>
     {error ? <p className="form-notice error">{error}</p> : null}
     {notice ? <p className="form-notice success">{notice}</p> : null}
-    {readOnly ? <aside className="script-readonly-note"><CheckCircle2 size={18} /><div><strong>{!assignedWriter ? "عرض إشرافي فقط — صاحب الاسكريبت هو من يكتب ويولّد" : workspace.script.status === "handed_off" ? "هذه هي النسخة التي دخلت مصنع المحتوى" : "الاسكريبت مؤرشف"}</strong><p>{!assignedWriter ? "يمكن للمالك متابعة النسخة، لكن لا يمكنه كشف بصمة الكاتب أو التوليد والتعديل مكانه." : "أي تنفيذ لاحق يتم من مصنع المحتوى وليس بتعديل هذا الأصل."}</p>{workspace.script.content_item_id ? <a href={`/content#content-${workspace.script.content_item_id}`}>فتح خط الإنتاج <ExternalLink size={13} /></a> : null}</div></aside> : null}
+    {readOnly ? <aside className="script-readonly-note"><CheckCircle2 size={18} /><div><strong>{!assignedWriter ? "عرض إشرافي فقط — صاحب الاسكريبت هو من يكتب ويولّد" : workspace.script.status === "handed_off" ? "هذه هي النسخة التي دخلت مصنع المحتوى" : "الاسكريبت مؤرشف"}</strong><p>{!assignedWriter ? "يمكن للمالك متابعة النسخة، لكن لا يمكنه كشف بصمة الكاتب أو التوليد والتعديل مكانه." : "أي تنفيذ لاحق يتم من مصنع المحتوى وليس بتعديل هذا الأصل."}</p>{workspace.script.content_item_id ? <a href={`/content?content=${workspace.script.content_item_id}#content-${workspace.script.content_item_id}`}>فتح خط الإنتاج <ExternalLink size={13} /></a> : null}</div></aside> : null}
 
     <form className="script-editor-form" onSubmit={(event) => void save(event)}>
       <section className="panel script-editor-section">

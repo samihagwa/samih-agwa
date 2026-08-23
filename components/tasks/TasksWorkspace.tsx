@@ -16,8 +16,9 @@ import {
   ShieldCheck,
   UserRoundCheck,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { contentStepConfig } from "../../lib/content";
+import { currentUuidDeepLink, taskDomId, taskReference } from "../../lib/deep-links";
 import { launchGateConfig } from "../../lib/launches";
 import {
   allowedTaskTransitions,
@@ -142,8 +143,10 @@ export function TasksWorkspace() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<TaskFilter>("active");
+  const [linkedTaskId] = useState(() => currentUuidDeepLink("task", "task"));
   const [renderNow, setRenderNow] = useState(() => Date.now());
   const [defaultDue] = useState(() => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
+  const openedTaskLink = useRef<string | null>(null);
 
   const clearWorkspace = useCallback(() => {
     setWorkspace(null);
@@ -272,9 +275,10 @@ export function TasksWorkspace() {
       const orderedTasks = isContentWorkflow ? sortContentTasks(entryTasks) : entryTasks;
       const primaryTask = orderedTasks[0];
       if (!primaryTask) return [];
-      const matches = isContentWorkflow
+      const linkedEntry = Boolean(linkedTaskId && orderedTasks.some((task) => task.id === linkedTaskId));
+      const matches = linkedEntry || (isContentWorkflow
         ? contentWorkflowMatchesFilter(orderedTasks, filter, session.user.id, renderNow)
-        : taskMatchesFilter(primaryTask, filter, session.user.id, renderNow);
+        : taskMatchesFilter(primaryTask, filter, session.user.id, renderNow));
       if (!matches) return [];
       return [{
         id,
@@ -283,7 +287,19 @@ export function TasksWorkspace() {
         laneId: boardLaneForTasks(orderedTasks, isContentWorkflow),
       }];
     });
-  }, [filter, renderNow, session, tasks]);
+  }, [filter, linkedTaskId, renderNow, session, tasks]);
+
+  useEffect(() => {
+    if (!linkedTaskId || openedTaskLink.current === linkedTaskId || !tasks.some((task) => task.id === linkedTaskId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(taskDomId(linkedTaskId));
+      if (!target) return;
+      openedTaskLink.current = linkedTaskId;
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [boardEntries, linkedTaskId, tasks]);
 
   async function bootstrapWorkspace() {
     if (!session) return;
@@ -397,7 +413,9 @@ export function TasksWorkspace() {
   const manager = canManageTasks(workspace.membership.role);
   const platformAdmin = canManageAllTaskExecution(workspace.membership.role);
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
-  const visibleLanes = boardLanes.filter((lane) => lane.id !== "closed" || filter === "completed" || filter === "all");
+  const linkedTask = linkedTaskId ? tasks.find((task) => task.id === linkedTaskId) ?? null : null;
+  const linkedLaneId = linkedTaskId ? boardEntries.find((entry) => entry.tasks.some((task) => task.id === linkedTaskId))?.laneId : null;
+  const visibleLanes = boardLanes.filter((lane) => lane.id !== "closed" || filter === "completed" || filter === "all" || linkedLaneId === "closed");
   return (
     <section className="tasks-workspace">
       <div className="workspace-toolbar">
@@ -413,6 +431,7 @@ export function TasksWorkspace() {
 
       {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+      {linkedTask ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح المهمة المطلوبة مباشرة: <strong>{taskReference(linkedTask.id)}</strong> — الكارت المحدد ظاهر بإطار واضح.</p> : linkedTaskId ? <p className="form-notice error" role="alert">المهمة المطلوبة غير موجودة أو ليست ضمن صلاحيات حسابك.</p> : null}
 
       {showCreate && manager ? (
         <form className="panel task-create-form" onSubmit={createTask}>
@@ -444,7 +463,7 @@ export function TasksWorkspace() {
                     return <article className={`task-card content-workflow-group ${overdueTasks.length ? "task-overdue" : ""}`} data-state={lane.id} key={entry.id}>
                       <div className="task-card-top"><span className="workflow-task-label"><Film size={12} /> محتوى · {entry.tasks.length} خطوات تنفيذ</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info"}>{lane.label}</StatusBadge></div>
                       <h3>{contentGroupTitle(entry.tasks[0])}</h3>
-                      <a className="task-production-link" href={`/content#content-${entry.contentItemId}`}><FileText size={12} /> فتح ملف المحتوى ونتائج التنفيذ</a>
+                      <a className="task-production-link" href={`/content?content=${entry.contentItemId}#content-${entry.contentItemId}`}><FileText size={12} /> فتح ملف المحتوى ونتائج التنفيذ</a>
                       <div className="content-workflow-progress">
                         <div><span>تقدم التنفيذ</span><strong>{progress}%</strong></div>
                         <span className="content-workflow-progress-track" role="progressbar" aria-label="نسبة تقدم ملف المحتوى" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></span>
@@ -462,15 +481,16 @@ export function TasksWorkspace() {
                             ? "فتح وتأكيد النشر"
                             : "فتح وتسليم المهمة";
                         const className = [isOverdue(task, renderNow) ? "overdue" : "", task.status === "blocked" ? "blocked" : "", completed ? "completed" : "", isMine ? "mine" : ""].filter(Boolean).join(" ");
-                        return <section className={className} key={task.id}>
+                        const directTarget = linkedTaskId === task.id;
+                        return <section className={className} data-direct-target={directTarget || undefined} id={taskDomId(task.id)} tabIndex={directTarget ? -1 : undefined} key={task.id}>
                           <div className="content-subtask-copy">
                             <span className="content-subtask-marker" aria-label={completed ? "مكتملة" : `الخطوة ${index + 1}`}>{completed ? <CheckCircle2 size={16} /> : index + 1}</span>
-                            <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}{isMine ? <b> · مهمتك الآن</b> : null}</small></div>
+                            <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small><span className="task-reference">{taskReference(task.id)}</span> · {owner?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}{isMine ? <b> · مهمتك الآن</b> : null}</small>{directTarget ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}</div>
                           </div>
                           <div className="content-subtask-action">
                             <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
                             {!completed && task.status !== "backlog" && canOpenAction && !(task.status === "review" && !platformAdmin)
-                              ? <a href={`/content#content-${entry.contentItemId}`}><FileText size={12} /> {actionLabel}</a>
+                              ? <a href={`/content?content=${entry.contentItemId}#content-${entry.contentItemId}`}><FileText size={12} /> {actionLabel}</a>
                               : !completed ? <small>{task.status === "backlog" ? "تفتح تلقائيًا بعد الخطوة السابقة" : actionLabel}</small> : null}
                           </div>
                         </section>;
@@ -486,15 +506,16 @@ export function TasksWorkspace() {
                       || option !== "review" || task.status === "review")
                   );
                   return (
-                    <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} data-priority={task.priority} data-status={task.status} key={task.id}>
-                      <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small>v{task.version}</small></div>
+                    <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} data-priority={task.priority} data-status={task.status} data-direct-target={linkedTaskId === task.id || undefined} id={taskDomId(task.id)} tabIndex={linkedTaskId === task.id ? -1 : undefined} key={task.id}>
+                      <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small className="task-reference">{taskReference(task.id)}</small><small>v{task.version}</small></div>
+                      {linkedTaskId === task.id ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
-                      {task.content_item_id ? <a className="task-production-link" href={`/content#content-${task.content_item_id}`}><FileText size={12} /> فتح ملف المحتوى وتسليم النتيجة</a> : null}
+                      {task.content_item_id ? <a className="task-production-link" href={`/content?content=${task.content_item_id}#content-${task.content_item_id}`}><FileText size={12} /> فتح ملف المحتوى وتسليم النتيجة</a> : null}
                       {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
                       {task.launch_deliverable_id ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · بند تنفيذي</span> : null}
-                      {task.launch_deliverable_id ? <a className="task-production-link" href={`/campaigns#deliverable-${task.launch_deliverable_id}`}><FileText size={12} /> فتح التفاصيل وتسليم النتيجة</a> : null}
+                      {task.launch_deliverable_id ? <a className="task-production-link" href={`/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`}><FileText size={12} /> فتح التفاصيل وتسليم النتيجة</a> : null}
                       {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> CRM · متابعة عميل</span> : null}
-                      {task.crm_contact_id ? <a className="task-production-link" href={`/crm#lead-${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
+                      {task.crm_contact_id ? <a className="task-production-link" href={`/crm?contact=${task.crm_contact_id}#crm-${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
                       <h3>{task.title}</h3>
                       {task.description ? <CollapsibleText text={task.description} maxCharacters={170} className="task-description" /> : null}
                       <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong><CollapsibleText text={task.acceptance_criteria} maxCharacters={130} /></span></div>

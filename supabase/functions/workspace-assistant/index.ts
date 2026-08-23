@@ -38,9 +38,11 @@ function personalQuestionIntent(question: string): PersonalQuestionIntent | null
   return personal ? "tasks" : null;
 }
 function taskUrl(task: Record<string, unknown>) {
-  return task.crm_contact_id ? `/crm#lead-${task.crm_contact_id}`
-    : task.content_item_id ? `/content#content-${task.content_item_id}`
-      : task.launch_deliverable_id ? `/campaigns#deliverable-${task.launch_deliverable_id}` : `/tasks#task-${task.id}`;
+  const id = text(task.id);
+  return `/tasks?task=${id}#task-${id}`;
+}
+function taskReference(taskId: string) {
+  return `MW-${taskId.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase()}`;
 }
 function taskSummary(task: Record<string, unknown>): TaskSummary {
   return {
@@ -70,7 +72,7 @@ function formatTask(task: TaskSummary, index: number, now: Date) {
   const due = task.due_at
     ? `${new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo" }).format(new Date(task.due_at))} — ${dueDistance(task.due_at, now)}`
     : "بدون موعد تسليم مسجل";
-  return `${index + 1}. ${task.title}\nالحالة: ${statusLabel(task.status)} · الموعد: ${due}\nالرابط: ${task.url}`;
+  return `${index + 1}. ${taskReference(task.id)} · ${task.title}\nالحالة: ${statusLabel(task.status)} · الموعد: ${due}\nالرابط المباشر: ${task.url}`;
 }
 function personalAnswer(intent: PersonalQuestionIntent, tasks: TaskSummary[], question: string) {
   const now = new Date();
@@ -202,7 +204,7 @@ export default {
         .order("updated_at", { ascending: false }).limit(leadership ? 30 : 15);
       if (!leadership) scriptQuery = scriptQuery.eq("assigned_to", actorId);
       const { data } = await scriptQuery;
-      workspaceContext.scripts = (data ?? []).map((script) => ({ ...script, url: `/scripts#script-${script.id}` }));
+      workspaceContext.scripts = (data ?? []).map((script) => ({ ...script, url: `/scripts/${script.id}` }));
     })());
 
     if (hasSection(role, sections, "content")) queries.push((async () => {
@@ -210,7 +212,7 @@ export default {
         .select("id, title, format, status, publish_at, platforms, goal")
         .eq("organization_id", organizationId).not("status", "in", "(published,cancelled)")
         .order("publish_at").limit(30);
-      workspaceContext.content_pipeline = (data ?? []).map((item) => ({ ...item, url: `/content#content-${item.id}` }));
+      workspaceContext.content_pipeline = (data ?? []).map((item) => ({ ...item, url: `/content?content=${item.id}#content-${item.id}` }));
     })());
 
     if (hasSection(role, sections, "campaigns")) queries.push((async () => {
@@ -218,7 +220,7 @@ export default {
         .select("id, title, status, starts_at, ends_at, objective, lead_target, sales_target, revenue_target, currency")
         .eq("organization_id", organizationId).not("status", "in", "(completed,cancelled)")
         .order("starts_at").limit(15);
-      workspaceContext.active_launches = (data ?? []).map((launch) => ({ ...launch, url: `/campaigns#launch-${launch.id}` }));
+      workspaceContext.active_launches = (data ?? []).map((launch) => ({ ...launch, url: `/campaigns?launch=${launch.id}#launch-${launch.id}` }));
     })());
 
     if (hasSection(role, sections, "crm")) queries.push((async () => {
@@ -226,7 +228,7 @@ export default {
         .select("id, full_name, stage, owner_id, next_follow_up_at, last_contacted_at, source, source_reason")
         .eq("organization_id", organizationId).not("stage", "in", "(won,lost,do_not_contact)")
         .order("next_follow_up_at", { ascending: true, nullsFirst: false }).limit(40);
-      workspaceContext.crm_pipeline = (data ?? []).map((contact) => ({ ...contact, url: `/crm#lead-${contact.id}` }));
+      workspaceContext.crm_pipeline = (data ?? []).map((contact) => ({ ...contact, url: `/crm?contact=${contact.id}#crm-${contact.id}` }));
     })());
 
     await Promise.all(queries);

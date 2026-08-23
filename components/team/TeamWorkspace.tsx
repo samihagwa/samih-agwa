@@ -6,7 +6,8 @@ import {
   Clock3, Copy, Link2, LoaderCircle, LockKeyhole, RefreshCw, RotateCcw,
   ShieldCheck, UserCog, UserPlus, UsersRound,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { currentUuidDeepLink } from "../../lib/deep-links";
 import {
   defaultSectionsByRole,
   normalizeWorkspaceSections,
@@ -122,6 +123,21 @@ export function TeamWorkspace() {
   const [customStart, setCustomStart] = useState(() => dateInput(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
   const [customEnd, setCustomEnd] = useState(() => dateInput(new Date()));
   const [now, setNow] = useState(() => Date.now());
+  const [linkedMemberId] = useState(() => currentUuidDeepLink("member", "member"));
+  const openedMemberLink = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!workspace || !linkedMemberId || openedMemberLink.current === linkedMemberId) return;
+    if (!workspace.people.some((person) => person.id === linkedMemberId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`member-${linkedMemberId}`);
+      if (!target) return;
+      openedMemberLink.current = linkedMemberId;
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [linkedMemberId, workspace]);
 
   const range = useMemo(() => {
     const end = preset === "custom" ? new Date(`${customEnd}T23:59:59.999`) : new Date();
@@ -291,6 +307,7 @@ export function TeamWorkspace() {
   return <section className="team-workspace">
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
     {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
+    {linkedMemberId && workspace.people.some((person) => person.id === linkedMemberId) ? <p className="direct-link-notice" role="status"><UsersRound size={15} /> تم فتح العضو المطلوب مباشرة.</p> : linkedMemberId ? <p className="form-notice error" role="alert">العضو المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
 
     {!workspace.membership.onboarding_completed_at ? <section className="panel team-onboarding-panel">
       <div className="section-heading"><div><p className="overline">أول يوم على السيستم</p><h2>3 اتفاقات قبل استلام الشغل</h2><p>كل خطوة تُحفظ على حسابك؛ الهدف فهم طريقة التشغيل، مش تكميل checklist شكلي.</p></div><StatusBadge tone="warning">{Object.values(onboardingState).filter(Boolean).length}/3</StatusBadge></div>
@@ -320,7 +337,7 @@ export function TeamWorkspace() {
 
     {owner ? <section className="panel team-members-panel">
       <div className="section-heading"><div><p className="overline">أقل صلاحية لازمة</p><h2>الأعضاء والوصول</h2><p>إيقاف عضو لن يتم لو عنده مهام أو اسكريبتات أو عملاء مفتوحون؛ انقل المسؤولية أولًا.</p></div><StatusBadge tone="info">{activePeople.length} فعّال</StatusBadge></div>
-      <div className="team-member-list">{workspace.people.map((person) => <article key={person.id} className={person.status === "suspended" ? "suspended" : ""}>
+      <div className="team-member-list">{workspace.people.map((person) => <article id={`member-${person.id}`} data-direct-target={linkedMemberId === person.id || undefined} tabIndex={linkedMemberId === person.id ? -1 : undefined} key={person.id} className={person.status === "suspended" ? "suspended" : ""}>
         <div className="team-member-identity"><span>{person.name.slice(0, 1)}</span><div><strong>{person.name}</strong><small>{person.joinedAt ? `انضم ${formatDate(person.joinedAt)}` : "لم يكتمل الانضمام"}</small></div></div>
         <div className="team-member-role"><StatusBadge tone={person.status === "suspended" ? "danger" : person.role === "owner" ? "success" : "info"}>{person.status === "suspended" ? "موقوف" : roleLabel(person.role)}</StatusBadge><small>{roleDescriptions[person.role]}</small></div>
         {person.role === "owner" ? <div className="owner-lock"><ShieldCheck size={15} /><span><strong>مالك + مدير المنصة</strong><small>وصول كامل ومحمي لكل الأقسام</small></span></div> : <div className="team-member-actions"><label><span>الصلاحية</span><select value={person.role} disabled={working || person.status === "suspended"} onChange={(event) => void updateMember(person, event.target.value as Membership["role"], "active")}>{manageableRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></label><MemberSectionEditor key={`${person.id}:${person.allowedSections.join("|")}`} person={person} working={working} onSave={(sections) => updateMember(person, person.role, "active", sections)} />{person.status === "suspended" ? <Button type="button" variant="secondary" disabled={working} onClick={() => void updateMember(person, person.role, "active")}><RotateCcw size={14} /> إعادة الوصول</Button> : <button type="button" className="text-button danger-text" disabled={working} onClick={() => void updateMember(person, person.role, "suspended")}><Ban size={14} /> إيقاف الوصول</button>}</div>}
@@ -334,7 +351,7 @@ export function TeamWorkspace() {
       <div className="presence-grid">{activePeople.map((person) => {
         const memberPresence = presenceByUser.get(person.id);
         const active = memberPresence ? now - new Date(memberPresence.last_seen_at).getTime() <= 2 * 60_000 : false;
-        return <article key={person.id}><header><span className={`presence-dot ${active ? "online" : ""}`} /><div><strong>{person.name}</strong><small>{roleLabel(person.role)}</small></div><StatusBadge tone={active ? "success" : "neutral"}>{active ? "متصل الآن" : "غير متصل"}</StatusBadge></header><dl><div><dt>آخر قسم</dt><dd>{memberPresence ? sectionLabels[memberPresence.current_section] ?? memberPresence.current_section : "لم يدخل بعد"}</dd></div><div><dt>آخر ظهور على المنصة</dt><dd>{formatLastSeen(memberPresence?.last_seen_at ?? null, now)}</dd></div><div><dt>بداية الجلسة</dt><dd>{formatDate(memberPresence?.session_started_at ?? null)}</dd></div></dl></article>;
+        return <article id={!owner ? `member-${person.id}` : undefined} data-direct-target={!owner && linkedMemberId === person.id || undefined} tabIndex={!owner && linkedMemberId === person.id ? -1 : undefined} key={person.id}><header><span className={`presence-dot ${active ? "online" : ""}`} /><div><strong>{person.name}</strong><small>{roleLabel(person.role)}</small></div><StatusBadge tone={active ? "success" : "neutral"}>{active ? "متصل الآن" : "غير متصل"}</StatusBadge></header><dl><div><dt>آخر قسم</dt><dd>{memberPresence ? sectionLabels[memberPresence.current_section] ?? memberPresence.current_section : "لم يدخل بعد"}</dd></div><div><dt>آخر ظهور على المنصة</dt><dd>{formatLastSeen(memberPresence?.last_seen_at ?? null, now)}</dd></div><div><dt>بداية الجلسة</dt><dd>{formatDate(memberPresence?.session_started_at ?? null)}</dd></div></dl></article>;
       })}</div>
     </section>
 

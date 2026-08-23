@@ -9,6 +9,7 @@ import {
   Timer, Video, X,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { currentUuidDeepLink } from "../../lib/deep-links";
 import { formatPublishingCountdown, previewPolicyConfig, publicationStatus } from "../../lib/publishing";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
@@ -115,6 +116,7 @@ export function PublishingWorkspace() {
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ schedule: Schedule; post: Post } | null>(null);
   const [queueView, setQueueView] = useState<QueueView>("upcoming");
+  const [linkedOccurrenceId] = useState(() => currentUuidDeepLink("occurrence", "occurrence"));
   const [scheduleType, setScheduleType] = useState<ScheduleType>("once");
   const [mediaKind, setMediaKind] = useState("none");
   const [mediaSourceMode, setMediaSourceMode] = useState<"library" | "url">("library");
@@ -124,6 +126,7 @@ export function PublishingWorkspace() {
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد Supabase لهذه النسخة.");
   const [clockNow, setClockNow] = useState(() => Date.now());
   const composerRef = useRef<HTMLFormElement>(null);
+  const openedOccurrenceLink = useRef<string | null>(null);
 
   const clearData = useCallback(() => {
     setChannels([]); setPosts([]); setSchedules([]); setScheduleChannels([]); setOccurrences([]);
@@ -216,6 +219,25 @@ export function PublishingWorkspace() {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [pendingDelete, working]);
+
+  useEffect(() => {
+    if (!linkedOccurrenceId || openedOccurrenceLink.current === linkedOccurrenceId) return;
+    const linkedOccurrence = occurrences.find((occurrence) => occurrence.id === linkedOccurrenceId);
+    if (!linkedOccurrence) return;
+    const targetView = terminalOccurrenceStatuses.has(linkedOccurrence.status) ? "archive" : "upcoming";
+    if (queueView !== targetView) {
+      const frame = window.requestAnimationFrame(() => setQueueView(targetView));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`occurrence-${linkedOccurrenceId}`);
+      if (!target) return;
+      openedOccurrenceLink.current = linkedOccurrenceId;
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [linkedOccurrenceId, occurrences, queueView]);
 
   useEffect(() => {
     const refreshClock = () => setClockNow(Date.now());
@@ -412,7 +434,8 @@ export function PublishingWorkspace() {
   const readyChannels = channels.filter((channel) => channel.verification_status === "ready" && channel.allowlisted && channel.bot_can_post);
   const upcoming = occurrences.filter((occurrence) => !terminalOccurrenceStatuses.has(occurrence.status));
   const archivedOccurrences = occurrences.filter((occurrence) => terminalOccurrenceStatuses.has(occurrence.status));
-  const visibleOccurrences = queueView === "upcoming" ? upcoming : archivedOccurrences;
+  const linkedOccurrence = linkedOccurrenceId ? occurrences.find((occurrence) => occurrence.id === linkedOccurrenceId) ?? null : null;
+  const visibleOccurrences = linkedOccurrence ? [linkedOccurrence] : queueView === "upcoming" ? upcoming : archivedOccurrences;
   const publishedCount = occurrences.filter((occurrence) => occurrence.status === "published").length;
   const problemCount = occurrences.filter((occurrence) => ["failed", "unknown", "held_changed"].includes(occurrence.status)).length;
   const activeMediaSource = mediaKind === "none" ? "" : mediaSourceMode === "library"
@@ -429,6 +452,7 @@ export function PublishingWorkspace() {
 
     {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+    {linkedOccurrence ? <p className="direct-link-notice" role="status"><Send size={15} /> تم فتح عملية النشر المطلوبة مباشرة.</p> : linkedOccurrenceId ? <p className="form-notice error" role="alert">عملية النشر المطلوبة غير موجودة أو ليست ضمن صلاحيات حسابك.</p> : null}
 
     <div className="publishing-kpis"><div><Send size={17} /><span>تم نشره</span><strong>{publishedCount}</strong></div><div className={upcoming.length ? "active" : ""}><CalendarClock size={17} /><span>قادم</span><strong>{upcoming.length}</strong></div><div className={problemCount ? "danger" : ""}><AlertTriangle size={17} /><span>يحتاج فحص</span><strong>{problemCount}</strong></div><button type="button" disabled={!manager || working} className={control?.kill_switch ? "kill active" : "kill"} onClick={() => void toggleKillSwitch()}>{control?.kill_switch ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}<span>إيقاف طوارئ</span><strong>{control?.kill_switch ? "مفعّل" : "متوقف"}</strong></button></div>
 
@@ -487,7 +511,7 @@ export function PublishingWorkspace() {
         const status = publicationStatus(occurrence.status);
         const occurrenceLogs = logsByOccurrence.get(occurrence.id) ?? [];
         const canChangeSchedule = Boolean(manager && schedule && post && !schedule.deleted_at && !["publishing", "unknown"].includes(occurrence.status));
-        return <article className="panel publishing-occurrence workflow-entity-card" data-card-state={occurrence.status} id={`occurrence-${occurrence.id}`} key={occurrence.id}><header><div><p className="overline">{schedule?.schedule_type === "weekly" ? "متكرر أسبوعيًا" : "مرة واحدة"}</p><h3 className="workflow-card-heading">{post?.name ?? "منشور"}</h3><div className="publishing-occurrence-time"><small>{formatDate(occurrence.scheduled_at)}</small>{queueView === "upcoming" ? <span><Timer size={12} /> {formatPublishingCountdown(occurrence.scheduled_at, clockNow)}</span> : null}</div></div><StatusBadge tone={status.tone}>{status.label}</StatusBadge></header>{post?.post_text ? <p className="publishing-post-excerpt">{post.post_text}</p> : null}{occurrence.error ? <p className="publishing-error"><AlertTriangle size={13} /> {occurrence.error}</p> : null}{occurrence.hold_reason ? <small className="publishing-hold">سبب التوقف: {occurrence.hold_reason}</small> : null}{occurrenceLogs.length ? <div className="publishing-results">{occurrenceLogs.map((log) => <div key={log.id}><span>{publicationStatus(log.status).label}</span>{log.message_url ? <a href={log.message_url} target="_blank" rel="noreferrer">فتح المنشور <ExternalLink size={11} /></a> : null}{log.error ? <small>{log.error}</small> : null}</div>)}</div> : null}{queueView === "upcoming" ? <footer>{schedule && !schedule.deleted_at ? <button className="text-button" type="button" disabled={!manager || working} onClick={() => void toggleSchedule(schedule)}>{schedule.paused ? <ToggleRight size={14} /> : <CirclePause size={14} />} {schedule.paused ? "تشغيل الجدول" : "إيقاف الجدول"}</button> : null}{canChangeSchedule && schedule ? <button className="text-button" type="button" disabled={working} onClick={() => startEditing(schedule)}><Pencil size={13} /> تعديل المنشور والجدول</button> : null}{canChangeSchedule && schedule && post ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => setPendingDelete({ schedule, post })}><Trash2 size={13} /> حذف الجدول</button> : null}{manager && ["pending","previewing","previewed","awaiting_approval","approved","ready","held"].includes(occurrence.status) ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void cancelOccurrence(occurrence.id)}><OctagonX size={13} /> إلغاء هذه النسخة فقط</button> : null}</footer> : null}</article>;
+        return <article className="panel publishing-occurrence workflow-entity-card" data-card-state={occurrence.status} data-direct-target={linkedOccurrenceId === occurrence.id || undefined} tabIndex={linkedOccurrenceId === occurrence.id ? -1 : undefined} id={`occurrence-${occurrence.id}`} key={occurrence.id}><header><div><p className="overline">{schedule?.schedule_type === "weekly" ? "متكرر أسبوعيًا" : "مرة واحدة"}</p><h3 className="workflow-card-heading">{post?.name ?? "منشور"}</h3>{linkedOccurrenceId === occurrence.id ? <span className="direct-target-label"><Send size={11} /> دي عملية النشر المطلوبة</span> : null}<div className="publishing-occurrence-time"><small>{formatDate(occurrence.scheduled_at)}</small>{queueView === "upcoming" ? <span><Timer size={12} /> {formatPublishingCountdown(occurrence.scheduled_at, clockNow)}</span> : null}</div></div><StatusBadge tone={status.tone}>{status.label}</StatusBadge></header>{post?.post_text ? <p className="publishing-post-excerpt">{post.post_text}</p> : null}{occurrence.error ? <p className="publishing-error"><AlertTriangle size={13} /> {occurrence.error}</p> : null}{occurrence.hold_reason ? <small className="publishing-hold">سبب التوقف: {occurrence.hold_reason}</small> : null}{occurrenceLogs.length ? <div className="publishing-results">{occurrenceLogs.map((log) => <div key={log.id}><span>{publicationStatus(log.status).label}</span>{log.message_url ? <a href={log.message_url} target="_blank" rel="noreferrer">فتح المنشور <ExternalLink size={11} /></a> : null}{log.error ? <small>{log.error}</small> : null}</div>)}</div> : null}{queueView === "upcoming" ? <footer>{schedule && !schedule.deleted_at ? <button className="text-button" type="button" disabled={!manager || working} onClick={() => void toggleSchedule(schedule)}>{schedule.paused ? <ToggleRight size={14} /> : <CirclePause size={14} />} {schedule.paused ? "تشغيل الجدول" : "إيقاف الجدول"}</button> : null}{canChangeSchedule && schedule ? <button className="text-button" type="button" disabled={working} onClick={() => startEditing(schedule)}><Pencil size={13} /> تعديل المنشور والجدول</button> : null}{canChangeSchedule && schedule && post ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => setPendingDelete({ schedule, post })}><Trash2 size={13} /> حذف الجدول</button> : null}{manager && ["pending","previewing","previewed","awaiting_approval","approved","ready","held"].includes(occurrence.status) ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void cancelOccurrence(occurrence.id)}><OctagonX size={13} /> إلغاء هذه النسخة فقط</button> : null}</footer> : null}</article>;
       })}</div> : <section className="panel publishing-empty-state"><Send size={22} /><div><h3>{queueView === "upcoming" ? "لا توجد منشورات قادمة" : "الأرشيف فارغ"}</h3><p>{queueView === "upcoming" ? "أنشئ جدولًا جديدًا، أو افتح الأرشيف لمراجعة المنشورات السابقة والملغاة." : "ستظهر هنا المنشورات المكتملة والملغاة وحالات الفشل."}</p></div></section>}
     </section>
 

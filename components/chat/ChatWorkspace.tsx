@@ -6,6 +6,7 @@ import {
   Send, ShieldCheck, Trash2, UsersRound, X,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { currentPositiveIntegerDeepLink } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -49,6 +50,8 @@ export function ChatWorkspace() {
   const [draft, setDraft] = useState("");
   const [showRoomForm, setShowRoomForm] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const openedMessageLink = useRef<number | null>(null);
+  const [linkedMessageId] = useState(() => currentPositiveIntegerDeepLink("message", "message"));
 
   const clearWorkspace = useCallback(() => {
     setWorkspace(null); setRooms([]); setMessages([]); setActiveRoomId(null);
@@ -111,7 +114,22 @@ export function ChatWorkspace() {
     return () => { void supabase.removeChannel(channel); };
   }, [activeRoomId, refreshMessages, workspace]);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ block: "end" }); }, [messages.length]);
+  useEffect(() => {
+    if (linkedMessageId) {
+      if (openedMessageLink.current === linkedMessageId) return;
+      const targetMessage = messages.find((message) => message.id === linkedMessageId);
+      if (!targetMessage) return;
+      const frame = window.requestAnimationFrame(() => {
+        const target = document.getElementById(`message-${linkedMessageId}`);
+        if (!target) return;
+        openedMessageLink.current = linkedMessageId;
+        target.scrollIntoView({ block: "center" });
+        target.focus({ preventScroll: true });
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [linkedMessageId, messages]);
 
   const peopleById = useMemo(() => new Map((workspace?.people ?? []).map((person) => [person.id, person.name])), [workspace]);
   const messagesById = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages]);
@@ -189,12 +207,13 @@ export function ChatWorkspace() {
       <header><div><Hash size={20} /><span><strong>{activeRoom?.name ?? "مجتمع الفريق"}</strong><small>{activeRoom?.description ?? "ابدأ أول نقاش للفريق"}</small></span></div><StatusBadge tone="success"><ShieldCheck size={13} /> خاص بالفريق</StatusBadge></header>
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
       {notice ? <p className="form-notice success">{notice}</p> : null}
+      {linkedMessageId && messages.some((message) => message.id === linkedMessageId) ? <p className="direct-link-notice" role="status"><MessageCircleMore size={15} /> تم فتح الرسالة المطلوبة مباشرة.</p> : linkedMessageId && !loading ? <p className="form-notice error" role="alert">الرسالة المطلوبة غير موجودة أو ليست ضمن صلاحيات حسابك.</p> : null}
       <div className="team-chat-messages" role="log" aria-live="polite">
         {!messages.length ? <div className="team-chat-empty"><MessageCircleMore size={30} /><h3>ابدأ أول رسالة هنا</h3><p>الدردشة مخصصة للتنسيق السريع. المهام والملفات النهائية تظل في أقسامها الأساسية.</p></div> : null}
         {messages.map((message) => {
           const own = message.author_id === session.user.id;
           const replied = message.reply_to_id ? messagesById.get(message.reply_to_id) : null;
-          return <article id={`message-${message.id}`} key={message.id} className={`team-chat-message ${own ? "own" : ""} ${message.deleted_at ? "deleted" : ""}`}>
+          return <article id={`message-${message.id}`} key={message.id} data-direct-target={linkedMessageId === message.id || undefined} tabIndex={linkedMessageId === message.id ? -1 : undefined} className={`team-chat-message ${own ? "own" : ""} ${message.deleted_at ? "deleted" : ""}`}>
             <div className="team-chat-avatar" aria-hidden="true">{(peopleById.get(message.author_id) ?? "ع").trim().charAt(0)}</div>
             <div><header><strong>{peopleById.get(message.author_id) ?? "عضو فريق"}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>{message.edited_at ? <small>معدّلة</small> : null}</header>
               {replied ? <blockquote><CornerUpRight size={13} /><span>{peopleById.get(replied.author_id) ?? "عضو"}: {replied.deleted_at ? "رسالة محذوفة" : replied.body.slice(0, 140)}</span></blockquote> : null}

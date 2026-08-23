@@ -294,6 +294,33 @@ async function rollbackImportBatch(body: Record<string, unknown>, context: Conte
   return commandError(error, "تعذّر التراجع عن دفعة الاستيراد.") ?? jsonResponse({ result: data });
 }
 
+async function getLeadRouting(body: Record<string, unknown>, context: Context) {
+  const organizationId = text(body.organization_id);
+  if (!organizationId) return jsonResponse({ message: "اختر مساحة عمل صحيحة." }, 400);
+  const { data, error } = await context!.supabaseAdmin.rpc("get_crm_lead_routing", {
+    target_user_id: context!.userClaims!.id,
+    target_organization_id: organizationId,
+  });
+  return commandError(error, "تعذّر تحميل حسابات توزيع العملاء.") ?? jsonResponse({ members: data ?? [] });
+}
+
+async function saveLeadRouting(body: Record<string, unknown>, context: Context) {
+  const organizationId = text(body.organization_id);
+  const userIds = Array.isArray(body.user_ids) ? body.user_ids.map(text).filter(Boolean) : [];
+  if (!organizationId || userIds.length > 20 || userIds.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) {
+    return jsonResponse({ message: "قائمة حسابات استقبال العملاء غير صالحة." }, 400);
+  }
+  if (new Set(userIds).size !== userIds.length) {
+    return jsonResponse({ message: "لا يمكن اختيار نفس الحساب أكثر من مرة." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("save_crm_lead_routing", {
+    target_user_id: context!.userClaims!.id,
+    target_organization_id: organizationId,
+    route_user_ids: userIds,
+  });
+  return commandError(error, "تعذّر حفظ توزيع تسجيلات Whales Zone.") ?? jsonResponse({ selectedCount: data ?? 0 });
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -315,6 +342,8 @@ export default {
     if (body.action === "import_telegram_batch") return importTelegramBatch(body, context);
     if (body.action === "import_whales_zone_sheet_batch") return importWhalesZoneSheetBatch(body, context);
     if (body.action === "rollback_import_batch") return rollbackImportBatch(body, context);
+    if (body.action === "get_lead_routing") return getLeadRouting(body, context);
+    if (body.action === "save_lead_routing") return saveLeadRouting(body, context);
     return jsonResponse({ message: "أمر CRM غير معروف." }, 400);
   },
 };

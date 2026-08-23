@@ -2,7 +2,8 @@
 
 import type { Session } from "@supabase/supabase-js";
 import { Archive, Bot, FilePenLine, Lightbulb, LoaderCircle, LockKeyhole, Plus, Radar, Search, ShieldCheck, Sparkles, UserRound, UsersRound } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { currentUuidDeepLink } from "../../lib/deep-links";
 import { formatScriptDate, lines, scriptInputModeConfig, scriptResearchKindConfig, scriptStatusConfig } from "../../lib/scripts";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
@@ -128,7 +129,11 @@ export function ScriptsWorkspace() {
   const [loading, setLoading] = useState(configured);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("scripts");
+  const [linkedResearchId] = useState(() => currentUuidDeepLink("research", "research"));
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "scripts";
+    return new URL(window.location.href).searchParams.get("tab") === "radar" || currentUuidDeepLink("research", "research") ? "radar" : "scripts";
+  });
   const [search, setSearch] = useState("");
   const [personFilter, setPersonFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("active");
@@ -142,6 +147,7 @@ export function ScriptsWorkspace() {
   const [researchAiLoading, setResearchAiLoading] = useState<string | null>(null);
   const [researchPreview, setResearchPreview] = useState<{ researchId: string; variants: ScriptVariant[]; hooks: string[] } | null>(null);
   const [researchAiDirection, setResearchAiDirection] = useState("");
+  const openedResearchLink = useRef<string | null>(null);
 
   const clearWorkspace = useCallback(() => setWorkspace(null), []);
   const clearTransientState = useCallback(() => { setError(null); setNotice(null); }, []);
@@ -194,6 +200,18 @@ export function ScriptsWorkspace() {
   }, [clearWorkspace, loadRows]);
 
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading, clearTransientState });
+
+  useEffect(() => {
+    if (!linkedResearchId || openedResearchLink.current === linkedResearchId || !workspace?.research.some((item) => item.id === linkedResearchId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`research-${linkedResearchId}`);
+      if (!target) return;
+      openedResearchLink.current = linkedResearchId;
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [linkedResearchId, workspace]);
   const refresh = useCallback(async () => {
     if (!workspace) return;
     await loadRows({ organization: workspace.organization, membership: workspace.membership, people: workspace.people });
@@ -310,6 +328,7 @@ export function ScriptsWorkspace() {
     </div>
     {error ? <p className="form-notice error">{error}</p> : null}
     {notice ? <p className="form-notice success">{notice}</p> : null}
+    {linkedResearchId && workspace.research.some((item) => item.id === linkedResearchId) ? <p className="direct-link-notice" role="status"><Radar size={15} /> تم فتح الفكرة أو البحث المطلوب مباشرة.</p> : linkedResearchId ? <p className="form-notice error">العنصر المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
 
     {tab === "scripts" ? <>
       <section className="panel scripts-control-panel">
@@ -357,8 +376,9 @@ export function ScriptsWorkspace() {
       <div className="research-grid">{workspace.research.length ? workspace.research.map((item) => {
         const preview = researchPreview?.researchId === item.id ? researchPreview : null;
         const canUse = item.status !== "archived" && item.status !== "used";
-        return <article className={`research-card status-${item.status}`} key={item.id}>
+        return <article className={`research-card status-${item.status}`} id={`research-${item.id}`} data-direct-target={linkedResearchId === item.id || undefined} tabIndex={linkedResearchId === item.id ? -1 : undefined} key={item.id}>
           <header><div><Radar size={17} /><div><span>{scriptResearchKindConfig[item.kind]}</span><h3>{item.title}</h3></div></div><StatusBadge tone={item.status === "used" ? "success" : item.status === "archived" ? "info" : "neutral"}>{item.status === "inbox" ? "وارد" : item.status === "selected" ? "مختار" : item.status === "used" ? "تحول لاسكريبت" : "مؤرشف"}</StatusBadge></header>
+          {linkedResearchId === item.id ? <span className="direct-target-label"><Radar size={11} /> ده العنصر المطلوب</span> : null}
           {item.transferable_principle ? <div className="research-principle"><strong>المبدأ القابل للنقل</strong><p>{item.transferable_principle}</p></div> : null}
           {item.original_angles.length ? <ul>{item.original_angles.slice(0, 3).map((angle) => <li key={angle}>{angle}</li>)}</ul> : null}
           {canUse ? <div className="research-ai-preview">

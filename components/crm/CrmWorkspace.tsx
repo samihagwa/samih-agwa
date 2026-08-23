@@ -48,6 +48,7 @@ import {
   type CrmSource,
 } from "../../lib/crm";
 import { parseTelegramCustomerImport, parseWhalesZoneSheetImport, type TelegramImportPreview, type TelegramImportSignal } from "../../lib/crm-import";
+import { currentUuidDeepLink, taskDeepLink, taskReference } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Database, Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -73,6 +74,15 @@ type Filter = "all" | "mine" | "overdue";
 type BoardView = "current" | "archive";
 type ImportMode = "telegram" | "whales_zone_sheet";
 type IntakeHealth = Database["public"]["Functions"]["get_whales_zone_intake_health"]["Returns"][number];
+type LeadRoutingMember = {
+  user_id: string;
+  full_name: string;
+  email: string;
+  role: Membership["role"];
+  selected: boolean;
+  route_position: number | null;
+  assigned_live_leads: number;
+};
 
 const PAGE_SIZE = 60;
 
@@ -126,6 +136,8 @@ export function CrmWorkspace() {
   const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [intakeHealth, setIntakeHealth] = useState<IntakeHealth | null>(null);
+  const [leadRoutingMembers, setLeadRoutingMembers] = useState<LeadRoutingMember[]>([]);
+  const [leadRoutingSelection, setLeadRoutingSelection] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(configured);
   const [crmLoading, setCrmLoading] = useState(false);
@@ -152,6 +164,7 @@ export function CrmWorkspace() {
   const [ownerFilter, setOwnerFilter] = useState("");
   const [stageFilter, setStageFilter] = useState<CrmLeadStage | "">("");
   const [boardView, setBoardView] = useState<BoardView>("current");
+  const [linkedContactId] = useState(() => currentUuidDeepLink("contact", "crm"));
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -161,6 +174,7 @@ export function CrmWorkspace() {
   const [renderNow] = useState(() => Date.now());
   const [defaultFollowUp] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 24 * 60 * 60 * 1000)));
   const createNameInputRef = useRef<HTMLInputElement>(null);
+  const openedContactLink = useRef<string | null>(null);
   const manager = Boolean(workspace && canManageTasks(workspace.membership.role));
   const platformAdmin = Boolean(workspace && canManageAllTaskExecution(workspace.membership.role));
 
@@ -174,6 +188,8 @@ export function CrmWorkspace() {
     setImportBatches([]);
     setImportRows([]);
     setIntakeHealth(null);
+    setLeadRoutingMembers([]);
+    setLeadRoutingSelection([]);
     setTotalCount(0);
     setActivityFormId(null);
     setIdentityFormId(null);
@@ -190,7 +206,7 @@ export function CrmWorkspace() {
     const supabase = getSupabaseBrowserClient();
     setCrmLoading(true);
     try {
-      const [searchResult, performanceResult, batchesResult, intakeHealthResult] = await Promise.all([
+      const [searchResult, performanceResult, batchesResult, intakeHealthResult, routingResult] = await Promise.all([
         supabase.rpc("search_crm_contacts_v2", {
           target_organization_id: organizationId,
           search_query: searchQuery,
@@ -210,17 +226,32 @@ export function CrmWorkspace() {
         platformAdmin
           ? supabase.rpc("get_whales_zone_intake_health", { target_organization_id: organizationId })
           : Promise.resolve({ data: [] as IntakeHealth[], error: null }),
+        platformAdmin
+          ? supabase.functions.invoke("crm-commands", { body: { action: "get_lead_routing", organization_id: organizationId } })
+          : Promise.resolve({ data: { members: [] as LeadRoutingMember[] }, error: null }),
       ]);
       if (searchResult.error) throw searchResult.error;
       if (performanceResult.error) throw performanceResult.error;
       if (batchesResult.error) throw batchesResult.error;
       if (intakeHealthResult.error) throw intakeHealthResult.error;
+      if (routingResult.error) throw routingResult.error;
 
       const matches = searchResult.data ?? [];
-      const contactIds = matches.map((match) => match.contact_id);
-      setTotalCount(Number(matches[0]?.total_count ?? 0));
+      let contactIds = matches.map((match) => match.contact_id);
+      let matchedCount = Number(matches[0]?.total_count ?? 0);
+      if (linkedContactId) {
+        const directContactResult = await supabase.from("crm_contacts").select("id").eq("organization_id", organizationId).eq("id", linkedContactId).maybeSingle();
+        if (directContactResult.error) throw directContactResult.error;
+        contactIds = directContactResult.data ? [directContactResult.data.id] : [];
+        matchedCount = contactIds.length;
+      }
+      setTotalCount(matchedCount);
       setOwnerPerformance(performanceResult.data ?? []);
       setIntakeHealth(intakeHealthResult.data?.[0] ?? null);
+      const routingMembers = ((routingResult.data as { members?: LeadRoutingMember[] } | null)?.members ?? [])
+        .map((member) => ({ ...member, assigned_live_leads: Number(member.assigned_live_leads), route_position: member.route_position === null ? null : Number(member.route_position) }));
+      setLeadRoutingMembers(routingMembers);
+      setLeadRoutingSelection(routingMembers.filter((member) => member.selected).sort((a, b) => (a.route_position ?? 99) - (b.route_position ?? 99)).map((member) => member.user_id));
       const batches = batchesResult.data ?? [];
       setImportBatches(batches);
       if (platformAdmin && batches.length) {
@@ -256,7 +287,7 @@ export function CrmWorkspace() {
     } finally {
       setCrmLoading(false);
     }
-  }, [boardView, filter, manager, ownerFilter, page, performanceRange, platformAdmin, searchQuery, stageFilter]);
+  }, [boardView, filter, linkedContactId, manager, ownerFilter, page, performanceRange, platformAdmin, searchQuery, stageFilter]);
 
   const refreshSafely = useCallback(async (organizationId: string) => {
     try {
@@ -329,6 +360,18 @@ export function CrmWorkspace() {
   }, [refreshSafely, workspace]);
 
   useEffect(() => {
+    if (!linkedContactId || openedContactLink.current === linkedContactId || !contacts.some((contact) => contact.id === linkedContactId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`crm-${linkedContactId}`);
+      if (!target) return;
+      openedContactLink.current = linkedContactId;
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [contacts, linkedContactId]);
+
+  useEffect(() => {
     if (!workspace) return;
     const supabase = getSupabaseBrowserClient();
     const refresh = () => void refreshSafely(workspace.organization.id);
@@ -391,6 +434,29 @@ export function CrmWorkspace() {
     setNotice(successMessage);
     await refreshSafely(workspace.organization.id);
     return true;
+  }
+
+  async function saveLeadRouting() {
+    if (!workspace) return;
+    setWorking(true);
+    setError(null);
+    setNotice(null);
+    const { error: routingError } = await getSupabaseBrowserClient().functions.invoke("crm-commands", {
+      body: {
+        action: "save_lead_routing",
+        organization_id: workspace.organization.id,
+        user_ids: leadRoutingSelection,
+      },
+    });
+    setWorking(false);
+    if (routingError) {
+      setError(await getSupabaseFunctionErrorMessage(routingError, "تعذّر حفظ توزيع تسجيلات Whales Zone."));
+      return;
+    }
+    setNotice(leadRoutingSelection.length
+      ? "تم حفظ حسابات استقبال التسجيلات الجديدة. كل عميل جديد سيذهب للأقل تحميلًا بينهم مع مهمة وإشعار مباشر."
+      : "تم إلغاء التوزيع المخصص. التسجيل الجديد سيذهب لحساب مالك المنصة كخيار آمن.");
+    await refreshSafely(workspace.organization.id);
   }
 
   async function createLead(event: FormEvent<HTMLFormElement>) {
@@ -609,7 +675,10 @@ export function CrmWorkspace() {
   }), { all: 0, overdue: 0, fresh: 0, won: 0 });
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const hasFilters = Boolean(searchQuery || ownerFilter || stageFilter || filter !== "all");
-  const visibleStages = crmLeadStages.filter((stage) => boardView === "current" ? crmLeadStageConfig[stage].active : !crmLeadStageConfig[stage].active);
+  const linkedContact = linkedContactId ? contacts.find((contact) => contact.id === linkedContactId) ?? null : null;
+  const visibleStages = linkedContact
+    ? [linkedContact.stage]
+    : crmLeadStages.filter((stage) => boardView === "current" ? crmLeadStageConfig[stage].active : !crmLeadStageConfig[stage].active);
 
   return <section className="crm-workspace">
     <div className="workspace-toolbar">
@@ -624,11 +693,21 @@ export function CrmWorkspace() {
 
     {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+    {linkedContact ? <p className="direct-link-notice" role="status"><ContactRound size={15} /> تم فتح ملف العميل المطلوب مباشرة، والكارت المحدد ظاهر بإطار واضح.</p> : linkedContactId && !crmLoading ? <p className="form-notice error" role="alert">ملف العميل المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
 
     {platformAdmin && intakeHealth ? <section className={`crm-intake-health ${Number(intakeHealth.failed_mirrors) ? "attention" : "healthy"}`} aria-label="حالة ربط Whales Zone">
       <span className="crm-intake-health-icon">{Number(intakeHealth.failed_mirrors) ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}</span>
       <div><p className="overline">Whales Zone → CRM</p><strong>{Number(intakeHealth.failed_mirrors) ? "التسجيل في CRM يعمل وتوجد محاولات مزامنة للشيت تحتاج مراجعة" : "الربط التلقائي جاهز: العميل يُحفظ في CRM أولًا"}</strong><small>{intakeHealth.last_received_at ? `آخر تسجيل أو استيراد: ${formatDate(intakeHealth.last_received_at)}` : "لم يصل تسجيل إلى المسار الجديد بعد."}</small></div>
       <dl><div><dt>تسجيلات مباشرة</dt><dd>{intakeHealth.live_events}</dd></div><div><dt>صفوف تاريخية</dt><dd>{intakeHealth.historical_events}</dd></div><div><dt>تم دمجها</dt><dd>{intakeHealth.deduplicated_events}</dd></div><div><dt>تعثر نسخ الشيت</dt><dd>{intakeHealth.failed_mirrors}</dd></div></dl>
+    </section> : null}
+
+    {platformAdmin && leadRoutingMembers.length ? <section className="panel crm-lead-routing" aria-label="توزيع تسجيلات Whales Zone الجديدة">
+      <div className="section-heading"><div><p className="overline">Whales Zone · تسجيلات جديدة فقط</p><h2>مين يستلم العميل والمهمة؟</h2><p>اختر حسابًا أو أكثر بالبريد. كل تسجيل جديد يتوزع تلقائيًا على الأقل تحميلًا بينهم، ويصل لصاحبه إشعار يفتح نفس المهمة. العملاء التاريخيون لا يدخلون هذا التوزيع ولا ينشئون مهام.</p></div><StatusBadge tone={leadRoutingSelection.length ? "success" : "warning"}>{leadRoutingSelection.length ? `${leadRoutingSelection.length} مستلم` : "المالك افتراضيًا"}</StatusBadge></div>
+      <div className="crm-lead-routing-grid">{leadRoutingMembers.map((member) => {
+        const checked = leadRoutingSelection.includes(member.user_id);
+        return <label className={checked ? "selected" : ""} key={member.user_id}><input type="checkbox" checked={checked} onChange={(event) => setLeadRoutingSelection((current) => event.target.checked ? [...current, member.user_id] : current.filter((id) => id !== member.user_id))} /><span><strong>{member.full_name}</strong><small dir="ltr">{member.email}</small><small>{member.assigned_live_leads.toLocaleString("ar-EG")} تسجيلات مباشرة مسندة حتى الآن</small></span><StatusBadge tone={checked ? "success" : "neutral"}>{checked ? "يستلم" : "غير مختار"}</StatusBadge></label>;
+      })}</div>
+      <div className="form-actions"><Button type="button" disabled={working} onClick={() => void saveLeadRouting()}>{working ? <LoaderCircle className="spin" size={15} /> : <UserRoundCheck size={15} />} حفظ توزيع التسجيلات الجديدة</Button><small>ترتيب الاختيار لا يرسل نفس العميل لأكثر من شخص؛ لكل عميل مسؤول واحد فقط.</small></div>
     </section> : null}
 
     <div className="workspace-view-switch">
@@ -697,7 +776,7 @@ export function CrmWorkspace() {
       <section className="panel crm-create-form crm-import-dialog" role="dialog" aria-modal="true" aria-labelledby="crm-import-dialog-title">
         <div className="section-heading"><div><p className="overline">استيراد موثّق + دمج هوية</p><h2 id="crm-import-dialog-title">استيراد ومزامنة العملاء</h2><p>{importMode === "whales_zone_sheet" ? "ارفع CSV المصدر من Google Sheet لاسترداد التسجيلات القديمة. التكرارات تُدمج في ملف العميل نفسه ولا تمنع الدفعة." : "اقرأ ملف Telegram JSON أو CSV أو الصق رسائل «أدمن الحيتان» كما هي. السيرفر يستقبل الصفوف التي راجعتها فقط."}</p></div><button className="text-button" type="button" onClick={() => setShowImport(false)}>إغلاق</button></div>
         <div className="segmented-control crm-import-mode" aria-label="مصدر استيراد العملاء"><button type="button" className={importMode === "telegram" ? "active" : ""} onClick={() => changeImportMode("telegram")}>Telegram · أدمن الحيتان</button><button type="button" className={importMode === "whales_zone_sheet" ? "active" : ""} onClick={() => changeImportMode("whales_zone_sheet")}>Google Sheet · Whales Zone</button></div>
-        <div className="crm-safety-note"><ShieldCheck size={18} /><div><strong>لا رسائل ولا تفعيل تلقائي</strong><p>الاستيراد ينشئ ملفات CRM ومهام متابعة فقط. الهاتف والبريد وTradingView يمنعون إنشاء ملف مكرر لنفس العميل.</p></div></div>
+        <div className="crm-safety-note"><ShieldCheck size={18} /><div><strong>لا رسائل ولا تفعيل تلقائي</strong><p>{importMode === "whales_zone_sheet" ? "الاستيراد التاريخي يحفظ ملفات CRM فقط بدون مهام جديدة؛ الهاتف والبريد وTradingView يمنعون التكرار." : "استيراد Telegram يحفظ ملفات CRM حسب حالة الرسالة؛ لا يرسل أي تواصل للعميل."}</p></div></div>
         <div className="crm-import-source-grid">
           <label className="crm-import-file"><Upload size={18} /><span><strong>{importFileName || (importMode === "whales_zone_sheet" ? "اختر CSV المصدر من Whales Zone" : "اختر ملف Telegram أو CSV")}</strong><small>{importMode === "whales_zone_sheet" ? "CSV / TSV — الأعمدة العربية الحالية مدعومة" : "JSON / CSV / TSV / TXT"} — حد أقصى 5MB</small></span><input type="file" accept={importMode === "whales_zone_sheet" ? ".csv,.tsv,text/csv,text/tab-separated-values" : ".json,.csv,.tsv,.txt,application/json,text/csv,text/plain"} onChange={(event) => void readImportFile(event)} /></label>
           <button className="crm-template-button" type="button" onClick={downloadImportTemplate}><Download size={16} /><span><strong>تنزيل قالب CSV</strong><small>لو ستجهّز الدفعة يدويًا</small></span></button>
@@ -709,7 +788,7 @@ export function CrmWorkspace() {
           <div className="crm-import-summary"><div><strong>{importPreview.rows.length}</strong><span>إجمالي الصفوف</span></div><div><strong>{importPreview.valid_rows.length}</strong><span>صالحة</span></div><div className={importPreview.invalid_count ? "attention" : ""}><strong>{importPreview.invalid_count}</strong><span>تحتاج تصحيحًا</span></div><div><strong>{importPreview.duplicate_count}</strong><span>{importMode === "whales_zone_sheet" ? "سيتم دمجها" : "مكررة داخل الملف"}</span></div></div>
           {importMode === "telegram" ? <div className="crm-import-signals">{(Object.keys(importSignalConfig) as TelegramImportSignal[]).map((signal) => <span key={signal}><StatusBadge tone={importSignalConfig[signal].tone}>{importSignalConfig[signal].label}</StatusBadge><strong>{importPreview.signal_counts[signal]}</strong></span>)}</div> : <p className="empty-proof"><ShieldCheck size={15} /> إعادة رفع نفس الشيت آمنة: الصف الموجود يُسجّل كمكرر ولا يُنشئ عميلاً ثانيًا.</p>}
           <div className="crm-import-table-wrap"><table><thead><tr><th>#</th><th>العميل</th><th>الهاتف والبريد</th><th>TradingView</th>{importMode === "telegram" ? <th>حالة Telegram</th> : null}<th>الفحص</th></tr></thead><tbody>{importPreview.rows.slice(0, 500).map((row) => <tr className={row.errors.length ? "invalid" : "valid"} key={`${row.message_id}-${row.row_number}`}><td>{row.row_number}</td><td><strong>{row.full_name || "—"}</strong><small>{importMode === "whales_zone_sheet" ? `صف ${row.row_number}` : `رسالة ${row.message_id || "—"}`}</small></td><td dir="ltr"><span>{row.phone || "—"}</span><small>{row.email || "—"}</small></td><td dir="ltr">{row.tradingview || "—"}</td>{importMode === "telegram" ? <td><StatusBadge tone={importSignalConfig[row.signal].tone}>{importSignalConfig[row.signal].label}</StatusBadge></td> : null}<td>{row.errors.length ? <ul>{row.errors.map((rowError) => <li key={rowError}>{rowError}</li>)}</ul> : <span className="crm-import-valid"><CheckCircle2 size={14} /> صالح</span>}</td></tr>)}</tbody></table></div>
-          <div className="crm-import-approval"><label><span>مسؤول المتابعة الافتراضي</span><select value={importDefaultOwner} onChange={(event) => setImportDefaultOwner(event.target.value)}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label className="crm-checkbox"><input type="checkbox" checked={importReviewed} onChange={(event) => setImportReviewed(event.target.checked)} /><span>راجعت الصفوف، وأفهم أن العملية تحفظ الملفات والمهام فقط ولا ترسل رسالة.</span></label><Button type="button" disabled={working || Boolean(importPreview.invalid_count) || !importPreview.valid_rows.length || !importReviewed} onClick={() => void importCustomers()}>{working ? <LoaderCircle className="spin" size={15} /> : <DatabaseIcon size={15} />} اعتماد {importPreview.valid_rows.length} صفًا</Button></div>
+          <div className="crm-import-approval"><label><span>{importMode === "whales_zone_sheet" ? "مالك الملفات التاريخية" : "مسؤول المتابعة الافتراضي"}</span><select value={importDefaultOwner} onChange={(event) => setImportDefaultOwner(event.target.value)}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label className="crm-checkbox"><input type="checkbox" checked={importReviewed} onChange={(event) => setImportReviewed(event.target.checked)} /><span>{importMode === "whales_zone_sheet" ? "راجعت الصفوف، وأفهم أن العملية تحفظ العملاء القدامى في CRM بدون إنشاء مهام أو إرسال رسائل." : "راجعت الصفوف، وأفهم أن العملية تحفظ الملفات وفق الحالة ولا ترسل رسالة."}</span></label><Button type="button" disabled={working || Boolean(importPreview.invalid_count) || !importPreview.valid_rows.length || !importReviewed} onClick={() => void importCustomers()}>{working ? <LoaderCircle className="spin" size={15} /> : <DatabaseIcon size={15} />} اعتماد {importPreview.valid_rows.length} صفًا</Button></div>
         </section> : null}
 
         <section className="crm-import-history"><div className="section-heading"><div><p className="overline">سجل تدقيق لا يُمحى</p><h3>آخر دفعات الاستيراد</h3></div><StatusBadge tone="neutral">{importBatches.length} دفعة</StatusBadge></div>{importBatches.length ? <div>{importBatches.map((batch) => {
@@ -732,17 +811,17 @@ export function CrmWorkspace() {
         const canAct = manager || contact.owner_id === session.user.id;
         const nextOptions = allowedCrmTransitions[contact.stage];
         const remainingIdentityKinds = (["phone", "email", "telegram"] as CrmIdentityKind[]).filter((kind) => !contactIdentities.some((identity) => identity.kind === kind));
-        return <article className={`crm-contact-card workflow-entity-card ${overdue ? "overdue" : ""}`} data-card-state={overdue ? "overdue" : contact.stage} key={contact.id} id={`crm-${contact.id}`}><div className="crm-contact-top"><div><p className="overline">{crmSourceConfig[contact.source].label} · {crmInterestConfig[contact.interest].label}</p><h3 className="workflow-card-heading">{contact.full_name}</h3></div><StatusBadge tone={crmLeadStageConfig[contact.stage].tone}>{crmLeadStageConfig[contact.stage].shortLabel}</StatusBadge></div>
+        return <article className={`crm-contact-card workflow-entity-card ${overdue ? "overdue" : ""}`} data-card-state={overdue ? "overdue" : contact.stage} data-direct-target={linkedContactId === contact.id || undefined} tabIndex={linkedContactId === contact.id ? -1 : undefined} key={contact.id} id={`crm-${contact.id}`}><div className="crm-contact-top"><div><p className="overline">{crmSourceConfig[contact.source].label} · {crmInterestConfig[contact.interest].label}</p><h3 className="workflow-card-heading">{contact.full_name}</h3>{linkedContactId === contact.id ? <span className="direct-target-label"><Route size={11} /> ده العميل المطلوب</span> : null}</div><StatusBadge tone={crmLeadStageConfig[contact.stage].tone}>{crmLeadStageConfig[contact.stage].shortLabel}</StatusBadge></div>
           <dl className="crm-contact-meta">
             {contactIdentities.map((identity) => <div key={identity.id}><dt>{crmIdentityKindConfig[identity.kind].label}{identity.is_primary ? " · أساسية" : ""}</dt><dd dir="ltr">{identity.value}</dd></div>)}
             <div><dt><CircleUserRound size={13} /> المسؤول</dt><dd>{peopleById.get(contact.owner_id)?.name ?? "عضو فريق"}</dd></div>
-            {contact.next_follow_up_at ? <div><dt><CalendarClock size={13} /> المتابعة</dt><dd>{formatDate(contact.next_follow_up_at)}</dd></div> : null}
+            {contact.next_follow_up_at ? <div><dt><CalendarClock size={13} /> المتابعة</dt><dd>{formatDate(contact.next_follow_up_at)}</dd></div> : !contact.follow_up_required ? <div><dt><CheckCircle2 size={13} /> المتابعة</dt><dd>سجل تاريخي — لا توجد مهمة مطلوبة</dd></div> : null}
             {contact.source_registered_at ? <div><dt><FileClock size={13} /> تاريخ التسجيل</dt><dd>{formatDate(contact.source_registered_at)}</dd></div> : null}
           </dl>
           {contactConversationLinks.length ? <div className="crm-chat-links">{contactConversationLinks.map((link) => <a href={link.url} target="_blank" rel="noreferrer" key={link.id}><ExternalLink size={12} /> فتح شات {link.label ?? crmConversationChannelConfig[link.channel].label}</a>)}</div> : null}
           {contact.notes ? <p className="crm-contact-notes">{contact.notes}</p> : null}
           {overdue ? <span className="overdue-label"><AlertTriangle size={13} /> المتابعة متأخرة</span> : null}
-          {openTask ? <a className="crm-task-link" href="/tasks"><Route size={12} /> المهمة: {taskStatusConfig[openTask.status].label}</a> : <span className="crm-task-complete"><CheckCircle2 size={12} /> لا توجد متابعة مفتوحة</span>}
+          {openTask ? <a className="crm-task-link" href={taskDeepLink(openTask.id)}><Route size={12} /> {taskReference(openTask.id)} · المهمة: {taskStatusConfig[openTask.status].label}</a> : <span className="crm-task-complete"><CheckCircle2 size={12} /> لا توجد متابعة مفتوحة</span>}
           <div className="crm-card-actions">{canAct && remainingIdentityKinds.length ? <button className="text-button" type="button" onClick={() => setIdentityFormId(identityFormId === contact.id ? null : contact.id)}><Plus size={13} /> إضافة وسيلة تواصل</button> : null}{canAct && nextOptions.length ? <button className="text-button" type="button" onClick={() => { const opening = activityFormId !== contact.id; setActivityFormId(opening ? contact.id : null); setActivityStage(contact.stage); }}><MessageSquareText size={13} /> تسجيل نتيجة متابعة</button> : null}</div>
           {identityFormId === contact.id && canAct && remainingIdentityKinds.length ? <form className="crm-activity-form" onSubmit={(event) => void addIdentity(event, contact)}><label><span>نوع الوسيلة الجديدة</span><select name="identity_kind">{remainingIdentityKinds.map((kind) => <option value={kind} key={kind}>{crmIdentityKindConfig[kind].label}</option>)}</select></label><label><span>القيمة</span><input name="identity_value" dir="ltr" minLength={3} maxLength={320} required placeholder="أدخل الهاتف أو البريد أو اسم Telegram" /></label><label className="crm-checkbox"><input name="make_primary" type="checkbox" /><span>اجعلها وسيلة التواصل الأساسية</span></label><div className="form-actions"><Button type="submit" disabled={working}>حفظ الوسيلة</Button><button className="text-button" type="button" onClick={() => setIdentityFormId(null)}>إلغاء</button></div></form> : null}
           {contactActivities.length ? <details className="crm-history"><summary><History size={13} /> أحدث الأنشطة المسجلة</summary><ol>{contactActivities.slice(0, 4).map((activity) => <li key={activity.id}><strong>{activity.kind === "created" ? "إنشاء الملف" : crmActivityKindConfig[activity.kind].label}</strong><p>{activity.summary}</p><small>{formatDate(activity.occurred_at)} · {crmLeadStageConfig[activity.to_stage].label}</small></li>)}</ol></details> : null}
@@ -751,7 +830,7 @@ export function CrmWorkspace() {
       })}{!stageContacts.length ? <div className="column-empty"><span>—</span><p>لا يوجد</p></div> : null}</div></section>;
     })}</div> : <section className="panel empty-state"><span className="empty-visual">{hasFilters ? <Search size={20} /> : <ContactRound size={20} />}</span><div><h2>{hasFilters ? "لا توجد نتائج مطابقة" : "CRM جاهز لاستقبال العملاء"}</h2><p>{hasFilters ? "غيّر كلمة البحث أو المسؤول أو المرحلة أو نطاق المتابعة." : "تسجيلات Whales Zone الجديدة ستظهر هنا تلقائيًا، ويمكن للإدارة استرداد السجل القديم من أداة الاستيراد."}</p></div><span className="empty-proof"><ShieldCheck size={15} /> Whales Zone مرتبط بالـCRM</span></section>}
 
-    {totalCount > PAGE_SIZE ? <nav className="crm-pagination" aria-label="صفحات نتائج العملاء"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}><ChevronRight size={15} /> السابق</button><span>صفحة {page + 1} من {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)}>التالي <ChevronLeft size={15} /></button></nav> : null}
+    {!linkedContactId && totalCount > PAGE_SIZE ? <nav className="crm-pagination" aria-label="صفحات نتائج العملاء"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}><ChevronRight size={15} /> السابق</button><span>صفحة {page + 1} من {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)}>التالي <ChevronLeft size={15} /></button></nav> : null}
     <aside className="automation-note"><LockKeyhole size={17} /><div><strong>{platformAdmin ? "ربط Whales Zone واستيراد Telegram تحت تحكمك وحدك" : "التكاملات تحت تحكم إدارة المنصة"}</strong><p>{platformAdmin ? "التسجيل الجديد يدخل CRM تلقائيًا، والاستيراد التاريخي له معاينة وسجل تدقيق وتراجع آمن." : "لن تظهر لك أدوات الاستيراد أو مفاتيح التكامل؛ ترى فقط العملاء المسموح لك بمتابعتهم."}</p></div></aside>
   </section>;
 }
