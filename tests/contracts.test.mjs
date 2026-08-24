@@ -388,12 +388,15 @@ test("AI providers are owner-managed, Vault-backed, testable, and provider-agnos
 });
 
 test("browser configuration cannot declare a service role variable", async () => {
-  const [envExample, client] = await Promise.all([
+  const [envExample, client, viteConfig] = await Promise.all([
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../lib/supabase/client.ts", import.meta.url), "utf8"),
+    readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(`${envExample}\n${client}`, /NEXT_PUBLIC_[A-Z_]*SERVICE/i);
   assert.match(`${envExample}\n${client}`, /PUBLISHABLE_KEY/);
+  assert.match(viteConfig, /loadEnv\(mode, process\.cwd\(\), \["NEXT_PUBLIC_"\]\)/);
+  assert.match(viteConfig, /Missing required browser environment/);
 });
 
 test("Whales Zone registrations are idempotent, CRM-first, historically importable, and publicly hardened", async () => {

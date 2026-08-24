@@ -1,5 +1,5 @@
 import vinext from "vinext";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
 
@@ -7,6 +7,11 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
 const { d1, r2 } = hostingConfig;
+
+const requiredPublicEnvironment = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+] as const;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -33,7 +38,22 @@ const localBindingConfig = {
     : [],
 };
 
-export default defineConfig(async () => {
+export default defineConfig(async ({ command, mode }) => {
+  // Vinext inlines NEXT_PUBLIC_* values into the browser bundle at build time.
+  // Load them before the Vinext plugin runs and reject a production artifact
+  // that would otherwise render a disabled login form for every visitor.
+  const publicEnvironment = loadEnv(mode, process.cwd(), ["NEXT_PUBLIC_"]);
+  for (const [key, value] of Object.entries(publicEnvironment)) {
+    process.env[key] ??= value;
+  }
+
+  if (command === "build") {
+    const missing = requiredPublicEnvironment.filter((key) => !process.env[key]);
+    if (missing.length > 0) {
+      throw new Error(`Missing required browser environment: ${missing.join(", ")}`);
+    }
+  }
+
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
