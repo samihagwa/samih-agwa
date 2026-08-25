@@ -35,6 +35,11 @@ const eslintConfig = defineConfig([
         version: "detect",
       },
     },
+    rules: {
+      // Internal navigation intentionally uses hard links because the deployed
+      // vinext client router has a documented fallback requirement.
+      "@next/next/no-html-link-for-pages": "off",
+    },
   },
 ]);
 

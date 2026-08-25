@@ -30,7 +30,7 @@ export function taskDomId(taskId: string) {
 
 export function taskDeepLink(taskId: string) {
   const id = encoded(taskId);
-  return `/tasks?task=${id}#task-${id}`;
+  return `/tasks/${id}`;
 }
 
 export function taskReference(taskId: string) {

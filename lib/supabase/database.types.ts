@@ -3719,6 +3719,58 @@ export type Database = {
           },
         ]
       }
+      task_revision_requests: {
+        Row: {
+          id: string
+          instructions: string
+          organization_id: string
+          requested_at: string
+          requested_by: string
+          task_id: string
+          task_version: number
+        }
+        Insert: {
+          id?: string
+          instructions: string
+          organization_id?: string
+          requested_at?: string
+          requested_by?: string
+          task_id: string
+          task_version: number
+        }
+        Update: {
+          id?: string
+          instructions?: string
+          organization_id?: string
+          requested_at?: string
+          requested_by?: string
+          task_id?: string
+          task_version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_revision_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_revision_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_revision_requests_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           acceptance_criteria: string

@@ -2008,10 +2008,59 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
 .crm-customer-timeline p { margin: 4px 0; color: var(--ink-600); font-size: 11px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
 .crm-customer-timeline small { color: var(--ink-400); font-size: 9px; }
 
+/* Dedicated task file — follows the existing customer-file hierarchy and tokens. */
+.task-detail-workspace { min-width: 0; display: grid; gap: 14px; }
+.task-detail-toolbar { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.task-detail-toolbar .button { min-height: 34px; padding: 6px 10px; }
+.task-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.task-detail-header h2 { margin: 6px 0 5px; color: var(--ink-950); font-size: 22px; line-height: 1.55; overflow-wrap: anywhere; }
+.task-detail-header p:not(.overline) { margin: 0; color: var(--ink-600); font-size: 12px; line-height: 1.7; }
+.task-detail-workspace > .form-notice { margin: 0; display: flex; align-items: center; gap: 6px; }
+.task-detail-layout { min-width: 0; display: grid; grid-template-columns: minmax(220px, .48fr) minmax(0, 1.52fr); align-items: start; gap: 12px; }
+.task-detail-action { position: sticky; top: 92px; display: grid; gap: 12px; }
+.task-detail-action .section-heading { margin: 0; }
+.task-detail-action .section-heading > svg, .task-detail-section .section-heading > svg { color: var(--teal-700); }
+.task-detail-action > .button { width: 100%; }
+.task-role-proof, .task-action-note { margin: 0; padding: 10px 11px; display: flex; align-items: flex-start; gap: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); color: var(--ink-600); font-size: 10px; line-height: 1.7; }
+.task-role-proof svg { flex: 0 0 auto; margin-top: 1px; color: var(--teal-700); }
+.task-detail-status { display: grid; gap: 6px; }
+.task-detail-status > span, .task-revision-compose label > span { color: var(--ink-800); font-size: 11px; font-weight: 900; }
+.task-detail-status select { min-height: 42px; font-size: 11px; }
+.task-detail-main { min-width: 0; display: grid; gap: 12px; }
+.task-detail-section { min-width: 0; }
+.task-detail-section .section-heading { margin-bottom: 14px; }
+.task-detail-section .section-heading > div > p:last-child { margin: 5px 0 0; color: var(--ink-600); font-size: 11px; line-height: 1.7; }
+.task-detail-facts { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.task-detail-facts > div { min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+.task-detail-facts dt { display: flex; align-items: center; gap: 4px; color: var(--ink-600); font-size: 10px; font-weight: 800; }
+.task-detail-facts dd { margin: 5px 0 0; color: var(--ink-800); font-size: 11px; font-weight: 900; line-height: 1.6; overflow-wrap: anywhere; }
+.task-detail-copy { margin-top: 11px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--paper); }
+.task-detail-copy.acceptance { background: var(--canvas); }
+.task-detail-copy strong { color: var(--ink-950); font-size: 11px; }
+.task-detail-copy p { margin: 6px 0 0; color: var(--ink-600); font-size: 11px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-detail-section .task-review-rule, .task-direct-close-rule { margin: 11px 0 0; padding: 9px 10px; display: flex; align-items: center; gap: 6px; border: 1px solid #ddc88e; border-radius: 10px; background: #fff9e8; color: #765b16; font-size: 10px; font-weight: 850; }
+.task-direct-close-rule { border-color: #b3dbd5; background: var(--teal-100); color: var(--teal-700); }
+.task-revision-compose form, .task-revision-compose label { display: grid; gap: 7px; }
+.task-revision-compose .form-actions { margin-top: 10px; }
+.task-revision-list, .task-event-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.task-revision-list li, .task-event-list li { min-width: 0; position: relative; padding: 0 24px 17px 0; }
+.task-revision-list li:last-child, .task-event-list li:last-child { padding-bottom: 0; }
+.task-revision-list li::before, .task-event-list li::before { content: ""; width: 1px; position: absolute; top: 8px; bottom: -1px; right: 6px; background: var(--line-strong); }
+.task-revision-list li:last-child::before, .task-event-list li:last-child::before { display: none; }
+.task-revision-list li > span, .task-event-list li > span { width: 13px; height: 13px; position: absolute; top: 3px; right: 0; border: 3px solid var(--paper); border-radius: 50%; background: var(--teal-700); }
+.task-revision-list li > span { background: var(--amber-700); }
+.task-revision-list strong, .task-event-list strong { color: var(--ink-800); font-size: 11px; }
+.task-revision-list p, .task-event-list p { margin: 4px 0; color: var(--ink-600); font-size: 11px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-revision-list small, .task-event-list small { color: var(--ink-400); font-size: 9px; }
+.task-empty-proof { margin: 0; display: flex; align-items: center; gap: 6px; color: var(--teal-700); font-size: 10px; font-weight: 900; }
+
 @media (max-width: 980px) {
   .crm-customer-layout { grid-template-columns: 1fr; }
   .crm-next-action { position: static; grid-template-columns: minmax(0, 1fr) minmax(180px, .55fr); align-items: center; }
   .crm-next-action .section-heading { grid-column: 1 / -1; }
+  .task-detail-layout { grid-template-columns: 1fr; }
+  .task-detail-action { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+  .task-detail-action .section-heading { grid-column: 1 / -1; }
 }
 
 @media (max-width: 760px) {
@@ -2023,4 +2072,10 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .crm-next-action .section-heading, .crm-customer-result-form .wide, .crm-sales-profile-form .wide { grid-column: auto; }
   .crm-customer-workspace .panel { padding: 17px 14px; }
   .crm-customer-task-list > a { align-items: flex-start; flex-direction: column; }
+  .task-detail-header, .task-detail-toolbar { align-items: flex-start; flex-direction: column; }
+  .task-detail-header h2 { font-size: 19px; }
+  .task-detail-action, .task-detail-facts { grid-template-columns: 1fr; }
+  .task-detail-action .section-heading { grid-column: auto; }
+  .task-detail-workspace .panel { padding: 17px 14px; }
+  .task-detail-status select, .task-revision-compose textarea { font-size: 16px; }
 }

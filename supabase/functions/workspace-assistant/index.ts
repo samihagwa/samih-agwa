@@ -67,7 +67,7 @@ function collectAllowedLinks(value: unknown, output = new Map<string, string>())
   return output;
 }
 function linkLabel(url: string) {
-  if (url.startsWith("/tasks?task=")) return "فتح المهمة المحددة";
+  if (/^\/tasks\/[^/?#]+/.test(url)) return "فتح المهمة المحددة";
   if (url.startsWith("/crm/")) return "فتح ملف العميل";
   if (url.startsWith("/scripts/")) return "فتح السكريبت";
   if (url.startsWith("/content?content=")) return "فتح المحتوى المحدد";
@@ -92,7 +92,7 @@ function personalQuestionIntent(question: string): PersonalQuestionIntent | null
 }
 function taskUrl(task: Record<string, unknown>) {
   const id = text(task.id);
-  return `/tasks?task=${id}#task-${id}`;
+  return `/tasks/${id}`;
 }
 function taskReference(taskId: string) {
   return `MW-${taskId.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase()}`;

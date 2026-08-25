@@ -55,23 +55,21 @@ export function allowedTaskTransitionsForActor({
 }: TaskTransitionContext): TaskStatus[] {
   const platformAdmin = canManageAllTaskExecution(role);
 
-  if (status === "review" && requiresReview) {
+  if (status === "review") {
     if (isAssignee) return [];
-    return isRequester || platformAdmin ? ["done", "in_progress"] : [];
+    return isRequester || platformAdmin ? ["done"] : [];
   }
 
-  if (!isAssignee && !platformAdmin) return [];
+  if (!isAssignee) return [];
 
-  if (status === "backlog") return platformAdmin ? ["ready", "cancelled"] : [];
-  if (status === "ready") return platformAdmin ? ["in_progress", "cancelled"] : ["in_progress"];
+  if (status === "backlog") return [];
+  if (status === "ready") return ["in_progress"];
   if (status === "in_progress") {
     const completion: TaskStatus = requiresReview ? "review" : "done";
-    return platformAdmin ? [completion, "blocked", "cancelled"] : [completion, "blocked"];
+    return [completion, "blocked"];
   }
-  if (status === "blocked") return platformAdmin ? ["in_progress", "cancelled"] : ["in_progress"];
-  if (status === "review") return ["done", "in_progress"];
-  if (status === "done") return platformAdmin ? ["in_progress"] : [];
-  return platformAdmin ? ["backlog"] : [];
+  if (status === "blocked") return ["in_progress"];
+  return [];
 }
 
 export function taskTransitionLabel(currentStatus: TaskStatus, nextStatus: TaskStatus) {

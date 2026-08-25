@@ -80,10 +80,15 @@ test("workflow execution is assignee-scoped, voice profiles are private, and mob
 });
 
 test("task review is optional, requester-gated, and never self-approved", async () => {
-  const [migration, taskContract, workspace, types] = await Promise.all([
+  const [migration, revisionMigration, statusGuardMigration, requesterIndexMigration, taskContract, workspace, detail, deepLinks, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260825151421_optional_task_review_workflow.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260825160911_task_detail_revision_workflow.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260825162147_prevent_task_status_bypass.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260825163600_index_task_revision_request_requester.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/deep-links.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
   ]);
 
@@ -93,15 +98,35 @@ test("task review is optional, requester-gated, and never self-approved", async 
   assert.match(migration, /The task assignee cannot modify their own task while it is under review/);
   assert.match(migration, /Submit this task for review before completion/);
   assert.match(migration, /new\.created_by, 'task_review'/);
-  assert.match(migration, /'\/tasks\?task=' \|\| new\.id \|\| '#task-' \|\| new\.id/);
 
   assert.match(taskContract, /requiresReview \? "review" : "done"/);
   assert.match(taskContract, /currentStatus === "review" \? "إرجاع للتنفيذ"/);
+  assert.match(taskContract, /if \(!isAssignee\) return \[\]/);
   assert.doesNotMatch(taskContract, /in_progress:\s*\["ready"/);
   assert.match(workspace, /معيار القبول — اختياري/);
   assert.match(workspace, /هل المهمة تحتاج مراجعة؟/);
   assert.match(workspace, /task\.status === "review" && task\.created_by === currentUserId/);
   assert.match(workspace, /لا يمكنك اعتمادها بنفسك/);
+  assert.match(workspace, /taskDeepLink\(task\.id\)/);
+  assert.match(revisionMigration, /create table public\.task_revision_requests/);
+  assert.match(revisionMigration, /task_revision_requests_insert_requester_or_platform_admin/);
+  assert.match(revisionMigration, /Platform leadership cannot execute a task assigned to another member/);
+  assert.match(revisionMigration, /app\.task_revision_request_id/);
+  assert.match(revisionMigration, /Invalid task revision command/);
+  assert.match(revisionMigration, /'revision_requested'/);
+  assert.match(revisionMigration, /new\.url := '\/tasks\/' \|\| new\.entity_id/);
+  assert.match(statusGuardMigration, /create or replace function private\.guard_manual_task_status_actor/);
+  assert.match(statusGuardMigration, /The assignee cannot approve, cancel, or reopen their own task/);
+  assert.match(statusGuardMigration, /Return reviewed work through a written revision request/);
+  assert.match(statusGuardMigration, /Only the assigned task owner can execute this task/);
+  assert.match(statusGuardMigration, /drop trigger if exists tasks_actor_status_guard/);
+  assert.match(requesterIndexMigration, /\(requested_by, requested_at desc, id\)/);
+  assert.match(detail, /const canRequestRevision/);
+  assert.match(detail, /from\("task_revision_requests"\)\.insert/);
+  assert.match(detail, /task_version: workspace\.task\.version/);
+  assert.match(detail, /التنفيذ يخص/);
+  assert.match(deepLinks, /return `\/tasks\/\$\{id\}`/);
+  assert.match(types, /task_revision_requests:/);
   assert.match(types, /requires_review: boolean/);
 });
 
@@ -1323,8 +1348,9 @@ test("content team AI choices remain explicit, version fenced, role scoped, and 
 });
 
 test("entity links open the exact card across notifications, tasks, revisions, campaigns, chat, and AI", async () => {
-  const [migration, deepLinks, tasks, content, crm, scripts, publishing, campaigns, chat, team, assistant] = await Promise.all([
+  const [migration, taskDetailMigration, deepLinks, tasks, content, crm, scripts, publishing, campaigns, chat, team, assistant] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822233859_canonical_deep_links_and_whales_zone_routing.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260825160911_task_detail_revision_workflow.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/deep-links.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
@@ -1347,7 +1373,8 @@ test("entity links open the exact card across notifications, tasks, revisions, c
   assert.match(migration, /crm_lead_routing_members/);
   assert.match(migration, /private\.pick_crm_lead_route/);
 
-  assert.match(deepLinks, /\/tasks\?task=\$\{id\}#task-\$\{id\}/);
+  assert.match(taskDetailMigration, /when 'task' then[\s\S]*new\.url := '\/tasks\/' \|\| new\.entity_id/);
+  assert.match(deepLinks, /\/tasks\/\$\{id\}/);
   for (const workspace of [tasks, content, crm, scripts, publishing, campaigns, chat, team]) {
     assert.match(workspace, /data-direct-target/);
   }
@@ -1359,7 +1386,7 @@ test("entity links open the exact card across notifications, tasks, revisions, c
   assert.match(campaigns, /deliverable-\$\{deliverable\.id\}/);
   assert.match(chat, /message-\$\{message\.id\}/);
   assert.match(team, /member-\$\{person\.id\}/);
-  assert.match(assistant, /\/tasks\?task=\$\{id\}#task-\$\{id\}/);
+  assert.match(assistant, /\/tasks\/\$\{id\}/);
   assert.match(assistant, /دي المهام المفتوحة المسندة مباشرة لحسابك فقط/);
 });
 

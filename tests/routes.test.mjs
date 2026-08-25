@@ -4,6 +4,7 @@ import test from "node:test";
 const protectedRoutes = [
   ["/", "اعرف أين الشغل واقف"],
   ["/tasks", "كل شخص يعرف دوره"],
+  ["/tasks/example", "المهمة واضحة من الطلب حتى التنفيذ"],
   ["/content", "من الفكرة إلى النشر"],
   ["/planning", "نعرف لماذا وماذا ومتى"],
   ["/scripts", "فكرتك تبقى اسكريبت"],
