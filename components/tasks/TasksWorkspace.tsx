@@ -21,12 +21,13 @@ import { contentStepConfig } from "../../lib/content";
 import { currentUuidDeepLink, taskDomId, taskReference } from "../../lib/deep-links";
 import { launchGateConfig } from "../../lib/launches";
 import {
-  allowedTaskTransitions,
+  allowedTaskTransitionsForActor,
   canManageAllTaskExecution,
   canManageTasks,
   taskPriorityConfig,
   taskStatusConfig,
   taskStatusLabel,
+  taskTransitionLabel,
   type TaskPriority,
   type TaskStatus,
 } from "../../lib/tasks";
@@ -106,7 +107,10 @@ function boardLaneForTasks(tasks: Task[], isContentWorkflow: boolean) {
 
 function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string, now: number) {
   if (filter === "active") return !taskIsClosed(task);
-  if (filter === "mine") return task.owner_id === currentUserId && !taskIsClosed(task);
+  if (filter === "mine") {
+    return !taskIsClosed(task)
+      && (task.owner_id === currentUserId || (task.status === "review" && task.created_by === currentUserId));
+  }
   if (filter === "overdue") return isOverdue(task, now);
   if (filter === "completed") return taskIsClosed(task);
   return true;
@@ -114,7 +118,10 @@ function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string
 
 function contentWorkflowMatchesFilter(tasks: Task[], filter: TaskFilter, currentUserId: string, now: number) {
   if (filter === "active") return tasks.some((task) => !taskIsClosed(task));
-  if (filter === "mine") return tasks.some((task) => task.owner_id === currentUserId && !taskIsClosed(task));
+  if (filter === "mine") {
+    return tasks.some((task) => !taskIsClosed(task)
+      && (task.owner_id === currentUserId || (task.status === "review" && task.created_by === currentUserId)));
+  }
   if (filter === "overdue") return tasks.some((task) => isOverdue(task, now));
   if (filter === "completed") return tasks.every(taskIsClosed);
   return true;
@@ -142,6 +149,8 @@ export function TasksWorkspace() {
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [newTaskOwnerId, setNewTaskOwnerId] = useState("");
+  const [newTaskRequiresReview, setNewTaskRequiresReview] = useState(false);
   const [filter, setFilter] = useState<TaskFilter>("active");
   const [linkedTaskId] = useState(() => currentUuidDeepLink("task", "task"));
   const [renderNow, setRenderNow] = useState(() => Date.now());
@@ -327,9 +336,15 @@ export function TasksWorkspace() {
     const form = new FormData(formElement);
     const dueValue = String(form.get("due_at") ?? "");
     const dueDate = new Date(dueValue);
+    const ownerId = String(form.get("owner_id") ?? "");
 
     if (!dueValue || Number.isNaN(dueDate.getTime()) || dueDate.getTime() <= Date.now()) {
       setError("اختر موعدًا نهائيًا صحيحًا في المستقبل.");
+      return;
+    }
+
+    if (newTaskRequiresReview && ownerId === session?.user.id) {
+      setError("لا يمكن طلب مراجعة مستقلة لمهمة أسندتها لنفسك. اختر عضوًا آخر أو اجعل الإغلاق مباشرًا.");
       return;
     }
 
@@ -342,9 +357,10 @@ export function TasksWorkspace() {
       title: String(form.get("title") ?? "").trim(),
       description: String(form.get("description") ?? "").trim() || null,
       acceptance_criteria: String(form.get("acceptance_criteria") ?? "").trim(),
-      owner_id: String(form.get("owner_id") ?? ""),
+      owner_id: ownerId,
       priority: String(form.get("priority") ?? "normal") as TaskPriority,
       status: "ready",
+      requires_review: newTaskRequiresReview,
       due_at: dueDate.toISOString(),
     });
 
@@ -355,6 +371,8 @@ export function TasksWorkspace() {
     }
 
     formElement.reset();
+    setNewTaskOwnerId("");
+    setNewTaskRequiresReview(false);
     setShowCreate(false);
     setNotice("تم إنشاء المهمة داخل «شغل مطلوب تنفيذه» وتسجيلها في سجل النشاط.");
     await refreshTasks(workspace.organization.id);
@@ -438,11 +456,19 @@ export function TasksWorkspace() {
           <div className="section-heading"><div><p className="overline">تعريف واضح قبل التنفيذ</p><h2>إنشاء مهمة حقيقية</h2></div><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div>
           <div className="form-grid">
             <label><span>عنوان المهمة</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: مونتاج ريلز خطة التداول" /></label>
-            <label><span>المسؤول المباشر</span><select name="owner_id" defaultValue={session.user.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+            <label><span>المسؤول المباشر</span><select name="owner_id" value={newTaskOwnerId || session.user.id} required onChange={(event) => { setNewTaskOwnerId(event.target.value); if (event.target.value === session.user.id) setNewTaskRequiresReview(false); }}>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
             <label><span>الموعد النهائي</span><input name="due_at" type="datetime-local" defaultValue={defaultDue} required /></label>
             <label><span>الأولوية</span><select name="priority" defaultValue="normal">{(Object.keys(taskPriorityConfig) as TaskPriority[]).map((priority) => <option value={priority} key={priority}>{taskPriorityConfig[priority].label}</option>)}</select></label>
             <label className="full-field"><span>شرح مختصر</span><textarea name="description" maxLength={5000} rows={3} placeholder="السياق والملفات المطلوبة وأي ملاحظات مهمة" /></label>
-            <label className="full-field"><span>معيار القبول — متى نقول إن المهمة تمت؟</span><textarea name="acceptance_criteria" minLength={5} maxLength={4000} rows={3} required placeholder="مثال: نسخة 1080×1920، بدون أخطاء لغوية، ومعتمدة من المسؤول" /></label>
+            <label className="full-field"><span>معيار القبول — اختياري</span><textarea name="acceptance_criteria" maxLength={4000} rows={3} placeholder="اكتبه فقط لو النتيجة المطلوبة تحتاج شروطًا واضحة، مثل المقاس أو صيغة التسليم" /></label>
+            <fieldset className="full-field task-review-choice">
+              <legend>هل المهمة تحتاج مراجعة؟</legend>
+              <div className="task-review-option">
+                <input aria-label="تحتاج اعتماد طالب المهمة قبل الإغلاق" type="checkbox" checked={newTaskRequiresReview} disabled={(newTaskOwnerId || session.user.id) === session.user.id} onChange={(event) => setNewTaskRequiresReview(event.target.checked)} />
+                <span><strong>تحتاج اعتماد طالب المهمة قبل الإغلاق</strong><small>{(newTaskOwnerId || session.user.id) === session.user.id ? "غير متاح عند إسناد المهمة لنفسك." : "العضو يرسلها للمراجعة، وأنت توافق أو تعيدها للتنفيذ."}</small></span>
+              </div>
+              <small>لو لم تفعّل هذا الاختيار، يقدر المسؤول الضغط على «تم التنفيذ» وإغلاق المهمة مباشرة.</small>
+            </fieldset>
           </div>
           <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <CheckCircle2 size={16} />} حفظ المهمة</Button><small>ستظهر مباشرة داخل «شغل مطلوب تنفيذه»، وكل تغيير بعدها مسموح ومسجّل.</small></div>
         </form>
@@ -499,12 +525,22 @@ export function TasksWorkspace() {
                   }
                   const task = entry.tasks[0];
                   const owner = peopleById.get(task.owner_id);
-                  const canMove = !task.crm_contact_id && (platformAdmin || task.owner_id === session.user.id);
-                  const options = [task.status, ...allowedTaskTransitions[task.status]].filter((option) =>
+                  const isAssignee = task.owner_id === session.user.id;
+                  const isRequester = task.created_by === session.user.id;
+                  const transitions = allowedTaskTransitionsForActor({
+                    status: task.status,
+                    requiresReview: task.requires_review,
+                    isAssignee,
+                    isRequester,
+                    role: workspace.membership.role,
+                  });
+                  const options = transitions.filter((option) =>
                     (!task.launch_deliverable_id || option !== "review" || task.status === "review")
                     && (!task.content_step || !["caption", "design", "scheduling", "publishing"].includes(task.content_step)
                       || option !== "review" || task.status === "review")
                   );
+                  const canMove = !task.crm_contact_id && options.length > 0;
+                  const requester = peopleById.get(task.created_by);
                   return (
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} data-priority={task.priority} data-status={task.status} data-direct-target={linkedTaskId === task.id || undefined} id={taskDomId(task.id)} tabIndex={linkedTaskId === task.id ? -1 : undefined} key={task.id}>
                       <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small className="task-reference">{taskReference(task.id)}</small><small>v{task.version}</small></div>
@@ -518,12 +554,13 @@ export function TasksWorkspace() {
                       {task.crm_contact_id ? <a className="task-production-link" href={`/crm/${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
                       <h3>{task.title}</h3>
                       {task.description ? <CollapsibleText text={task.description} maxCharacters={170} className="task-description" /> : null}
-                      <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong><CollapsibleText text={task.acceptance_criteria} maxCharacters={130} /></span></div>
+                      {task.acceptance_criteria.trim() ? <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong><CollapsibleText text={task.acceptance_criteria} maxCharacters={130} /></span></div> : null}
+                      {task.requires_review ? <p className="task-review-rule"><ShieldCheck size={13} /> تحتاج اعتماد {requester?.name ?? "طالب المهمة"} قبل الإغلاق.</p> : null}
                       <dl className="task-meta"><div><dt><CircleUserRound size={14} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div><div><dt><CalendarClock size={14} /> الموعد</dt><dd>{formatDeadline(task.due_at)}</dd></div></dl>
                       {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة منذ {formatOverdueDuration(task, renderNow)}</span> : null}
                       {task.crm_contact_id
                         ? <p className="crm-task-guard"><ShieldCheck size={13} /> تتحرك هذه المهمة تلقائيًا عند تسجيل النتيجة من CRM.</p>
-                        : <label className="status-select"><span>نقل إلى</span><select value={task.status} disabled={!canMove || working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}>{options.map((option) => <option key={option} value={option}>{taskStatusLabel(option, task.content_step)}</option>)}</select></label>}
+                        : <><label className="status-select"><span>الإجراء التالي</span><select value={task.status} disabled={!canMove || working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}><option value={task.status}>{taskStatusLabel(task.status, task.content_step)} — الحالة الحالية</option>{options.map((option) => <option key={option} value={option}>{taskTransitionLabel(task.status, option)}</option>)}</select></label>{task.requires_review && task.status === "review" && isAssignee ? <small className="task-review-waiting">تم التسليم. بانتظار قرار طالب المهمة، ولا يمكنك اعتمادها بنفسك.</small> : task.requires_review && task.status === "review" && canMove ? <small className="task-review-waiting reviewer">راجع النتيجة ثم اختر الاعتماد أو الإرجاع للتنفيذ.</small> : null}</>}
                     </article>
                   );
                 })}

@@ -261,6 +261,14 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
 .form-grid label { display: grid; gap: 7px; }
 .full-field { grid-column: 1 / -1; }
+.task-review-choice { margin: 0; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.task-review-choice legend { padding: 0 5px; color: var(--ink-800); font-size: 11px; font-weight: 900; }
+.task-review-option { display: flex; align-items: flex-start; gap: 9px; }
+.task-review-choice input { width: 17px; height: 17px; margin-top: 2px; accent-color: var(--teal-700); }
+.task-review-option > span { display: grid; gap: 2px; }
+.task-review-choice strong { color: var(--ink-950); font-size: 12px; }
+.task-review-choice small { color: var(--ink-600); font-size: 10px; line-height: 1.65; }
+.task-review-choice > small { display: block; margin-top: 8px; }
 .form-actions { margin-top: 18px; display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
 .form-actions small { color: var(--ink-600); font-size: 10px; }
 
@@ -301,6 +309,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .acceptance-note > span { min-width: 0; }
 .acceptance-note .collapsible-text p { font-size: 12px; line-height: 1.65; }
 .acceptance-note strong { display: block; margin-bottom: 3px; color: var(--ink-950); font-size: 12px; }
+.task-card > .task-review-rule { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; padding: 8px 9px; border: 1px solid #ddc88e; border-radius: 9px; background: #fff9e8; color: #765b16; font-size: 10px; font-weight: 850; }
 .task-meta { margin: 13px 0; display: grid; gap: 8px; }
 .task-meta > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .task-meta dt { display: flex; align-items: center; gap: 5px; color: var(--ink-600); font-size: 12px; }
@@ -308,6 +317,8 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .overdue-label { margin-bottom: 10px; display: flex; align-items: center; gap: 5px; color: var(--red-700); font-size: 12px; font-weight: 900; }
 .status-select { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; padding-top: 11px; border-top: 1px solid var(--line); }
 .status-select select { min-height: 34px; padding: 6px 8px; font-size: 10px; }
+.task-review-waiting { display: block; margin-top: 7px; color: var(--ink-600); font-size: 10px; line-height: 1.6; }
+.task-review-waiting.reviewer { color: #765b16; font-weight: 800; }
 .column-empty { min-height: 130px; display: grid; place-items: center; align-content: center; gap: 5px; border: 1px dashed var(--line-strong); border-radius: 13px; color: var(--ink-400); }
 .column-empty span { font-size: 22px; }
 .column-empty p { margin: 0; font-size: 12px; }

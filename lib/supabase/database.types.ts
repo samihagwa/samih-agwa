@@ -3739,6 +3739,7 @@ export type Database = {
           organization_id: string
           owner_id: string
           priority: Database["public"]["Enums"]["task_priority"]
+          requires_review: boolean
           started_at: string | null
           status: Database["public"]["Enums"]["task_status"]
           title: string
@@ -3746,7 +3747,7 @@ export type Database = {
           version: number
         }
         Insert: {
-          acceptance_criteria: string
+          acceptance_criteria?: string
           completed_at?: string | null
           content_item_id?: string | null
           content_step?: Database["public"]["Enums"]["content_step"] | null
@@ -3764,6 +3765,7 @@ export type Database = {
           organization_id: string
           owner_id: string
           priority?: Database["public"]["Enums"]["task_priority"]
+          requires_review?: boolean
           started_at?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title: string
@@ -3789,6 +3791,7 @@ export type Database = {
           organization_id?: string
           owner_id?: string
           priority?: Database["public"]["Enums"]["task_priority"]
+          requires_review?: boolean
           started_at?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title?: string

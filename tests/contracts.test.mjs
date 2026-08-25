@@ -79,6 +79,32 @@ test("workflow execution is assignee-scoped, voice profiles are private, and mob
   assert.match(access, /member: \["tasks", "chat"\]/);
 });
 
+test("task review is optional, requester-gated, and never self-approved", async () => {
+  const [migration, taskContract, workspace, types] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260825151421_optional_task_review_workflow.sql", import.meta.url), "utf8"),
+    readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /add column requires_review boolean not null default false/);
+  assert.match(migration, /char_length\(trim\(acceptance_criteria\)\) <= 4000/);
+  assert.match(migration, /tasks_update_assignee_requester_or_platform_admin/);
+  assert.match(migration, /The task assignee cannot modify their own task while it is under review/);
+  assert.match(migration, /Submit this task for review before completion/);
+  assert.match(migration, /new\.created_by, 'task_review'/);
+  assert.match(migration, /'\/tasks\?task=' \|\| new\.id \|\| '#task-' \|\| new\.id/);
+
+  assert.match(taskContract, /requiresReview \? "review" : "done"/);
+  assert.match(taskContract, /currentStatus === "review" \? "إرجاع للتنفيذ"/);
+  assert.doesNotMatch(taskContract, /in_progress:\s*\["ready"/);
+  assert.match(workspace, /معيار القبول — اختياري/);
+  assert.match(workspace, /هل المهمة تحتاج مراجعة؟/);
+  assert.match(workspace, /task\.status === "review" && task\.created_by === currentUserId/);
+  assert.match(workspace, /لا يمكنك اعتمادها بنفسك/);
+  assert.match(types, /requires_review: boolean/);
+});
+
 test("team community chat is private, realtime, command-written, and permission scoped", async () => {
   const [migration, hardening, commands, workspace, page, navigation, access, presence, css, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822171303_team_chat_workspace_assistant.sql", import.meta.url), "utf8"),

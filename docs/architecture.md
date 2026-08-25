@@ -43,12 +43,13 @@ Existing Market Whales application
 ## Task workflow contract
 
 - `tasks` is the operational source of truth; Telegram messages are never treated as task records.
-- A task cannot be created without one active organization owner, a future deadline, and acceptance criteria.
+- A task cannot be created without one active organization owner and a future deadline. Acceptance criteria are optional.
+- Review is explicit per task: without review the assignee completes directly; with review the assignee submits and the requester (or platform leadership) alone can approve or return it. Self-review is rejected in the database.
 - Leadership can define and reassign work. An assigned member can move only their own task and cannot rewrite its scope, owner, priority, or deadline.
 - Status transitions are validated by `private.enforce_task_rules`, not by the browser. The UI mirrors the same transition map for guidance only.
 - Every task change creates an immutable `task_events` record and a leadership-visible `audit_events` record.
 - The first organization is created atomically by an authenticated Edge Function. Its database command is `SECURITY INVOKER` and executable by `service_role` only.
-- The browser groups backlog, ready, and in-progress work into one human-facing lane named “شغل مطلوب تنفيذه”. The database keeps the exact states because dependency unlocking, timestamps, reviews, and audits still require them.
+- The browser groups backlog, ready, and in-progress work into one human-facing lane named “شغل مطلوب تنفيذه”. Once work starts it never offers a backwards move to ready; a reviewer returns requested changes directly to in-progress. The database keeps the exact states because dependency unlocking, timestamps, optional reviews, and audits still require them.
 - Current work is the default view. Completed and cancelled tasks are retained as history behind explicit filters instead of crowding the operational board.
 
 ## Team operations contract
@@ -123,7 +124,7 @@ Existing Market Whales application
 ## Initial domains
 
 1. Identity, organizations, memberships, roles, one-time email-bound claim links, onboarding acknowledgements, and safe suspension — foundation live; real team rollout pending owner approval.
-2. Tasks, transitions, ownership, deadlines, acceptance criteria, Realtime, and activity — foundation live.
+2. Tasks, transitions, ownership, deadlines, optional acceptance criteria/review, Realtime, and activity — foundation live.
 3. Content assets, briefs, dependency-based production stages, and manual publish confirmation — foundation live; external publishing and metrics pending.
 4. Campaigns, launches, assets, readiness gates, and Go / No-Go — foundation live; external performance ingestion pending.
 5. People, leads, customers, sources, consent, pipeline, and accountable follow-up tasks — foundation ready for personal testing; imports and messages pending.

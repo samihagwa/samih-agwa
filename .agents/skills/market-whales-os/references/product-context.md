@@ -25,7 +25,8 @@ Build an internal, web-first operating system on `samihagwa.com` or an approved 
 ## Product principles
 
 - The web app is the source of truth; Telegram is a notification and action surface.
-- Every work item has one accountable owner, a deadline, an acceptance definition, and a visible next state.
+- Every work item has one accountable owner, a deadline, an optional acceptance definition, and a visible next state.
+- Review is chosen per task. Direct-close tasks end with the assignee; reviewed tasks can only be approved or returned by the requester or platform leadership, never by the assignee.
 - Every workflow transition has an actor, timestamp, validation, and audit trail.
 - Dashboards answer a decision question; they do not display decorative numbers.
 - Brand and operating knowledge must be accessible to a new designer, editor, publisher, or manager without oral handover.

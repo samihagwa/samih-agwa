@@ -38,15 +38,54 @@ export function taskStatusLabel(status: TaskStatus, contentStep?: ContentStep | 
   return contentStep === "publishing" ? publishingStatusLabels[status] : taskStatusConfig[status].label;
 }
 
-export const allowedTaskTransitions: Record<TaskStatus, TaskStatus[]> = {
-  backlog: ["ready", "cancelled"],
-  ready: ["backlog", "in_progress", "cancelled"],
-  in_progress: ["ready", "review", "blocked", "cancelled"],
-  blocked: ["ready", "in_progress", "cancelled"],
-  review: ["in_progress", "blocked", "done"],
-  done: ["in_progress"],
-  cancelled: ["backlog"],
+type TaskTransitionContext = {
+  status: TaskStatus;
+  requiresReview: boolean;
+  isAssignee: boolean;
+  isRequester: boolean;
+  role: Database["public"]["Enums"]["app_role"] | null;
 };
+
+export function allowedTaskTransitionsForActor({
+  status,
+  requiresReview,
+  isAssignee,
+  isRequester,
+  role,
+}: TaskTransitionContext): TaskStatus[] {
+  const platformAdmin = canManageAllTaskExecution(role);
+
+  if (status === "review" && requiresReview) {
+    if (isAssignee) return [];
+    return isRequester || platformAdmin ? ["done", "in_progress"] : [];
+  }
+
+  if (!isAssignee && !platformAdmin) return [];
+
+  if (status === "backlog") return platformAdmin ? ["ready", "cancelled"] : [];
+  if (status === "ready") return platformAdmin ? ["in_progress", "cancelled"] : ["in_progress"];
+  if (status === "in_progress") {
+    const completion: TaskStatus = requiresReview ? "review" : "done";
+    return platformAdmin ? [completion, "blocked", "cancelled"] : [completion, "blocked"];
+  }
+  if (status === "blocked") return platformAdmin ? ["in_progress", "cancelled"] : ["in_progress"];
+  if (status === "review") return ["done", "in_progress"];
+  if (status === "done") return platformAdmin ? ["in_progress"] : [];
+  return platformAdmin ? ["backlog"] : [];
+}
+
+export function taskTransitionLabel(currentStatus: TaskStatus, nextStatus: TaskStatus) {
+  if (nextStatus === "in_progress") {
+    return currentStatus === "review" ? "إرجاع للتنفيذ" : currentStatus === "blocked" ? "استئناف التنفيذ" : "بدء التنفيذ";
+  }
+  if (nextStatus === "review") return "تم التنفيذ — إرسال للمراجعة";
+  if (nextStatus === "done") return currentStatus === "review" ? "اعتماد وإغلاق المهمة" : "تم التنفيذ";
+  if (nextStatus === "blocked") return "إيقاف مؤقت";
+  if (nextStatus === "cancelled") return "إلغاء المهمة";
+  if (nextStatus === "ready") return "إتاحة للتنفيذ";
+  if (nextStatus === "backlog") return "إعادة للانتظار";
+  return "تحديث الحالة";
+}
 
 export const visibleBoardStatuses: TaskStatus[] = [
   "backlog",
