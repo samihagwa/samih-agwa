@@ -11,7 +11,7 @@ export default function TasksPage() {
       <PageHeader
         eyebrow="مهام الفريق"
         title="كل شخص يعرف دوره والخطوة التالية"
-        description="بورد حقيقي بمسؤول واحد وموعد ومعيار قبول وانتقالات مسموحة وسجل تدقيق لكل تغيير. لا توجد مهام تجريبية مخفية."
+        description="بورد حقيقي بمسؤول واحد وموعد ومعيار قبول عند الحاجة وانتقالات واضحة وسجل تدقيق لكل تغيير. لا توجد مهام تجريبية مخفية."
         actions={<StatusBadge tone="success">متصل بقاعدة آمنة</StatusBadge>}
       />
       <TasksWorkspace />
