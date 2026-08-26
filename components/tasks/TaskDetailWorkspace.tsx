@@ -17,7 +17,7 @@ import {
   Send,
   ShieldCheck,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { contentStepConfig } from "../../lib/content";
 import { taskReference } from "../../lib/deep-links";
 import { launchGateConfig } from "../../lib/launches";
@@ -38,6 +38,7 @@ import { StatusBadge } from "../ui/StatusBadge";
 
 type Task = Tables<"tasks">;
 type TaskEvent = Tables<"task_events">;
+type TaskDiscussionMessage = Tables<"task_discussion_messages">;
 type TaskRevisionRequest = Tables<"task_revision_requests">;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
@@ -48,6 +49,7 @@ type Workspace = {
   people: Person[];
   task: Task;
   events: TaskEvent[];
+  discussion: TaskDiscussionMessage[];
   revisions: TaskRevisionRequest[];
 };
 
@@ -63,6 +65,8 @@ function friendlyError(error: unknown) {
   if (/assignee cannot request/i.test(message)) return "المنفّذ لا يطلب تعديلًا من نفسه.";
   if (/Linked workflow revisions/i.test(message)) return "التعديل على هذه المهمة يتم من ملف المحتوى أو العميل أو الإطلاق المرتبط بها.";
   if (/cancelled task/i.test(message)) return "المهمة الملغاة لا تستقبل طلبات تعديل.";
+  if (/Only task participants/i.test(message)) return "النقاش متاح للمسؤول وطالب المهمة وإدارة المنصة فقط.";
+  if (/discussion messages must contain/i.test(message)) return "اكتب سؤالًا أو توضيحًا من حرفين على الأقل.";
   if (/Platform leadership cannot execute/i.test(message)) return "تنفيذ المهمة وتغيير حالتها متاحان للمسؤول المسند إليه فقط.";
   return message || "حدث خطأ غير متوقع.";
 }
@@ -84,8 +88,11 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [discussionDraft, setDiscussionDraft] = useState("");
   const [error, setError] = useState<string | null>(configured ? null : "اتصال تسجيل الدخول غير متاح مؤقتًا.");
   const [notice, setNotice] = useState<string | null>(null);
+  const focusedDiscussion = useRef<string | null>(null);
+  const [linkedDiscussionId] = useState(() => typeof window === "undefined" ? null : new URL(window.location.href).searchParams.get("message"));
 
   const clearWorkspace = useCallback(() => setWorkspace(null), []);
   const clearTransientState = useCallback(() => { setError(null); setNotice(null); }, []);
@@ -114,16 +121,21 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       if (membersError) throw membersError;
       if (!task) throw new Error("المهمة غير موجودة أو خارج صلاحيات حسابك.");
 
-      const [{ data: events, error: eventsError }, { data: revisions, error: revisionsError }] = await Promise.all([
+      const [{ data: events, error: eventsError }, { data: discussion, error: discussionError }, { data: revisions, error: revisionsError }] = await Promise.all([
         supabase.from("task_events").select("*").eq("task_id", task.id).order("occurred_at", { ascending: false }).limit(100),
+        supabase.from("task_discussion_messages").select("*").eq("task_id", task.id).order("created_at", { ascending: true }).limit(200),
         supabase.from("task_revision_requests").select("*").eq("task_id", task.id).order("requested_at", { ascending: false }).limit(100),
       ]);
       if (eventsError) throw eventsError;
+      if (discussionError) throw discussionError;
       if (revisionsError) throw revisionsError;
 
       const profileIds = [...new Set([
         ...(memberRows ?? []).map((member) => member.user_id),
+        task.owner_id,
+        task.created_by,
         ...(events ?? []).flatMap((event) => event.actor_id ? [event.actor_id] : []),
+        ...(discussion ?? []).map((message) => message.author_id),
         ...(revisions ?? []).map((revision) => revision.requested_by),
       ])];
       const { data: profiles, error: profilesError } = profileIds.length
@@ -144,7 +156,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         }
       }
 
-      setWorkspace({ organization, membership, people, task, events: events ?? [], revisions: revisions ?? [] });
+      setWorkspace({ organization, membership, people, task, events: events ?? [], discussion: discussion ?? [], revisions: revisions ?? [] });
       setError(null);
     } catch (loadError) {
       setError(friendlyError(loadError));
@@ -164,12 +176,25 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       .channel(`task-detail:${taskId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_events", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_discussion_messages", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_revision_requests", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [loadTaskData, session, taskId, workspace]);
 
   const peopleById = useMemo(() => new Map(workspace?.people.map((person) => [person.id, person]) ?? []), [workspace?.people]);
+
+  useEffect(() => {
+    if (!linkedDiscussionId || focusedDiscussion.current === linkedDiscussionId || !workspace?.discussion.some((message) => message.id === linkedDiscussionId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`discussion-${linkedDiscussionId}`);
+      if (!target) return;
+      focusedDiscussion.current = linkedDiscussionId;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [linkedDiscussionId, workspace?.discussion]);
 
   async function changeStatus(nextStatus: TaskStatus) {
     if (!workspace || nextStatus === workspace.task.status) return;
@@ -212,11 +237,30 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     setWorking(false);
   }
 
+  async function sendDiscussionMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspace || !session) return;
+    const body = discussionDraft.trim();
+    if (body.length < 2) { setError("اكتب سؤالًا أو توضيحًا من حرفين على الأقل."); return; }
+    setWorking(true); setError(null); setNotice(null);
+    const { error: insertError } = await getSupabaseBrowserClient().from("task_discussion_messages").insert({
+      task_id: workspace.task.id,
+      body,
+    });
+    if (insertError) setError(friendlyError(insertError));
+    else {
+      setDiscussionDraft("");
+      setNotice(workspace.task.owner_id === session.user.id ? "تم إرسال سؤالك لطالب المهمة ووصل له إشعار." : "تم إرسال التوضيح للمسؤول ووصل له إشعار.");
+      await loadTaskData(session, false);
+    }
+    setWorking(false);
+  }
+
   if (loading) return <section className="panel empty-state"><LoaderCircle className="spin" size={20} /><div><h2>جارٍ فتح ملف المهمة</h2><p>نحمّل التفاصيل وطلبات التعديل وسجل الحالة.</p></div></section>;
   if (!configured) return <section className="panel empty-state"><AlertTriangle size={20} /><div><h2>اتصال تسجيل الدخول غير متاح مؤقتًا</h2><p>حدّث الصفحة بعد استعادة الاتصال.</p></div></section>;
   if (!session || !workspace) return <section className="panel empty-state"><AlertTriangle size={20} /><div><h2>تعذّر فتح ملف المهمة</h2><p>{error ?? "سجّل الدخول بحساب عضو مصرح له."}</p></div><Button href="/tasks" variant="secondary">العودة للمهام</Button></section>;
 
-  const { task, revisions, events } = workspace;
+  const { task, discussion, revisions, events } = workspace;
   const isAssignee = task.owner_id === session.user.id;
   const isRequester = task.created_by === session.user.id;
   const platformAdmin = canManageAllTaskExecution(workspace.membership.role);
@@ -229,6 +273,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     role: workspace.membership.role,
   });
   const canRequestRevision = !linkedWorkflow && !isAssignee && task.status !== "cancelled" && task.status !== "backlog" && (isRequester || platformAdmin);
+  const canDiscuss = isAssignee || isRequester || platformAdmin;
   const owner = peopleById.get(task.owner_id);
   const requester = peopleById.get(task.created_by);
   const linkedHref = task.content_item_id ? `/content?content=${task.content_item_id}#content-${task.content_item_id}`
@@ -294,6 +339,24 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
             {task.content_step ? <span className="workflow-task-label"><FileText size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
             {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
             {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> متابعة عميل</span> : null}
+          </section>
+
+          <section className="panel task-detail-section task-discussion-section">
+            <div className="section-heading compact"><div><p className="overline">سؤال وجواب داخل المهمة</p><h2>{isAssignee ? `اسأل ${requester?.name ?? "طالب المهمة"} لو المطلوب مش واضح` : `وضّح المطلوب لـ ${owner?.name ?? "المسؤول"}`}</h2><p>كل سؤال ورد يفضل محفوظًا هنا، والطرف الآخر يصله إشعار يفتح نفس الرسالة مباشرة.</p></div><MessageSquareText size={19} /></div>
+            {linkedDiscussionId && discussion.some((message) => message.id === linkedDiscussionId) ? <p className="direct-link-notice"><Route size={14} /> تم فتح الرسالة المطلوبة داخل نقاش المهمة.</p> : null}
+            {discussion.length ? <ol className="task-discussion-list">{discussion.map((message) => {
+              const author = peopleById.get(message.author_id);
+              const authorRole = message.author_id === task.owner_id ? "المسؤول عن التنفيذ" : message.author_id === task.created_by ? "طالب المهمة" : "إدارة المنصة";
+              const directTarget = linkedDiscussionId === message.id;
+              return <li id={`discussion-${message.id}`} data-direct-target={directTarget || undefined} tabIndex={directTarget ? -1 : undefined} key={message.id}>
+                <span className="task-discussion-avatar" aria-hidden="true">{(author?.name ?? "ع").trim().charAt(0)}</span>
+                <div><header><strong>{author?.name ?? "عضو فريق"}</strong><small>{authorRole}</small><time dateTime={message.created_at}>{formatDate(message.created_at)}</time></header><p>{message.body}</p></div>
+              </li>;
+            })}</ol> : <p className="task-empty-proof"><MessageSquareText size={14} /> لا توجد أسئلة حتى الآن. اكتب هنا بدل ما تضيع التفاصيل في شات خارجي.</p>}
+            {canDiscuss ? <form className="task-discussion-compose" onSubmit={sendDiscussionMessage}>
+              <label htmlFor="task-discussion-body">{isAssignee ? "سؤالك لطالب المهمة" : "رد أو توضيح للمسؤول"}</label>
+              <div><textarea id="task-discussion-body" value={discussionDraft} onChange={(event) => setDiscussionDraft(event.target.value)} minLength={2} maxLength={4000} rows={3} placeholder={isAssignee ? "مثال: هل المقاس المطلوب 1080×1920؟ وأستخدم أي رابط للمادة الخام؟" : "اكتب الرد أو التوضيح هنا، وسيصل للمسؤول إشعار مباشر."} disabled={working} /><Button type="submit" disabled={working || discussionDraft.trim().length < 2}>{working ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />} إرسال</Button></div>
+            </form> : null}
           </section>
 
           <section className="panel task-detail-section">

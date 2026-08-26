@@ -324,6 +324,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .column-empty p { margin: 0; font-size: 12px; }
 .workflow-task-label { width: fit-content; margin-top: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 8px; background: var(--teal-100); color: var(--teal-700); font-size: 12px; font-weight: 900; }
 .task-production-link { width: fit-content; margin-top: 7px; display: flex; align-items: center; gap: 5px; color: var(--teal-700); font-size: 12px; font-weight: 900; text-decoration: underline; text-underline-offset: 3px; }
+.task-open-link { width: fit-content; min-height: 34px; margin: 0 0 11px; padding: 7px 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--teal-700); border-radius: 9px; background: var(--teal-100); color: var(--teal-700); font-size: 11px; font-weight: 950; line-height: 1.4; }
+.task-open-link:hover { background: #dcefeb; }
+.task-open-link:focus-visible { outline: 3px solid rgba(47,159,146,.24); outline-offset: 2px; }
 .content-workflow-group { display: grid; gap: 11px; }
 .content-workflow-group .task-card-top { align-items: center; }
 .content-workflow-group .workflow-task-label { margin-top: 0; }
@@ -345,6 +348,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .content-workflow-subtasks > section > div { min-width: 0; }
 .content-subtask-copy { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: center; gap: 8px; }
 .content-subtask-copy > div { min-width: 0; display: grid; gap: 3px; }
+.content-subtask-copy .task-open-link { min-height: 29px; margin: 2px 0 0; padding: 5px 7px; font-size: 9px; }
 .content-subtask-marker { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--paper); color: var(--ink-400); font-size: 10px; font-weight: 900; }
 .completed .content-subtask-marker { border-color: #91c9b7; background: #e9f7f1; color: var(--teal-700); }
 .content-workflow-subtasks > section strong { color: var(--ink-900); font-size: 12px; }
@@ -2053,6 +2057,20 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
 .task-revision-list p, .task-event-list p { margin: 4px 0; color: var(--ink-600); font-size: 11px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .task-revision-list small, .task-event-list small { color: var(--ink-400); font-size: 9px; }
 .task-empty-proof { margin: 0; display: flex; align-items: center; gap: 6px; color: var(--teal-700); font-size: 10px; font-weight: 900; }
+.task-discussion-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.task-discussion-list li { min-width: 0; padding: 10px; display: flex; align-items: flex-start; gap: 9px; border: 1px solid var(--line); border-radius: 11px; background: var(--canvas); scroll-margin-block: 120px; }
+.task-discussion-avatar { width: 30px; height: 30px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; background: var(--ink-950); color: white; font-size: 11px; font-weight: 900; }
+.task-discussion-list li > div { min-width: 0; flex: 1; }
+.task-discussion-list header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.task-discussion-list header strong { color: var(--ink-950); font-size: 11px; }
+.task-discussion-list header small { padding: 2px 5px; border-radius: 6px; background: var(--teal-100); color: var(--teal-700); font-size: 8px; font-weight: 900; }
+.task-discussion-list time { margin-inline-start: auto; color: var(--ink-400); font-size: 8px; }
+.task-discussion-list p { margin: 6px 0 0; color: var(--ink-700); font-size: 11px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-discussion-compose { margin-top: 13px; padding-top: 13px; display: grid; gap: 7px; border-top: 1px solid var(--line); }
+.task-discussion-compose > label { color: var(--ink-800); font-size: 11px; font-weight: 900; }
+.task-discussion-compose > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.task-discussion-compose textarea { min-width: 0; resize: vertical; }
+.task-discussion-compose .button { min-height: 42px; }
 
 @media (max-width: 980px) {
   .crm-customer-layout { grid-template-columns: 1fr; }
@@ -2077,5 +2095,7 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .task-detail-action, .task-detail-facts { grid-template-columns: 1fr; }
   .task-detail-action .section-heading { grid-column: auto; }
   .task-detail-workspace .panel { padding: 17px 14px; }
-  .task-detail-status select, .task-revision-compose textarea { font-size: 16px; }
+  .task-detail-status select, .task-revision-compose textarea, .task-discussion-compose textarea { font-size: 16px; }
+  .task-discussion-compose > div { grid-template-columns: 1fr; }
+  .task-discussion-compose .button { width: 100%; }
 }

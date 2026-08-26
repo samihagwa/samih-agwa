@@ -498,11 +498,12 @@ export function TasksWorkspace() {
                       {overdueTasks.length ? <span className="overdue-label"><AlertTriangle size={14} /> {overdueTasks.length} خطوة متأخرة — الأقدم منذ {formatOverdueDuration(overdueTasks.sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0], renderNow)}</span> : null}
                       <div className="content-workflow-subtasks">{entry.tasks.map((task, index) => {
                         const owner = peopleById.get(task.owner_id);
+                        const requester = peopleById.get(task.created_by);
                         const completed = taskIsClosed(task);
                         const isMine = task.owner_id === session.user.id && !completed;
-                        const taskRequester = task.created_by === session.user.id;
+                        const isRequester = task.created_by === session.user.id;
                         const canOpenAction = task.owner_id === session.user.id
-                          || (task.status === "review" && (taskRequester || platformAdmin));
+                          || (task.status === "review" && (isRequester || platformAdmin));
                         const actionLabel = task.status === "review"
                           ? platformAdmin ? "فتح للمراجعة والاعتماد" : "بانتظار اعتماد الإدارة"
                           : task.content_step === "publishing"
@@ -513,7 +514,7 @@ export function TasksWorkspace() {
                         return <section className={className} data-direct-target={directTarget || undefined} id={taskDomId(task.id)} tabIndex={directTarget ? -1 : undefined} key={task.id}>
                           <div className="content-subtask-copy">
                             <span className="content-subtask-marker" aria-label={completed ? "مكتملة" : `الخطوة ${index + 1}`}>{completed ? <CheckCircle2 size={16} /> : index + 1}</span>
-                            <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small><a className="task-reference" href={taskDeepLink(task.id)}>{taskReference(task.id)}</a> · {owner?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}{isMine ? <b> · مهمتك الآن</b> : null}</small>{directTarget ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}</div>
+                            <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · طلبها {requester?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}{isMine ? <b> · مهمتك الآن</b> : null}</small><a className="task-open-link" href={taskDeepLink(task.id)}><FileText size={12} /> فتح المهمة {taskReference(task.id)}</a>{directTarget ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}</div>
                           </div>
                           <div className="content-subtask-action">
                             <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
@@ -555,12 +556,12 @@ export function TasksWorkspace() {
                       {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> CRM · متابعة عميل</span> : null}
                       {task.crm_contact_id ? <a className="task-production-link" href={`/crm/${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
                       <h3>{task.title}</h3>
+                      <a className="task-open-link" href={taskDeepLink(task.id)}><FileText size={13} /> فتح صفحة المهمة {taskReference(task.id)}</a>
                       {task.description ? <CollapsibleText text={task.description} maxCharacters={170} className="task-description" /> : null}
                       {task.acceptance_criteria.trim() ? <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong><CollapsibleText text={task.acceptance_criteria} maxCharacters={130} /></span></div> : null}
                       {task.requires_review ? <p className="task-review-rule"><ShieldCheck size={13} /> تحتاج اعتماد {requester?.name ?? "طالب المهمة"} قبل الإغلاق.</p> : null}
-                      <dl className="task-meta"><div><dt><CircleUserRound size={14} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div><div><dt><CalendarClock size={14} /> الموعد</dt><dd>{formatDeadline(task.due_at)}</dd></div></dl>
+                      <dl className="task-meta"><div><dt><CircleUserRound size={14} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div><div><dt><UserRoundCheck size={14} /> طالب المهمة</dt><dd>{requester?.name ?? "عضو فريق"}</dd></div><div><dt><CalendarClock size={14} /> الموعد</dt><dd>{formatDeadline(task.due_at)}</dd></div></dl>
                       {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة منذ {formatOverdueDuration(task, renderNow)}</span> : null}
-                      <a className="task-production-link task-detail-link" href={taskDeepLink(task.id)}><FileText size={12} /> فتح صفحة المهمة والتفاصيل وطلبات التعديل</a>
                       {task.crm_contact_id
                         ? <p className="crm-task-guard"><ShieldCheck size={13} /> تتحرك هذه المهمة تلقائيًا عند تسجيل النتيجة من CRM.</p>
                         : <>{canMove ? <label className="status-select"><span>الإجراء التالي</span><select value={task.status} disabled={working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}><option value={task.status}>{taskStatusLabel(task.status, task.content_step)} — الحالة الحالية</option>{options.map((option) => <option key={option} value={option}>{taskTransitionLabel(task.status, option)}</option>)}</select></label> : null}{task.requires_review && task.status === "review" && isAssignee ? <small className="task-review-waiting">تم التسليم. بانتظار قرار طالب المهمة، ولا يمكنك اعتمادها بنفسك.</small> : task.requires_review && task.status === "review" && canMove ? <small className="task-review-waiting reviewer">راجع النتيجة ثم اعتمدها، أو افتح صفحة المهمة لكتابة طلب التعديل وإرجاعها للتنفيذ.</small> : !isAssignee && !canMove && !taskIsClosed(task) ? <small className="task-review-waiting">التنفيذ متاح للمسؤول المسند إليه فقط. المتابعة وطلب التعديل من صفحة المهمة.</small> : null}</>}

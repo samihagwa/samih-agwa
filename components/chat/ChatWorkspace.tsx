@@ -80,7 +80,18 @@ export function ChatWorkspace() {
       ]);
       if (roomError) throw roomError;
       if (memberError) throw memberError;
-      const ids = (memberRows ?? []).map((member) => member.user_id);
+      const availableRooms = roomRows ?? [];
+      const requestedRoom = new URL(window.location.href).searchParams.get("room");
+      const roomId = availableRooms.some((room) => room.id === requestedRoom)
+        ? requestedRoom : availableRooms[0]?.id ?? null;
+      const { data: initialMessages, error: initialMessagesError } = roomId
+        ? await supabase.from("team_chat_messages").select("*").eq("room_id", roomId).order("created_at", { ascending: false }).limit(120)
+        : { data: [], error: null };
+      if (initialMessagesError) throw initialMessagesError;
+      const ids = [...new Set([
+        ...(memberRows ?? []).map((member) => member.user_id),
+        ...(initialMessages ?? []).map((message) => message.author_id),
+      ])];
       const { data: profiles, error: profileError } = ids.length
         ? await supabase.from("profiles").select("id, full_name").in("id", ids)
         : { data: [], error: null };
@@ -91,17 +102,13 @@ export function ChatWorkspace() {
           ?? (id === activeSession.user.id ? activeSession.user.email : null)
           ?? "عضو فريق",
       }));
-      const availableRooms = roomRows ?? [];
-      const requestedRoom = new URL(window.location.href).searchParams.get("room");
-      const roomId = availableRooms.some((room) => room.id === requestedRoom)
-        ? requestedRoom : availableRooms[0]?.id ?? null;
       setWorkspace({ organizationId: membership.organization_id, membership, people });
       setRooms(availableRooms); setActiveRoomId(roomId);
-      if (roomId) await refreshMessages(roomId); else setMessages([]);
+      setMessages([...(initialMessages ?? [])].reverse());
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "تعذّر فتح مجتمع الفريق.");
     } finally { setLoading(false); }
-  }, [clearWorkspace, refreshMessages]);
+  }, [clearWorkspace]);
 
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading, clearTransientState });
 

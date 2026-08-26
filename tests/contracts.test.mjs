@@ -173,6 +173,44 @@ test("team community chat is private, realtime, command-written, and permission 
   assert.match(config, /\[functions\.chat-commands\][\s\S]*verify_jwt = true/);
 });
 
+test("task links stay visible, task discussion notifies exact participants, and member names are durable", async () => {
+  const [migration, notificationKinds, board, detail, sessionChip, chat, css, types] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260826003105_task_discussion_and_member_names.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260826003817_allow_task_discussion_notification_kinds.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/SessionChip.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/chat/ChatWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /create table public\.task_discussion_messages/);
+  assert.match(migration, /alter table public\.task_discussion_messages enable row level security/);
+  assert.match(migration, /task_discussion_select_participants/);
+  assert.match(migration, /task_discussion_insert_participants/);
+  assert.match(migration, /grant insert \(task_id, body\)/);
+  assert.match(migration, /'task_question'/);
+  assert.match(migration, /'\/tasks\/' \|\| task_record\.id \|\| '\?message='/);
+  assert.match(migration, /alter publication supabase_realtime add table public\.task_discussion_messages/);
+  assert.match(migration, /memberships_require_display_name/);
+  assert.match(migration, /profiles_protect_active_display_name/);
+  assert.match(notificationKinds, /'task_question'/);
+  assert.match(notificationKinds, /'task_discussion'/);
+  assert.match(board, /className="task-open-link" href=\{taskDeepLink\(task\.id\)\}/);
+  assert.match(board, /طلبها \{requester\?\.name/);
+  assert.match(detail, /from\("task_discussion_messages"\)\.insert/);
+  assert.match(detail, /table: "task_discussion_messages"/);
+  assert.match(detail, /اسأل .*طالب المهمة/);
+  assert.match(detail, /discussion-\$\{message\.id\}/);
+  assert.match(sessionChip, /select\("full_name"\)/);
+  assert.match(sessionChip, /const displayName = fullName \?\? email/);
+  assert.match(chat, /\.\.\.\(initialMessages \?\? \[\]\)\.map\(\(message\) => message\.author_id\)/);
+  assert.match(css, /\.task-open-link/);
+  assert.match(css, /\.task-discussion-list/);
+  assert.match(types, /task_discussion_messages:/);
+});
+
 test("workspace assistant answers personal work from the current account and keeps team context separate", async () => {
   const [migration, memory, indexes, edgeFunction, providerHelpers, component, shell, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822171303_team_chat_workspace_assistant.sql", import.meta.url), "utf8"),
