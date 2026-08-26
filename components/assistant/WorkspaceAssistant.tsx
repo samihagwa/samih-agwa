@@ -7,7 +7,7 @@ import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-err
 
 type AssistantLink = { label: string; url: string };
 type AssistantMessage = { id: string; role: "user" | "assistant"; text: string; provider?: string; links: AssistantLink[] };
-const starters = ["إيه المهام اللي عليّا النهارده؟", "إيه أقرب موعد تسليم عندي؟", "أوصل للقسم اللي محتاجه إزاي؟"];
+const starters = ["إيه المهام اللي عليّا النهارده؟", "إيه أقرب موعد تسليم عندي؟", "هل في ضغط زائد في تقويم الفريق؟", "أوصل للقسم اللي محتاجه إزاي؟"];
 
 function AnswerText({ value }: { value: string }) {
   const pattern = /\[([^\]]+)\]\((\/[A-Za-z0-9/_?#=&.%:-]+)\)|(\/[A-Za-z0-9/_?#=&.%:-]+)/g;
@@ -80,6 +80,15 @@ export function WorkspaceAssistant() {
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [open]);
+  useEffect(() => {
+    const openWithQuestion = (event: Event) => {
+      const question = (event as CustomEvent<{ question?: unknown }>).detail?.question;
+      if (typeof question !== "string" || !question.trim()) return;
+      setOpen(true); setDraft(question.trim()); setError(null);
+    };
+    window.addEventListener("workspace-ai:ask", openWithQuestion);
+    return () => window.removeEventListener("workspace-ai:ask", openWithQuestion);
+  }, []);
 
   async function ask(question: string) {
     const cleanQuestion = question.trim();

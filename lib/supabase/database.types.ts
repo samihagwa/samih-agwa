@@ -760,6 +760,7 @@ export type Database = {
           created_at: string
           created_by: string
           cta: string | null
+          estimated_minutes: number
           hook_direction: string | null
           id: string
           kind: Database["public"]["Enums"]["content_plan_item_kind"]
@@ -781,6 +782,7 @@ export type Database = {
           created_at?: string
           created_by: string
           cta?: string | null
+          estimated_minutes?: number
           hook_direction?: string | null
           id?: string
           kind: Database["public"]["Enums"]["content_plan_item_kind"]
@@ -802,6 +804,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           cta?: string | null
+          estimated_minutes?: number
           hook_direction?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["content_plan_item_kind"]
@@ -3832,6 +3835,7 @@ export type Database = {
           crm_work_kind: string | null
           description: string | null
           due_at: string
+          estimated_minutes: number
           id: string
           is_work_item: boolean
           launch_deliverable_id: string | null
@@ -3841,6 +3845,7 @@ export type Database = {
           owner_id: string
           priority: Database["public"]["Enums"]["task_priority"]
           requires_review: boolean
+          source_plan_item_id: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["task_status"]
           title: string
@@ -3858,6 +3863,7 @@ export type Database = {
           crm_work_kind?: string | null
           description?: string | null
           due_at: string
+          estimated_minutes?: number
           id?: string
           is_work_item?: boolean
           launch_deliverable_id?: string | null
@@ -3867,6 +3873,7 @@ export type Database = {
           owner_id: string
           priority?: Database["public"]["Enums"]["task_priority"]
           requires_review?: boolean
+          source_plan_item_id?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title: string
@@ -3884,6 +3891,7 @@ export type Database = {
           crm_work_kind?: string | null
           description?: string | null
           due_at?: string
+          estimated_minutes?: number
           id?: string
           is_work_item?: boolean
           launch_deliverable_id?: string | null
@@ -3893,6 +3901,7 @@ export type Database = {
           owner_id?: string
           priority?: Database["public"]["Enums"]["task_priority"]
           requires_review?: boolean
+          source_plan_item_id?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title?: string
@@ -3945,6 +3954,61 @@ export type Database = {
           {
             foreignKeyName: "tasks_owner_id_fkey"
             columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_source_plan_item_org_fkey"
+            columns: ["source_plan_item_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "content_plan_items"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      team_capacity_settings: {
+        Row: {
+          created_at: string
+          created_by: string
+          daily_capacity_minutes: number
+          max_parallel_tasks: number
+          organization_id: string
+          updated_at: string
+          updated_by: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          daily_capacity_minutes?: number
+          max_parallel_tasks?: number
+          organization_id: string
+          updated_at?: string
+          updated_by?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          daily_capacity_minutes?: number
+          max_parallel_tasks?: number
+          organization_id?: string
+          updated_at?: string
+          updated_by?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_capacity_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_capacity_settings_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -4158,6 +4222,45 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_team_member_capacity: {
+        Args: {
+          excluded_task_id?: string | null
+          requested_minutes?: number
+          target_due_at: string
+          target_member_id: string
+          target_organization_id: string
+        }
+        Returns: Json
+      }
+      create_plan_item_execution: {
+        Args: {
+          accountable_owner_id: string
+          allow_capacity_override?: boolean
+          content_cta: string
+          content_hook: string
+          content_objective: string
+          content_platforms: string[]
+          content_title: string
+          design_owner_id: string
+          editing_owner_id: string
+          publishing_owner_id: string
+          requested_minutes?: number
+          target_kind: Database["public"]["Enums"]["content_plan_item_kind"]
+          target_organization_id: string
+          target_pillar_id: string | null
+          target_plan_id: string
+          target_publish_at: string
+        }
+        Returns: Json
+      }
+      get_team_capacity_calendar: {
+        Args: {
+          range_ends_on: string
+          range_starts_on: string
+          target_organization_id: string
+        }
+        Returns: Json
+      }
       append_assistant_exchange: {
         Args: {
           assistant_answer: string

@@ -2,20 +2,22 @@
 
 import type { Session } from "@supabase/supabase-js";
 import {
-  ArrowUpLeft, CalendarDays, CheckCircle2, CircleSlash2, FilePlus2,
+  AlertTriangle, ArrowUpLeft, Bot, CalendarDays, CheckCircle2, CircleSlash2, FilePlus2,
   Link2, LoaderCircle, LockKeyhole, PencilLine, Plus, RefreshCw,
   Route, ShieldCheck, Target, UsersRound,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   contentPlanItemKindConfig, contentPlanItemKinds, contentPlanItemStatusConfig,
   contentPlanStatusConfig, type ContentPlanItemKind, type ContentPlanStatus,
 } from "../../lib/planning";
+import { currentUuidDeepLink } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
+import { TeamCapacityCalendar } from "./TeamCapacityCalendar";
 
 type Organization = Tables<"organizations">;
 type Membership = Tables<"memberships">;
@@ -32,6 +34,36 @@ type Workspace = {
   pillars: Pillar[];
   items: PlanItem[];
   contentItems: ContentItem[];
+};
+type PlanSaveMode = "calendar" | "execution";
+type CapacitySnapshot = {
+  user_id: string;
+  date: string;
+  daily_capacity_minutes: number;
+  allocated_minutes: number;
+  requested_minutes: number;
+  projected_minutes: number;
+  projected_count: number;
+  max_parallel_tasks: number;
+  overloaded: boolean;
+};
+type PlanSubmission = {
+  organization_id: string;
+  plan_id: string;
+  pillar_id: string | null;
+  kind: ContentPlanItemKind;
+  title: string;
+  objective: string;
+  hook_direction: string | null;
+  cta: string | null;
+  platforms: string[];
+  owner_id: string;
+  publish_at: string;
+  estimated_minutes: number;
+  mode: PlanSaveMode;
+  editing_owner_id: string;
+  design_owner_id: string;
+  publishing_owner_id: string;
 };
 
 const leadershipRoles = new Set<Membership["role"]>(["owner", "admin", "manager"]);
@@ -89,6 +121,10 @@ export function PlanningWorkspace() {
   const [showPillarForm, setShowPillarForm] = useState(false);
   const [showItemForm, setShowItemForm] = useState(false);
   const [selectedKind, setSelectedKind] = useState<ContentPlanItemKind>("reel");
+  const [planSaveMode, setPlanSaveMode] = useState<PlanSaveMode>("execution");
+  const [capacityWarning, setCapacityWarning] = useState<{ submission: PlanSubmission; snapshots: CapacitySnapshot[] } | null>(null);
+  const [linkedPlanItemId] = useState(() => currentUuidDeepLink("plan_item", "plan-item"));
+  const openedPlanItem = useRef<string | null>(null);
 
   const clearWorkspace = useCallback(() => setWorkspace(null), []);
   const clearTransientState = useCallback(() => { setError(null); setNotice(null); }, []);
@@ -122,6 +158,8 @@ export function PlanningWorkspace() {
       const names = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.full_name ?? "عضو فريق"]));
       const people = memberRows.map((row) => ({ id: row.user_id, role: row.role, name: names.get(row.user_id) ?? "عضو فريق" }));
       const plans = plansResult.data ?? [];
+      const directPlanItemId = currentUuidDeepLink("plan_item", "plan-item");
+      const directPlanId = (itemsResult.data ?? []).find((item) => item.id === directPlanItemId)?.plan_id ?? null;
       setWorkspace({
         organization: organizationResult.data,
         membership,
@@ -131,9 +169,9 @@ export function PlanningWorkspace() {
         items: itemsResult.data ?? [],
         contentItems: contentResult.data ?? [],
       });
-      setSelectedPlanId((current) => plans.some((plan) => plan.id === current)
+      setSelectedPlanId((current) => directPlanId ?? (plans.some((plan) => plan.id === current)
         ? current
-        : plans.find((plan) => plan.status === "active")?.id ?? plans[0]?.id ?? null);
+        : plans.find((plan) => plan.status === "active")?.id ?? plans[0]?.id ?? null));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "تعذّر تحميل خطة المحتوى.");
     } finally {
@@ -169,6 +207,16 @@ export function PlanningWorkspace() {
     channel.subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [refresh, session, workspace]);
+  useEffect(() => {
+    if (!linkedPlanItemId || openedPlanItem.current === linkedPlanItemId || !workspace?.items.some((item) => item.id === linkedPlanItemId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`plan-item-${linkedPlanItemId}`);
+      if (!target) return;
+      openedPlanItem.current = linkedPlanItemId;
+      target.scrollIntoView({ block: "center" }); target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [linkedPlanItemId, selectedPlanId, workspace?.items]);
 
   async function createPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -226,14 +274,118 @@ export function PlanningWorkspace() {
     await refresh();
   }
 
+  async function inspectCapacity(submission: PlanSubmission) {
+    let assignments: ReadonlyArray<readonly [string, number]> = [[submission.owner_id, submission.estimated_minutes]];
+    if (submission.mode === "execution") {
+      if (submission.kind === "reel") assignments = [
+        [submission.owner_id, submission.estimated_minutes], [submission.editing_owner_id, 180],
+        [submission.design_owner_id, 90], [submission.publishing_owner_id, 30],
+      ];
+      else if (submission.kind === "social_post" || submission.kind === "ad") assignments = [
+        [submission.owner_id, 90], [submission.design_owner_id, 120], [submission.publishing_owner_id, 30],
+      ];
+      else if (submission.kind === "story") assignments = [
+        [submission.design_owner_id, 90], [submission.publishing_owner_id, 30],
+      ];
+      else if (submission.kind === "live" || submission.kind === "webinar") assignments = [
+        [submission.owner_id, 180], [submission.publishing_owner_id, 30],
+      ];
+      else assignments = [[submission.owner_id, 90], [submission.publishing_owner_id, 30]];
+    }
+    const aggregated = new Map<string, number>();
+    for (const [ownerId, minutes] of assignments) {
+      aggregated.set(ownerId, (aggregated.get(ownerId) ?? 0) + minutes);
+    }
+    const unique = [...aggregated.entries()];
+    const results = await Promise.all(unique.map(async ([ownerId, minutes]) => {
+      const { data, error: checkError } = await getSupabaseBrowserClient().rpc("check_team_member_capacity", {
+        target_organization_id: submission.organization_id,
+        target_member_id: ownerId,
+        target_due_at: submission.publish_at,
+        requested_minutes: minutes,
+      });
+      if (checkError) throw checkError;
+      return data as unknown as CapacitySnapshot;
+    }));
+    return results.filter((snapshot) => snapshot.overloaded);
+  }
+
+  async function persistPlanItem(submission: PlanSubmission, allowCapacityOverride = false) {
+    if (!workspace || !session) return;
+    setWorking(true); clearTransientState();
+    try {
+      if (!allowCapacityOverride) {
+        const snapshots = await inspectCapacity(submission);
+        if (snapshots.length) {
+          setCapacityWarning({ submission, snapshots });
+          setWorking(false);
+          return;
+        }
+      }
+      if (submission.mode === "execution") {
+        const { error: executionError } = await getSupabaseBrowserClient().rpc("create_plan_item_execution", {
+          target_organization_id: submission.organization_id,
+          target_plan_id: submission.plan_id,
+          target_pillar_id: submission.pillar_id,
+          target_kind: submission.kind,
+          content_title: submission.title,
+          content_objective: submission.objective,
+          content_hook: submission.hook_direction ?? "",
+          content_cta: submission.cta ?? "",
+          content_platforms: submission.platforms,
+          target_publish_at: submission.publish_at,
+          accountable_owner_id: submission.owner_id,
+          editing_owner_id: submission.editing_owner_id,
+          design_owner_id: submission.design_owner_id,
+          publishing_owner_id: submission.publishing_owner_id,
+          requested_minutes: submission.estimated_minutes,
+          allow_capacity_override: allowCapacityOverride,
+        });
+        if (executionError) throw executionError;
+      } else {
+        const { error: insertError } = await getSupabaseBrowserClient().from("content_plan_items").insert({
+          organization_id: submission.organization_id,
+          plan_id: submission.plan_id,
+          pillar_id: submission.pillar_id,
+          kind: submission.kind,
+          title: submission.title,
+          objective: submission.objective,
+          hook_direction: submission.hook_direction,
+          cta: submission.cta,
+          platforms: submission.platforms,
+          owner_id: submission.owner_id,
+          publish_at: submission.publish_at,
+          estimated_minutes: submission.estimated_minutes,
+          status: "planned",
+          created_by: session.user.id,
+          updated_by: session.user.id,
+        });
+        if (insertError) throw insertError;
+      }
+      setCapacityWarning(null); setShowItemForm(false); setSelectedKind("reel"); setPlanSaveMode("execution");
+      setNotice(submission.mode === "execution"
+        ? "تم إنشاء بند الخطة وملف مصنع المحتوى ومهام التنفيذ والإشعارات معًا."
+        : "تم حفظ الموعد في التقويم فقط؛ لم تُنشأ مهمة أو إشعار.");
+      await refresh();
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "تعذّر حفظ بند الخطة.";
+      if (message.includes("TEAM_CAPACITY_EXCEEDED") && !allowCapacityOverride) {
+        const snapshots = await inspectCapacity(submission);
+        setCapacityWarning({ submission, snapshots });
+      } else setError(message);
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function addPlanItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspace || !selectedPlan || !session) return;
     const form = new FormData(event.currentTarget);
     const publishDate = new Date(String(form.get("publish_at") ?? ""));
     const platforms = String(form.get("platforms") ?? "").split(/[،,]/).map((value) => value.trim()).filter(Boolean);
-    setWorking(true); clearTransientState();
-    const { error: insertError } = await getSupabaseBrowserClient().from("content_plan_items").insert({
+    const ownerId = String(form.get("owner_id") ?? "");
+    const submission: PlanSubmission = {
       organization_id: workspace.organization.id,
       plan_id: selectedPlan.id,
       pillar_id: String(form.get("pillar_id") ?? "") || null,
@@ -243,17 +395,16 @@ export function PlanningWorkspace() {
       hook_direction: String(form.get("hook_direction") ?? "") || null,
       cta: String(form.get("cta") ?? "") || null,
       platforms,
-      owner_id: String(form.get("owner_id") ?? ""),
+      owner_id: ownerId,
       publish_at: publishDate.toISOString(),
-      status: "planned",
-      created_by: session.user.id,
-      updated_by: session.user.id,
-    });
-    setWorking(false);
-    if (insertError) { setError(insertError.message); return; }
-    event.currentTarget.reset(); setShowItemForm(false); setSelectedKind("reel");
-    setNotice("دخل المحتوى التقويم بمسؤول وموعد واضحين.");
-    await refresh();
+      estimated_minutes: Number(form.get("estimated_minutes") ?? 120),
+      mode: planSaveMode,
+      editing_owner_id: String(form.get("editing_owner_id") ?? ownerId) || ownerId,
+      design_owner_id: String(form.get("design_owner_id") ?? ownerId) || ownerId,
+      publishing_owner_id: String(form.get("publishing_owner_id") ?? ownerId) || ownerId,
+    };
+    setCapacityWarning(null);
+    await persistPlanItem(submission);
   }
 
   async function linkContent(item: PlanItem, contentItemId: string) {
@@ -285,12 +436,13 @@ export function PlanningWorkspace() {
   const quarter = defaultQuarter();
   return <section className="planning-workspace">
     <header className="panel planning-toolbar">
-      <div><p className="overline">{workspace.organization.name}</p><h2>الخطة الربع سنوية وتقويم المحتوى</h2><p>الهدف والأعمدة ومواعيد النشر في مكان واحد، والتنفيذ الفعلي يظل داخل مصنع المحتوى.</p></div>
-      <div className="toolbar-actions"><button className="icon-button" type="button" aria-label="تحديث الخطة" onClick={() => void refresh()}><RefreshCw size={17} /></button>{manager ? <Button type="button" onClick={() => setShowPlanForm((value) => !value)}><Plus size={15} /> خطة جديدة</Button> : null}</div>
+      <div><p className="overline">{workspace.organization.name}</p><h2>الخطة الربع سنوية وتقويم المحتوى</h2><p>الخطة تحدد ماذا ولماذا، والتقويم يوازن متى ومَن، ثم مصنع المحتوى والمهام ينفذان.</p></div>
+      <div className="toolbar-actions">{manager ? <Button type="button" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent("workspace-ai:ask", { detail: { question: "ساعدني أبني خطة محتوى متوازنة من بيانات الخطة الحالية، ومواعيد الفريق، والحمل الموجود في التقويم. لا تغيّر أي بيانات؛ قدّم اقتراحًا عمليًا فقط." } }))}><Bot size={14} /> اسأل AI عن الخطة</Button> : null}<button className="icon-button" type="button" aria-label="تحديث الخطة" onClick={() => void refresh()}><RefreshCw size={17} /></button>{manager ? <Button type="button" onClick={() => setShowPlanForm((value) => !value)}><Plus size={15} /> خطة جديدة</Button> : null}</div>
     </header>
 
     {error ? <p className="form-notice error">{error}</p> : null}
     {notice ? <p className="form-notice success">{notice}</p> : null}
+    {linkedPlanItemId && workspace.items.some((item) => item.id === linkedPlanItemId) ? <p className="direct-link-notice"><Route size={14} /> تم فتح بند الخطة المطلوب مباشرة.</p> : null}
 
     {showPlanForm && manager ? <form className="panel planning-form" onSubmit={(event) => void createPlan(event)}>
       <div className="section-heading"><div><p className="overline">Strategic brief</p><h2>خطة واحدة تقود التنفيذ</h2></div><button className="text-button" type="button" onClick={() => setShowPlanForm(false)}>إغلاق</button></div>
@@ -322,6 +474,8 @@ export function PlanningWorkspace() {
         <div className="planning-pillars-grid">{selectedPillars.map((pillar) => { const pillarItems = selectedItems.filter((item) => item.pillar_id === pillar.id && item.status !== "cancelled"); return <article key={pillar.id}><header><strong>{pillar.title}</strong><span>{pillarItems.length}/{pillar.target_quantity}</span></header><p>{pillar.purpose}</p><div className="content-progress-track"><span style={{ width: `${Math.min(100, Math.round((pillarItems.length / pillar.target_quantity) * 100))}%` }} /></div></article>; })}{!selectedPillars.length ? <div className="planning-empty-inline"><Target size={20} /><p>لا توجد أعمدة بعد. أضف 3–5 أعمدة تخدم الهدف بدل قائمة أفكار عشوائية.</p></div> : null}</div>
       </section>
 
+      {manager ? <TeamCapacityCalendar organizationId={workspace.organization.id} /> : null}
+
       <section className="panel planning-calendar-panel">
         <div className="section-heading"><div><p className="overline">Execution calendar</p><h2>تقويم التنفيذ والنشر</h2><p>كل بند مسؤول وموعد وهدف؛ ربطه بمصنع المحتوى يجعل حالته تتحرك تلقائيًا.</p></div>{manager ? <Button type="button" onClick={() => setShowItemForm((value) => !value)}><Plus size={14} /> إضافة محتوى للخطة</Button> : null}</div>
         {showItemForm && manager ? <form className="planning-form planning-item-form" onSubmit={(event) => void addPlanItem(event)}>
@@ -331,20 +485,28 @@ export function PlanningWorkspace() {
             <label><span>عمود المحتوى — اختياري</span><select name="pillar_id" defaultValue=""><option value="">بدون عمود مؤقتًا</option>{selectedPillars.map((pillar) => <option value={pillar.id} key={pillar.id}>{pillar.title}</option>)}</select></label>
             <label><span>المسؤول عن تحريكها</span><select name="owner_id" defaultValue={workspace.people[0]?.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
             <label><span>موعد النشر — القاهرة</span><input name="publish_at" type="datetime-local" defaultValue={planItemInputDate(selectedPlan)} required /></label>
+            <label><span>الوقت المتوقع على المسؤول</span><select name="estimated_minutes" defaultValue="120"><option value="30">30 دقيقة</option><option value="60">ساعة</option><option value="90">ساعة ونصف</option><option value="120">ساعتان</option><option value="180">3 ساعات</option><option value="240">4 ساعات</option><option value="360">6 ساعات</option></select></label>
             <label><span>المنصات</span><input name="platforms" minLength={2} required defaultValue={selectedKind === "telegram_post" ? "Telegram" : "Instagram"} placeholder="Instagram, Facebook" /></label>
             <label className="span-2"><span>هدف القطعة</span><textarea name="objective" minLength={5} maxLength={2000} rows={2} required placeholder="ما الفهم أو القرار المطلوب من الجمهور؟" /></label>
             <label><span>اتجاه الهوك — اختياري</span><textarea name="hook_direction" maxLength={2000} rows={2} placeholder="الخطر أو الموقف أو السؤال الذي نبدأ منه" /></label>
             <label><span>CTA — اختياري</span><textarea name="cta" maxLength={1000} rows={2} placeholder="الإجراء المطلوب من المشاهد" /></label>
+            <fieldset className="span-2 planning-execution-choice">
+              <legend>ماذا يحدث بعد الحفظ؟</legend>
+              <label aria-label="إرسال بند الخطة للتنفيذ الآن" htmlFor="plan-save-execution" className={planSaveMode === "execution" ? "active" : ""}><input id="plan-save-execution" type="radio" name="save_mode" value="execution" checked={planSaveMode === "execution"} onChange={() => { setPlanSaveMode("execution"); setCapacityWarning(null); }} /><span><strong>إرسال للتنفيذ الآن</strong><small>ينشئ ملف مصنع المحتوى والمهام والإشعارات معًا.</small></span></label>
+              <label aria-label="حفظ بند الخطة في التقويم فقط" htmlFor="plan-save-calendar" className={planSaveMode === "calendar" ? "active" : ""}><input id="plan-save-calendar" type="radio" name="save_mode" value="calendar" checked={planSaveMode === "calendar"} onChange={() => { setPlanSaveMode("calendar"); setCapacityWarning(null); }} /><span><strong>حفظ في التقويم فقط</strong><small>للتخطيط المبدئي؛ بدون مهمة أو إشعار.</small></span></label>
+            </fieldset>
+            {planSaveMode === "execution" ? <fieldset className="span-2 planning-assignment-grid"><legend>توزيع التنفيذ</legend><label><span>المونتاج</span><select name="editing_owner_id" defaultValue={workspace.people[0]?.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label><span>التصميم / الغلاف</span><select name="design_owner_id" defaultValue={workspace.people[0]?.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label><span>النشر</span><select name="publishing_owner_id" defaultValue={workspace.people[0]?.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><p>حسب نوع المحتوى، النظام ينشئ الخطوات المطلوبة فقط؛ الريلز يمر بالتسجيل والمونتاج والغلاف والنشر، والبوست يمر بالكابشن والتصميم والنشر.</p></fieldset> : null}
           </div>
-          <div className="form-actions"><Button type="submit" disabled={working}>إضافة للتقويم</Button><button className="text-button" type="button" onClick={() => setShowItemForm(false)}>إلغاء</button></div>
+          {capacityWarning ? <div className="capacity-decision" role="alert"><AlertTriangle size={18} /><div><strong>الموعد عليه حمل زائد</strong><p>{capacityWarning.snapshots.map((snapshot) => `${peopleById.get(snapshot.user_id)?.name ?? "عضو فريق"}: ${snapshot.projected_minutes.toLocaleString("ar-EG")} من ${snapshot.daily_capacity_minutes.toLocaleString("ar-EG")} دقيقة`).join(" · ")}</p><small>عدّل المسؤول أو الموعد، أو أكمل عن قصد وسيُسجل القرار.</small></div><div><button className="text-button" type="button" onClick={() => setCapacityWarning(null)}>تعديل الموعد أو المسؤول</button><Button type="button" variant="secondary" disabled={working} onClick={() => void persistPlanItem(capacityWarning.submission, true)}>إسناد رغم الضغط</Button></div></div> : null}
+          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : null}{planSaveMode === "execution" ? "حفظ وإرسال للتنفيذ" : "حفظ في التقويم فقط"}</Button><button className="text-button" type="button" onClick={() => { setShowItemForm(false); setCapacityWarning(null); }}>إلغاء</button></div>
         </form> : null}
 
         <div className="planning-calendar-list">{selectedItems.map((item) => {
           const linked = item.content_item_id ? contentById.get(item.content_item_id) : null;
           const availableContent = workspace.contentItems.filter((content) => !linkedContentIds.has(content.id) && contentMatchesPlanKind(content, item.kind));
-          return <article className={`planning-calendar-item ${item.status === "cancelled" ? "cancelled" : ""}`} key={item.id}>
+          return <article className={`planning-calendar-item ${item.status === "cancelled" ? "cancelled" : ""}`} data-direct-target={linkedPlanItemId === item.id || undefined} id={`plan-item-${item.id}`} tabIndex={linkedPlanItemId === item.id ? -1 : undefined} key={item.id}>
             <div className="planning-date-tile"><CalendarDays size={17} /><strong>{new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</strong><small>{new Intl.DateTimeFormat("ar-EG", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</small></div>
-            <div className="planning-item-copy"><div><span>{contentPlanItemKindConfig[item.kind].label}{item.pillar_id ? ` · ${pillarsById.get(item.pillar_id)?.title ?? "عمود"}` : ""}</span><h3>{item.title}</h3></div><p>{item.objective}</p><small>{peopleById.get(item.owner_id)?.name ?? "عضو فريق"} · {item.platforms.join("، ")}</small></div>
+            <div className="planning-item-copy"><div><span>{contentPlanItemKindConfig[item.kind].label}{item.pillar_id ? ` · ${pillarsById.get(item.pillar_id)?.title ?? "عمود"}` : ""}</span><h3>{item.title}</h3></div><p>{item.objective}</p><small>{peopleById.get(item.owner_id)?.name ?? "عضو فريق"} · {item.platforms.join("، ")} · {item.estimated_minutes.toLocaleString("ar-EG")} دقيقة متوقعة</small></div>
             <div className="planning-item-state"><StatusBadge tone={contentPlanItemStatusConfig[item.status].tone}>{contentPlanItemStatusConfig[item.status].label}</StatusBadge>{linked ? <a href={`/content?content=${linked.id}#content-${linked.id}`}>فتح التنفيذ <ArrowUpLeft size={12} /></a> : null}</div>
             {manager && item.status !== "published" ? <div className="planning-item-actions">{linked ? <button className="text-button" type="button" disabled={working} onClick={() => void linkContent(item, "")}><Link2 size={12} /> فك الربط</button> : <><label><span>ربط بمصنع المحتوى</span><select defaultValue="" disabled={working} onChange={(event) => { if (event.target.value) void linkContent(item, event.target.value); }}><option value="">اختر أصلًا منفذًا</option>{availableContent.map((content) => <option value={content.id} key={content.id}>{content.title}</option>)}</select></label><button className="text-button" type="button" disabled={working} onClick={() => void setItemCancelled(item, item.status !== "cancelled")}>{item.status === "cancelled" ? <RefreshCw size={12} /> : <CircleSlash2 size={12} />} {item.status === "cancelled" ? "إعادة للخطة" : "إلغاء البند"}</button></>}</div> : null}
           </article>;

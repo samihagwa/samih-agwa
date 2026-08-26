@@ -1541,6 +1541,73 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
 .planning-item-actions label span { color: var(--ink-500); font-size: 8px; font-weight: 900; }
 .planning-item-actions select { min-width: 0; font-size: 10px; }
 .planning-item-actions .text-button { justify-content: flex-start; }
+.planning-execution-choice { margin: 0; padding: 13px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; border: 1px solid var(--line); border-radius: 13px; }
+.planning-execution-choice legend, .planning-assignment-grid legend { padding: 0 6px; color: var(--ink-700); font-size: 10px; font-weight: 900; }
+.planning-execution-choice > label { padding: 11px; display: flex; align-items: flex-start; gap: 9px; border: 1px solid var(--line); border-radius: 11px; background: var(--paper-muted); cursor: pointer; }
+.planning-execution-choice > label.active { border-color: var(--teal-700); background: var(--teal-100); }
+.planning-execution-choice input { margin-top: 3px; accent-color: var(--teal-700); }
+.planning-execution-choice strong, .planning-execution-choice small { display: block; }
+.planning-execution-choice strong { color: var(--ink-800); font-size: 11px; }
+.planning-execution-choice small { margin-top: 3px; color: var(--ink-600); font-size: 9px; line-height: 1.55; }
+.planning-assignment-grid { margin: 0; padding: 13px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; border: 1px solid var(--line); border-radius: 13px; background: var(--paper-muted); }
+.planning-assignment-grid > p { grid-column: 1 / -1; margin: 0; color: var(--ink-500); font-size: 9px; line-height: 1.7; }
+.capacity-decision { padding: 13px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 1px solid #e6c46d; border-radius: 13px; background: var(--amber-100); color: var(--amber-700); }
+.capacity-decision > svg { align-self: start; margin-top: 2px; }
+.capacity-decision strong { font-size: 11px; }
+.capacity-decision p { margin: 3px 0; color: var(--ink-700); font-size: 10px; line-height: 1.65; }
+.capacity-decision small { color: var(--ink-600); font-size: 9px; }
+.capacity-decision > div:last-child { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.team-capacity-panel { min-width: 0; padding: 22px; display: grid; gap: 14px; overflow: hidden; }
+.capacity-alert, .capacity-clear { padding: 11px 13px; display: flex; align-items: flex-start; gap: 9px; border-radius: 12px; }
+.capacity-alert { border: 1px solid #e6c46d; background: var(--amber-100); color: var(--amber-700); }
+.capacity-alert svg { flex: 0 0 auto; margin-top: 2px; }
+.capacity-alert strong { font-size: 11px; }
+.capacity-alert p { margin: 2px 0 0; color: var(--ink-600); font-size: 9px; line-height: 1.65; }
+.capacity-clear { border: 1px solid #b9dcd7; background: var(--teal-100); color: var(--teal-700); font-size: 10px; font-weight: 800; }
+.capacity-week-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.capacity-week-toolbar > div { display: flex; align-items: center; gap: 5px; }
+.capacity-week-toolbar button { min-height: 34px; padding: 0 10px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink-700); font-size: 10px; font-weight: 900; cursor: pointer; }
+.capacity-week-toolbar strong { font-size: 11px; }
+.capacity-loading { min-height: 190px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink-500); font-size: 10px; }
+.capacity-board-wrap { width: 100%; min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); -webkit-overflow-scrolling: touch; }
+.capacity-board { min-width: 1180px; display: grid; }
+.capacity-row { display: grid; grid-template-columns: 180px repeat(7, minmax(135px, 1fr)); border-bottom: 1px solid var(--line); }
+.capacity-row:last-child { border-bottom: 0; }
+.capacity-row > div { min-width: 0; padding: 8px; border-inline-start: 1px solid var(--line); }
+.capacity-row > div:first-child { position: sticky; right: 0; z-index: 2; border-inline-start: 0; background: var(--paper); box-shadow: -8px 0 14px rgba(16,36,49,.035); }
+.capacity-header-row > div { min-height: 56px; display: grid; place-items: center; align-content: center; gap: 2px; background: var(--paper-muted); color: var(--ink-600); text-align: center; }
+.capacity-header-row > div:first-child { z-index: 3; display: flex; align-items: center; justify-content: flex-start; gap: 6px; }
+.capacity-header-row .today { background: var(--teal-100); color: var(--teal-700); }
+.capacity-header-row strong { font-size: 10px; }
+.capacity-header-row small { font-size: 8px; }
+.capacity-member { display: grid; align-content: start; gap: 3px; }
+.capacity-member strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.capacity-member small { color: var(--ink-400); font-size: 8px; }
+.capacity-cell { min-height: 130px; display: grid; align-content: start; gap: 6px; background: var(--paper); }
+.capacity-cell.overloaded { background: #fff8e8; box-shadow: inset 0 3px 0 #d79b25; }
+.capacity-cell-summary { display: flex; align-items: center; justify-content: space-between; gap: 6px; color: var(--ink-500); font-size: 8px; }
+.capacity-cell-summary span { display: inline-flex; align-items: center; gap: 3px; }
+.capacity-cell-summary strong { color: var(--ink-700); font-size: 9px; }
+.capacity-cell.overloaded .capacity-cell-summary strong { color: var(--amber-700); }
+.capacity-meter { height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); }
+.capacity-meter > span { height: 100%; display: block; border-radius: inherit; background: var(--teal-700); }
+.capacity-cell.overloaded .capacity-meter > span { background: var(--amber-700); }
+.capacity-entry-list { display: grid; gap: 4px; }
+.capacity-entry-list a { min-width: 0; padding: 5px 6px; display: flex; align-items: center; gap: 4px; overflow: hidden; border-radius: 7px; background: var(--paper-muted); color: var(--ink-700); font-size: 8px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.capacity-entry-list a:hover { background: var(--teal-100); }
+.capacity-entry-list a span { flex: 0 0 auto; color: var(--teal-700); font-size: 7px; }
+.capacity-entry-list a.plan span { color: var(--amber-700); }
+.capacity-entry-list small { color: var(--ink-400); font-size: 8px; }
+.capacity-settings { border-top: 1px solid var(--line); padding-top: 12px; }
+.capacity-settings summary { width: fit-content; display: flex; align-items: center; gap: 6px; color: var(--teal-700); font-size: 10px; font-weight: 900; cursor: pointer; }
+.capacity-settings form { margin-top: 11px; display: grid; gap: 10px; }
+.capacity-settings form > p { margin: 0; color: var(--ink-500); font-size: 9px; }
+.capacity-settings form > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.capacity-settings section { padding: 10px; display: grid; grid-template-columns: minmax(110px, 1fr) 130px 130px; align-items: end; gap: 8px; border: 1px solid var(--line); border-radius: 11px; background: var(--paper-muted); }
+.capacity-settings section > strong { align-self: center; font-size: 10px; }
+.capacity-settings label { display: grid; gap: 4px; }
+.capacity-settings label span { color: var(--ink-500); font-size: 8px; font-weight: 800; }
+.capacity-settings input { min-width: 0; }
 .dashboard-signin { min-height: 210px; padding: 28px; display: flex; align-items: center; gap: 16px; }
 .dashboard-signin svg { flex: 0 0 auto; color: var(--teal-700); }
 .dashboard-signin div { flex: 1; }
@@ -1745,6 +1812,13 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .planning-item-actions { grid-column: 1 / -1; grid-template-columns: 1fr; }
   .planning-progress, .readiness-progress { grid-template-columns: auto minmax(80px, 1fr); }
   .planning-progress small, .readiness-progress small { grid-column: 1 / -1; }
+  .planning-execution-choice, .planning-assignment-grid { grid-template-columns: 1fr; }
+  .planning-assignment-grid > p { grid-column: auto; }
+  .capacity-decision { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  .capacity-decision > div:last-child { grid-column: 1 / -1; }
+  .team-capacity-panel { padding: 16px; }
+  .capacity-week-toolbar { align-items: flex-start; flex-direction: column-reverse; }
+  .capacity-settings form > div, .capacity-settings section { grid-template-columns: 1fr; }
   .dashboard-signin { align-items: flex-start; flex-wrap: wrap; }
   .dashboard-signin .button { width: 100%; }
   .readiness-grid > a { grid-template-columns: auto minmax(0, 1fr); }

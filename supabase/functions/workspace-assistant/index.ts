@@ -71,6 +71,7 @@ function linkLabel(url: string) {
   if (url.startsWith("/crm/")) return "فتح ملف العميل";
   if (url.startsWith("/scripts/")) return "فتح السكريبت";
   if (url.startsWith("/content?content=")) return "فتح المحتوى المحدد";
+  if (url.startsWith("/planning?plan_item=")) return "فتح بند الخطة المحدد";
   if (url.startsWith("/campaigns?")) return "فتح الحملة المحددة";
   return "فتح القسم";
 }
@@ -166,6 +167,8 @@ function providerBody(
 - my_open_tasks هي المصدر الوحيد لأي سؤال بصيغة «مهامي/عندي/عليا/مطلوب مني»، حتى لو المستخدم مدير أو مالك.
 - team_open_tasks تُستخدم فقط لما السؤال يطلب صراحة مهام التيم أو الفريق؛ ممنوع خلطها مع مهام المستخدم الشخصية.
 - عند ذكر المهام، اذكر الموعد والحالة والرابط لكل مهمة.
+- عند سؤال التخطيط أو توزيع الحمل، استخدم planning_context فقط: فرّق بين موعد تسليم المهمة وموعد نشر المحتوى، واحسب الحمل بالدقائق مقابل السعة اليومية. اقترح ولا تغيّر أي إسناد.
+- لو يوم عضو تجاوز daily_capacity_minutes أو max_parallel_tasks، سمّه بوضوح «حمل زائد» واقترح موعدًا أو عضوًا أقل ضغطًا من البيانات المتاحة فقط.
 - عند ذكر مهمة أو عميل أو سكريبت أو محتوى، استخدم رابط الكيان النسبي المرفق كما هو حرفيًا. لا تنشئ رابطًا من عندك.
 - لو المعلومة غير موجودة قل بوضوح: «المعلومة دي مش موجودة في الجزء المسموح لي أشوفه» واقترح القسم الصحيح.
 - لا تنفذ أي تغيير ولا تدّعي أنك نفذت شيئًا. أنت للشرح والبحث والإرشاد فقط في هذه النسخة.
@@ -298,6 +301,49 @@ export default {
         .eq("organization_id", organizationId).not("status", "in", "(published,cancelled)")
         .order("publish_at").limit(30);
       workspaceContext.content_pipeline = (data ?? []).map((item) => ({ ...item, url: `/content?content=${item.id}#content-${item.id}` }));
+    })());
+
+    if (hasSection(role, sections, "planning") && leadership) queries.push((async () => {
+      const rangeStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const rangeEnd = new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString();
+      const [membersResult, capacityResult, tasksResult, plansResult, itemsResult] = await Promise.all([
+        context.supabaseAdmin.from("memberships")
+          .select("user_id, role").eq("organization_id", organizationId).eq("status", "active").neq("role", "viewer"),
+        context.supabaseAdmin.from("team_capacity_settings")
+          .select("user_id, daily_capacity_minutes, max_parallel_tasks").eq("organization_id", organizationId),
+        context.supabaseAdmin.from("tasks")
+          .select("id, title, owner_id, status, due_at, estimated_minutes, content_item_id, source_plan_item_id")
+          .eq("organization_id", organizationId).eq("is_work_item", true).not("status", "in", "(done,cancelled)")
+          .gte("due_at", rangeStart).lte("due_at", rangeEnd).order("due_at").limit(250),
+        context.supabaseAdmin.from("content_plans")
+          .select("id, name, status, starts_on, ends_on, objective, primary_metric")
+          .eq("organization_id", organizationId).neq("status", "archived").order("starts_on").limit(12),
+        context.supabaseAdmin.from("content_plan_items")
+          .select("id, plan_id, title, kind, owner_id, publish_at, status, estimated_minutes, content_item_id")
+          .eq("organization_id", organizationId).not("status", "in", "(published,cancelled)")
+          .gte("publish_at", rangeStart).lte("publish_at", rangeEnd).order("publish_at").limit(250),
+      ]);
+      const memberIds = (membersResult.data ?? []).map((member) => text(member.user_id));
+      const { data: profiles } = memberIds.length
+        ? await context.supabaseAdmin.from("profiles").select("id, full_name").in("id", memberIds)
+        : { data: [] };
+      const names = new Map((profiles ?? []).map((profile) => [text(profile.id), text(profile.full_name) || "عضو فريق"]));
+      const capacities = new Map((capacityResult.data ?? []).map((row) => [text(row.user_id), row]));
+      workspaceContext.planning_context = {
+        timezone: "Africa/Cairo",
+        rule: "task.due_at is a delivery deadline; plan_item.publish_at is a publication date. Linked plan items are visual milestones and their minutes must not be added again when execution tasks exist.",
+        members: (membersResult.data ?? []).map((member) => {
+          const capacity = capacities.get(text(member.user_id));
+          return {
+            id: member.user_id, name: names.get(text(member.user_id)) ?? "عضو فريق", role: member.role,
+            daily_capacity_minutes: capacity?.daily_capacity_minutes ?? 360,
+            max_parallel_tasks: capacity?.max_parallel_tasks ?? 5,
+          };
+        }),
+        plans: (plansResult.data ?? []).map((plan) => ({ ...plan, url: "/planning" })),
+        open_tasks: (tasksResult.data ?? []).map((task) => ({ ...task, owner_name: names.get(text(task.owner_id)) ?? "عضو فريق", url: `/tasks/${task.id}` })),
+        planned_items: (itemsResult.data ?? []).map((item) => ({ ...item, owner_name: names.get(text(item.owner_id)) ?? "عضو فريق", url: `/planning?plan_item=${item.id}#plan-item-${item.id}` })),
+      };
     })());
 
     if (hasSection(role, sections, "campaigns")) queries.push((async () => {

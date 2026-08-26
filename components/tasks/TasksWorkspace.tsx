@@ -57,6 +57,27 @@ type Workspace = {
 
 type TaskFilter = "active" | "mine" | "overdue" | "completed" | "all";
 type BoardEntry = { id: string; contentItemId: string | null; tasks: Task[]; laneId: string };
+type TaskSubmission = {
+  organization_id: string;
+  title: string;
+  description: string | null;
+  acceptance_criteria: string;
+  owner_id: string;
+  priority: TaskPriority;
+  status: "ready";
+  requires_review: boolean;
+  due_at: string;
+  estimated_minutes: number;
+};
+type CapacitySnapshot = {
+  user_id: string;
+  daily_capacity_minutes: number;
+  allocated_minutes: number;
+  projected_minutes: number;
+  projected_count: number;
+  max_parallel_tasks: number;
+  overloaded: boolean;
+};
 
 const boardLanes: Array<{ id: string; label: string }> = [
   { id: "work", label: "شغل مطلوب تنفيذه" },
@@ -151,6 +172,7 @@ export function TasksWorkspace() {
   const [showCreate, setShowCreate] = useState(false);
   const [newTaskOwnerId, setNewTaskOwnerId] = useState("");
   const [newTaskRequiresReview, setNewTaskRequiresReview] = useState(false);
+  const [capacityWarning, setCapacityWarning] = useState<{ submission: TaskSubmission; snapshot: CapacitySnapshot } | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("active");
   const [linkedTaskId] = useState(() => currentUuidDeepLink("task", "task"));
   const [renderNow, setRenderNow] = useState(() => Date.now());
@@ -328,12 +350,36 @@ export function TasksWorkspace() {
     setWorking(false);
   }
 
+  async function persistTask(submission: TaskSubmission, allowCapacityOverride = false) {
+    if (!workspace) return;
+    setWorking(true); setError(null); setNotice(null);
+    if (!allowCapacityOverride) {
+      const { data, error: capacityError } = await getSupabaseBrowserClient().rpc("check_team_member_capacity", {
+        target_organization_id: workspace.organization.id,
+        target_member_id: submission.owner_id,
+        target_due_at: submission.due_at,
+        requested_minutes: submission.estimated_minutes,
+      });
+      if (capacityError) { setWorking(false); setError(capacityError.message); return; }
+      const snapshot = data as unknown as CapacitySnapshot;
+      if (snapshot.overloaded) {
+        setCapacityWarning({ submission, snapshot }); setWorking(false); return;
+      }
+    }
+    const { error: insertError } = await getSupabaseBrowserClient().from("tasks").insert(submission);
+    if (insertError) { setWorking(false); setError(insertError.message); return; }
+    setCapacityWarning(null); setNewTaskOwnerId(""); setNewTaskRequiresReview(false); setShowCreate(false);
+    setNotice(allowCapacityOverride
+      ? "تم إنشاء المهمة رغم تحذير الحمل، وسُجل الإسناد في النشاط."
+      : "تم إنشاء المهمة داخل «شغل مطلوب تنفيذه» وإرسال إشعار للمسؤول.");
+    await refreshTasks(workspace.organization.id);
+    setWorking(false);
+  }
+
   async function createTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspace) return;
-
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
+    const form = new FormData(event.currentTarget);
     const dueValue = String(form.get("due_at") ?? "");
     const dueDate = new Date(dueValue);
     const ownerId = String(form.get("owner_id") ?? "");
@@ -348,11 +394,7 @@ export function TasksWorkspace() {
       return;
     }
 
-    setWorking(true);
-    setError(null);
-    setNotice(null);
-
-    const { error: insertError } = await getSupabaseBrowserClient().from("tasks").insert({
+    const submission: TaskSubmission = {
       organization_id: workspace.organization.id,
       title: String(form.get("title") ?? "").trim(),
       description: String(form.get("description") ?? "").trim() || null,
@@ -362,20 +404,10 @@ export function TasksWorkspace() {
       status: "ready",
       requires_review: newTaskRequiresReview,
       due_at: dueDate.toISOString(),
-    });
-
-    setWorking(false);
-    if (insertError) {
-      setError(insertError.message);
-      return;
-    }
-
-    formElement.reset();
-    setNewTaskOwnerId("");
-    setNewTaskRequiresReview(false);
-    setShowCreate(false);
-    setNotice("تم إنشاء المهمة داخل «شغل مطلوب تنفيذه» وتسجيلها في سجل النشاط.");
-    await refreshTasks(workspace.organization.id);
+      estimated_minutes: Number(form.get("estimated_minutes") ?? 60),
+    };
+    setCapacityWarning(null);
+    await persistTask(submission);
   }
 
   async function changeStatus(task: Task, nextStatus: TaskStatus) {
@@ -452,13 +484,14 @@ export function TasksWorkspace() {
       {linkedTask ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح المهمة المطلوبة مباشرة: <strong>{taskReference(linkedTask.id)}</strong> — الكارت المحدد ظاهر بإطار واضح.</p> : linkedTaskId ? <p className="form-notice error" role="alert">المهمة المطلوبة غير موجودة أو ليست ضمن صلاحيات حسابك.</p> : null}
 
       {showCreate && manager ? (
-        <form className="panel task-create-form" onSubmit={createTask}>
+        <form className="panel task-create-form" onSubmit={createTask} onChange={() => setCapacityWarning(null)}>
           <div className="section-heading"><div><p className="overline">تعريف واضح قبل التنفيذ</p><h2>إنشاء مهمة حقيقية</h2></div><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div>
           <div className="form-grid">
             <label><span>عنوان المهمة</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: مونتاج ريلز خطة التداول" /></label>
             <label><span>المسؤول المباشر</span><select name="owner_id" value={newTaskOwnerId || session.user.id} required onChange={(event) => { setNewTaskOwnerId(event.target.value); if (event.target.value === session.user.id) setNewTaskRequiresReview(false); }}>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
             <label><span>الموعد النهائي</span><input name="due_at" type="datetime-local" defaultValue={defaultDue} required /></label>
             <label><span>الأولوية</span><select name="priority" defaultValue="normal">{(Object.keys(taskPriorityConfig) as TaskPriority[]).map((priority) => <option value={priority} key={priority}>{taskPriorityConfig[priority].label}</option>)}</select></label>
+            <label><span>الوقت المتوقع</span><select name="estimated_minutes" defaultValue="60"><option value="30">30 دقيقة</option><option value="60">ساعة</option><option value="90">ساعة ونصف</option><option value="120">ساعتان</option><option value="180">3 ساعات</option><option value="240">4 ساعات</option><option value="360">6 ساعات</option></select></label>
             <label className="full-field"><span>شرح مختصر</span><textarea name="description" maxLength={5000} rows={3} placeholder="السياق والملفات المطلوبة وأي ملاحظات مهمة" /></label>
             <label className="full-field"><span>معيار القبول — اختياري</span><textarea name="acceptance_criteria" maxLength={4000} rows={3} placeholder="اكتبه فقط لو النتيجة المطلوبة تحتاج شروطًا واضحة، مثل المقاس أو صيغة التسليم" /></label>
             <fieldset className="full-field task-review-choice">
@@ -470,6 +503,7 @@ export function TasksWorkspace() {
               <small>لو لم تفعّل هذا الاختيار، يقدر المسؤول الضغط على «تم التنفيذ» وإغلاق المهمة مباشرة.</small>
             </fieldset>
           </div>
+          {capacityWarning ? <div className="capacity-decision" role="alert"><AlertTriangle size={18} /><div><strong>المسؤول عليه حمل زائد في هذا اليوم</strong><p>بعد الإسناد سيصبح الحمل {capacityWarning.snapshot.projected_minutes.toLocaleString("ar-EG")} من {capacityWarning.snapshot.daily_capacity_minutes.toLocaleString("ar-EG")} دقيقة، وعدد البنود {capacityWarning.snapshot.projected_count.toLocaleString("ar-EG")} من {capacityWarning.snapshot.max_parallel_tasks.toLocaleString("ar-EG")}.</p><small>غيّر الموعد أو المسؤول من الأعلى، أو أكمل عن قصد.</small></div><div><button className="text-button" type="button" onClick={() => setCapacityWarning(null)}>تعديل الإسناد</button><Button type="button" variant="secondary" disabled={working} onClick={() => void persistTask(capacityWarning.submission, true)}>إسناد رغم الضغط</Button></div></div> : null}
           <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <CheckCircle2 size={16} />} حفظ المهمة</Button><small>ستظهر مباشرة داخل «شغل مطلوب تنفيذه»، وكل تغيير بعدها مسموح ومسجّل.</small></div>
         </form>
       ) : null}

@@ -24,6 +24,47 @@ test("internal navigation remains usable when the experimental client router fai
   assert.match(sources[2], /if \(href\) return <a href=\{href\}/);
 });
 
+test("planning capacity is advisory, atomic, AI-readable, and linked to exact execution", async () => {
+  const [capacityMigration, workflowMigration, planning, calendar, tasks, assistant, types, css] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260826012841_team_capacity_unified_calendar.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260826020205_rebuild_compact_reel_workflow.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/planning/PlanningWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/planning/TeamCapacityCalendar.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/workspace-assistant/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(capacityMigration, /create table public\.team_capacity_settings/);
+  assert.match(capacityMigration, /create or replace function public\.check_team_member_capacity/);
+  assert.match(capacityMigration, /create or replace function public\.get_team_capacity_calendar/);
+  assert.match(capacityMigration, /create or replace function public\.create_plan_item_execution/);
+  assert.match(capacityMigration, /TEAM_CAPACITY_EXCEEDED/);
+  assert.match(capacityMigration, /allow_capacity_override/);
+  assert.match(capacityMigration, /source_plan_item_id/);
+  assert.match(capacityMigration, /alter table public\.team_capacity_settings enable row level security/);
+  assert.match(workflowMigration, /work_task_count.*raw_material_ready/s);
+  assert.match(workflowMigration, /content_step, is_work_item, estimated_minutes/);
+  assert.doesNotMatch(workflowMigration, /content_step, is_work_item, estimated_minutes[\s\S]*'approval'/);
+
+  assert.match(planning, /إرسال للتنفيذ الآن/);
+  assert.match(planning, /حفظ في التقويم فقط/);
+  assert.match(planning, /إسناد رغم الضغط/);
+  assert.match(planning, /create_plan_item_execution/);
+  assert.match(planning, /plan-item-\$\{item\.id\}/);
+  assert.match(calendar, /تقويم الفريق وحمل التنفيذ/);
+  assert.match(calendar, /workspace-ai:ask/);
+  assert.match(calendar, /team_capacity_settings/);
+  assert.match(tasks, /check_team_member_capacity/);
+  assert.match(tasks, /estimated_minutes/);
+  assert.match(assistant, /planning_context/);
+  assert.match(assistant, /daily_capacity_minutes/);
+  assert.match(types, /team_capacity_settings:/);
+  assert.match(types, /create_plan_item_execution:/);
+  assert.match(css, /\.capacity-board-wrap[^}]*overflow-x: auto/);
+});
+
 test("status badges never rely on color alone", async () => {
   const source = await readFile(new URL("../components/ui/StatusBadge.tsx", import.meta.url), "utf8");
   assert.match(source, /const marks/);
