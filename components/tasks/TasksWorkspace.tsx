@@ -3,6 +3,7 @@
 import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
+  Bot,
   CalendarClock,
   CheckCircle2,
   CircleUserRound,
@@ -485,7 +486,7 @@ export function TasksWorkspace() {
 
       {showCreate && manager ? (
         <form className="panel task-create-form" onSubmit={createTask} onChange={() => setCapacityWarning(null)}>
-          <div className="section-heading"><div><p className="overline">تعريف واضح قبل التنفيذ</p><h2>إنشاء مهمة حقيقية</h2></div><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div>
+          <div className="section-heading"><div><p className="overline">تعريف واضح قبل التنفيذ</p><h2>إنشاء مهمة حقيقية</h2></div><div className="toolbar-actions"><Button type="button" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent("workspace-ai:ask", { detail: { question: "راجع تقويم الفريق والمهام المفتوحة، وساعدني أختار مسؤولًا وموعدًا واقعيين للمهمة الجديدة. وضّح أي حمل زائد، ولا تغيّر أي بيانات من نفسك." } }))}><Bot size={14} /> اسأل AI قبل الإسناد</Button><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div></div>
           <div className="form-grid">
             <label><span>عنوان المهمة</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: مونتاج ريلز خطة التداول" /></label>
             <label><span>المسؤول المباشر</span><select name="owner_id" value={newTaskOwnerId || session.user.id} required onChange={(event) => { setNewTaskOwnerId(event.target.value); if (event.target.value === session.user.id) setNewTaskRequiresReview(false); }}>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>

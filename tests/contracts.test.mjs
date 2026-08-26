@@ -58,6 +58,8 @@ test("planning capacity is advisory, atomic, AI-readable, and linked to exact ex
   assert.match(calendar, /team_capacity_settings/);
   assert.match(tasks, /check_team_member_capacity/);
   assert.match(tasks, /estimated_minutes/);
+  assert.match(tasks, /اسأل AI قبل الإسناد/);
+  assert.match(tasks, /workspace-ai:ask/);
   assert.match(assistant, /planning_context/);
   assert.match(assistant, /daily_capacity_minutes/);
   assert.match(types, /team_capacity_settings:/);
