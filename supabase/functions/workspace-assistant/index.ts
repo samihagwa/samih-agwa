@@ -329,6 +329,7 @@ export default {
         : { data: [] };
       const names = new Map((profiles ?? []).map((profile) => [text(profile.id), text(profile.full_name) || "عضو فريق"]));
       const capacities = new Map((capacityResult.data ?? []).map((row) => [text(row.user_id), row]));
+      const visiblePlanIds = new Set((plansResult.data ?? []).map((plan) => text(plan.id)));
       workspaceContext.planning_context = {
         timezone: "Africa/Cairo",
         rule: "task.due_at is a delivery deadline; plan_item.publish_at is a publication date. Linked plan items are visual milestones and their minutes must not be added again when execution tasks exist.",
@@ -342,7 +343,8 @@ export default {
         }),
         plans: (plansResult.data ?? []).map((plan) => ({ ...plan, url: "/planning" })),
         open_tasks: (tasksResult.data ?? []).map((task) => ({ ...task, owner_name: names.get(text(task.owner_id)) ?? "عضو فريق", url: `/tasks/${task.id}` })),
-        planned_items: (itemsResult.data ?? []).map((item) => ({ ...item, owner_name: names.get(text(item.owner_id)) ?? "عضو فريق", url: `/planning?plan_item=${item.id}#plan-item-${item.id}` })),
+        planned_items: (itemsResult.data ?? []).filter((item) => visiblePlanIds.has(text(item.plan_id)))
+          .map((item) => ({ ...item, owner_name: names.get(text(item.owner_id)) ?? "عضو فريق", url: `/planning?plan_item=${item.id}#plan-item-${item.id}` })),
       };
     })());
 

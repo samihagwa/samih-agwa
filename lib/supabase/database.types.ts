@@ -949,6 +949,8 @@ export type Database = {
       }
       content_plans: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           audience: string
           created_at: string
           created_by: string
@@ -966,6 +968,8 @@ export type Database = {
           version: number
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           audience: string
           created_at?: string
           created_by: string
@@ -983,6 +987,8 @@ export type Database = {
           version?: number
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           audience?: string
           created_at?: string
           created_by?: string
@@ -1000,6 +1006,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "content_plans_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "content_plans_created_by_fkey"
             columns: ["created_by"]

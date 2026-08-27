@@ -677,6 +677,33 @@ test("quarterly planning, readiness, and deadline reminders are database-governe
   assert.match(packageJson, /"test": "pnpm run build/);
 });
 
+test("content plans support a real archive and owner-safe permanent deletion", async () => {
+  const [migration, planning, assistant, types, css] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260827011105_content_plan_archive_delete_controls.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/planning/PlanningWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/workspace-assistant/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /archived_at timestamptz/);
+  assert.match(migration, /content_plans_delete_owner/);
+  assert.match(migration, /array\['owner'\]::public\.app_role\[\]/);
+  assert.match(migration, /Archive the content plan before permanently deleting it/);
+  assert.match(migration, /A plan linked to execution cannot be permanently deleted/);
+  assert.match(migration, /'planning\.plan_deleted'/);
+  assert.match(migration, /plan\.status <> 'archived'/);
+  assert.match(planning, /الخطط الحالية/);
+  assert.match(planning, /الأرشيف/);
+  assert.match(planning, /نقل إلى الأرشيف/);
+  assert.match(planning, /استرجاع كمسودة/);
+  assert.match(planning, /حذف نهائي/);
+  assert.match(planning, /window\.confirm/);
+  assert.match(assistant, /visiblePlanIds/);
+  assert.match(types, /archived_at: string \| null/);
+  assert.match(css, /\.planning-archive-empty/);
+});
+
 test("Telegram intake is an optional reviewed path with a secured execution timeline", async () => {
   const [migration, parser, quickForm, workspace, createCommand, contentCommands, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817025228_telegram_smart_content_intake.sql", import.meta.url), "utf8"),

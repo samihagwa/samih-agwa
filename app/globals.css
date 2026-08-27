@@ -1492,6 +1492,12 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
 .planning-toolbar { padding: 22px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .planning-toolbar h2 { margin: 4px 0 5px; font-size: 20px; }
 .planning-toolbar p:last-child { margin: 0; color: var(--ink-600); font-size: 11px; line-height: 1.7; }
+.planning-plan-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.planning-plan-controls > small { color: var(--ink-500); font-size: 10px; line-height: 1.6; }
+.planning-archive-empty { padding: 13px 15px; display: flex; align-items: flex-start; gap: 10px; border: 1px dashed var(--line-strong); border-radius: 12px; background: var(--canvas); color: var(--ink-600); }
+.planning-archive-empty > svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal-700); }
+.planning-archive-empty strong { display: block; color: var(--ink-900); font-size: 12px; }
+.planning-archive-empty p { margin: 2px 0 0; font-size: 10px; line-height: 1.7; }
 .planning-plan-switcher { display: flex; gap: 8px; overflow-x: auto; padding: 2px 1px 5px; scrollbar-width: thin; }
 .planning-plan-switcher button { min-width: 210px; padding: 11px 13px; display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink-600); text-align: right; font: inherit; cursor: pointer; }
 .planning-plan-switcher button:hover { border-color: var(--line-strong); }

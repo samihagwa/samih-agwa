@@ -2,9 +2,9 @@
 
 import type { Session } from "@supabase/supabase-js";
 import {
-  AlertTriangle, ArrowUpLeft, Bot, CalendarDays, CheckCircle2, CircleSlash2, FilePlus2,
+  AlertTriangle, Archive, ArrowUpLeft, Bot, CalendarDays, CheckCircle2, CircleSlash2, FilePlus2,
   Link2, LoaderCircle, LockKeyhole, PencilLine, Plus, RefreshCw,
-  Route, ShieldCheck, Target, UsersRound,
+  Route, ShieldCheck, Target, Trash2, UsersRound,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -36,6 +36,7 @@ type Workspace = {
   contentItems: ContentItem[];
 };
 type PlanSaveMode = "calendar" | "execution";
+type PlanView = "current" | "archive";
 type CapacitySnapshot = {
   user_id: string;
   date: string;
@@ -117,6 +118,7 @@ export function PlanningWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [planView, setPlanView] = useState<PlanView>("current");
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [showPillarForm, setShowPillarForm] = useState(false);
   const [showItemForm, setShowItemForm] = useState(false);
@@ -160,6 +162,11 @@ export function PlanningWorkspace() {
       const plans = plansResult.data ?? [];
       const directPlanItemId = currentUuidDeepLink("plan_item", "plan-item");
       const directPlanId = (itemsResult.data ?? []).find((item) => item.id === directPlanItemId)?.plan_id ?? null;
+      const directPlan = plans.find((plan) => plan.id === directPlanId);
+      const fallbackPlan = plans.find((plan) => plan.status === "active")
+        ?? plans.find((plan) => plan.status !== "archived")
+        ?? plans.find((plan) => plan.status === "archived")
+        ?? null;
       setWorkspace({
         organization: organizationResult.data,
         membership,
@@ -169,9 +176,11 @@ export function PlanningWorkspace() {
         items: itemsResult.data ?? [],
         contentItems: contentResult.data ?? [],
       });
+      if (directPlan) setPlanView(directPlan.status === "archived" ? "archive" : "current");
+      else if (!plans.some((plan) => plan.status !== "archived") && plans.some((plan) => plan.status === "archived")) setPlanView("archive");
       setSelectedPlanId((current) => directPlanId ?? (plans.some((plan) => plan.id === current)
         ? current
-        : plans.find((plan) => plan.status === "active")?.id ?? plans[0]?.id ?? null));
+        : fallbackPlan?.id ?? null));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "تعذّر تحميل خطة المحتوى.");
     } finally {
@@ -181,9 +190,12 @@ export function PlanningWorkspace() {
 
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading, clearTransientState });
   const manager = Boolean(workspace && leadershipRoles.has(workspace.membership.role));
-  const selectedPlan = workspace?.plans.find((plan) => plan.id === selectedPlanId) ?? null;
-  const selectedPillars = useMemo(() => workspace?.pillars.filter((pillar) => pillar.plan_id === selectedPlanId) ?? [], [selectedPlanId, workspace?.pillars]);
-  const selectedItems = useMemo(() => workspace?.items.filter((item) => item.plan_id === selectedPlanId) ?? [], [selectedPlanId, workspace?.items]);
+  const currentPlans = useMemo(() => workspace?.plans.filter((plan) => plan.status !== "archived") ?? [], [workspace?.plans]);
+  const archivedPlans = useMemo(() => workspace?.plans.filter((plan) => plan.status === "archived") ?? [], [workspace?.plans]);
+  const visiblePlans = planView === "current" ? currentPlans : archivedPlans;
+  const selectedPlan = visiblePlans.find((plan) => plan.id === selectedPlanId) ?? visiblePlans[0] ?? null;
+  const selectedPillars = useMemo(() => workspace?.pillars.filter((pillar) => pillar.plan_id === selectedPlan?.id) ?? [], [selectedPlan?.id, workspace?.pillars]);
+  const selectedItems = useMemo(() => workspace?.items.filter((item) => item.plan_id === selectedPlan?.id) ?? [], [selectedPlan?.id, workspace?.items]);
   const linkedContentIds = useMemo(() => new Set(workspace?.items.flatMap((item) => item.content_item_id ? [item.content_item_id] : []) ?? []), [workspace?.items]);
   const peopleById = useMemo(() => new Map(workspace?.people.map((person) => [person.id, person]) ?? []), [workspace?.people]);
   const pillarsById = useMemo(() => new Map(selectedPillars.map((pillar) => [pillar.id, pillar])), [selectedPillars]);
@@ -193,8 +205,19 @@ export function PlanningWorkspace() {
     return summary;
   }, {}), [selectedItems]);
   const progress = selectedItems.length ? Math.round(((counts.published ?? 0) / selectedItems.filter((item) => item.status !== "cancelled").length) * 100) || 0 : 0;
+  const selectedPlanHasExecution = selectedItems.some((item) => item.content_item_id !== null || ["in_production", "scheduled", "published"].includes(item.status));
 
   const refresh = useCallback(async () => { if (session) await loadWorkspace(session); }, [loadWorkspace, session]);
+
+  function switchPlanView(view: PlanView) {
+    const plans = view === "current" ? currentPlans : archivedPlans;
+    setPlanView(view);
+    setSelectedPlanId(plans[0]?.id ?? null);
+    setShowPillarForm(false);
+    setShowItemForm(false);
+    setCapacityWarning(null);
+    clearTransientState();
+  }
 
   useEffect(() => {
     if (!workspace || !session) return;
@@ -238,18 +261,60 @@ export function PlanningWorkspace() {
     });
     setWorking(false);
     if (insertError) { setError(insertError.message); return; }
-    setShowPlanForm(false); setNotice("تم حفظ الخطة كمسودة. أضف الأعمدة وأول أسبوع ثم فعّلها.");
+    setShowPlanForm(false); setPlanView("current"); setSelectedPlanId(null);
+    setNotice("تم حفظ الخطة كمسودة. أضف الأعمدة وأول أسبوع ثم فعّلها.");
     await refresh();
   }
 
   async function changePlanStatus(status: ContentPlanStatus) {
-    if (!selectedPlan) return;
+    if (!selectedPlan || !workspace) return;
     setWorking(true); clearTransientState();
     const { error: updateError } = await getSupabaseBrowserClient().from("content_plans")
       .update({ status }).eq("id", selectedPlan.id).eq("version", selectedPlan.version);
     setWorking(false);
     if (updateError) { setError(updateError.message); return; }
-    setNotice(status === "active" ? "أصبحت هذه خطة المحتوى الفعّالة." : status === "completed" ? "تم إغلاق الخطة مع الاحتفاظ بكل سجلها." : "تم تحديث حالة الخطة.");
+    if (status === "archived") {
+      const nextCurrentPlan = workspace.plans.find((plan) => plan.id !== selectedPlan.id && plan.status !== "archived");
+      setPlanView(nextCurrentPlan ? "current" : "archive");
+      setSelectedPlanId(nextCurrentPlan?.id ?? selectedPlan.id);
+      setShowPillarForm(false); setShowItemForm(false); setCapacityWarning(null);
+    } else if (selectedPlan.status === "archived") {
+      setPlanView("current");
+      setSelectedPlanId(selectedPlan.id);
+    }
+    setNotice(status === "active" ? "أصبحت هذه خطة المحتوى الفعّالة."
+      : status === "completed" ? "تم إغلاق الخطة مع الاحتفاظ بكل سجلها."
+        : status === "archived" ? "تم نقل الخطة إلى الأرشيف وإخراج مواعيدها من حمل الفريق."
+          : selectedPlan.status === "archived" ? "تم استرجاع الخطة كمسودة في العمل الحالي."
+            : "تم تحديث حالة الخطة.");
+    await refresh();
+  }
+
+  async function deletePlan() {
+    if (!selectedPlan || !workspace || workspace.membership.role !== "owner") return;
+    if (selectedPlan.status !== "archived") { setError("انقل الخطة إلى الأرشيف قبل حذفها نهائيًا."); return; }
+    if (selectedPlanHasExecution) { setError("الخطة مرتبطة بالتنفيذ؛ تظل محفوظة في الأرشيف لحماية سجل المهام والمحتوى."); return; }
+    if (!window.confirm(`حذف خطة «${selectedPlan.name}» نهائيًا؟\n\nسيتم حذف أعمدتها وبنودها غير المنفذة، ولن يمكن استرجاعها.`)) return;
+    setWorking(true); clearTransientState();
+    const { data, error: deleteError } = await getSupabaseBrowserClient().from("content_plans")
+      .delete()
+      .eq("id", selectedPlan.id)
+      .eq("organization_id", workspace.organization.id)
+      .eq("version", selectedPlan.version)
+      .select("id")
+      .maybeSingle();
+    setWorking(false);
+    if (deleteError) {
+      setError(deleteError.message.includes("linked to execution")
+        ? "الخطة مرتبطة بالتنفيذ؛ استخدم الأرشيف للحفاظ على سجل الفريق."
+        : deleteError.message);
+      return;
+    }
+    if (!data) { setError("الخطة اتعدلت في نافذة أخرى. حدّث الصفحة قبل الحذف."); return; }
+    const nextArchivedPlan = archivedPlans.find((plan) => plan.id !== selectedPlan.id);
+    setSelectedPlanId(nextArchivedPlan?.id ?? currentPlans[0]?.id ?? null);
+    if (!nextArchivedPlan) setPlanView("current");
+    setNotice("تم حذف الخطة المؤرشفة وبنودها غير المنفذة نهائيًا.");
     await refresh();
   }
 
@@ -458,27 +523,33 @@ export function PlanningWorkspace() {
       <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <FilePlus2 size={14} />} حفظ كمسودة</Button><small>لن تُنشأ أي مهام تلقائيًا قبل إضافة بنود التقويم وربطها بالتنفيذ.</small></div>
     </form> : null}
 
-    {workspace.plans.length ? <div className="planning-plan-switcher" role="tablist" aria-label="خطط المحتوى">{workspace.plans.map((plan) => <button type="button" role="tab" aria-selected={plan.id === selectedPlanId} className={plan.id === selectedPlanId ? "active" : ""} key={plan.id} onClick={() => setSelectedPlanId(plan.id)}><span>{plan.name}</span><small>{formatDate(plan.starts_on)} — {formatDate(plan.ends_on)}</small></button>)}</div> : null}
+    {workspace.plans.length ? <>
+      <div className="planning-plan-controls">
+        <div className="segmented-control" aria-label="عرض خطط المحتوى"><button type="button" className={planView === "current" ? "active" : ""} onClick={() => switchPlanView("current")}>الخطط الحالية ({currentPlans.length.toLocaleString("ar-EG")})</button><button type="button" className={planView === "archive" ? "active" : ""} onClick={() => switchPlanView("archive")}>الأرشيف ({archivedPlans.length.toLocaleString("ar-EG")})</button></div>
+        <small>{planView === "archive" ? "الخطط المؤرشفة لا تظهر في حمل الفريق ويمكن استرجاعها." : "الأرشيف يخفي الخطة من التشغيل اليومي بدون فقد سجلها."}</small>
+      </div>
+      {visiblePlans.length ? <div className="planning-plan-switcher" role="tablist" aria-label={planView === "archive" ? "خطط المحتوى المؤرشفة" : "خطط المحتوى الحالية"}>{visiblePlans.map((plan) => <button type="button" role="tab" aria-selected={plan.id === selectedPlanId} className={plan.id === selectedPlanId ? "active" : ""} key={plan.id} onClick={() => setSelectedPlanId(plan.id)}><span>{plan.name}</span><small>{formatDate(plan.starts_on)} — {formatDate(plan.ends_on)}</small></button>)}</div> : <aside className="planning-archive-empty"><Archive size={17} /><div><strong>{planView === "archive" ? "الأرشيف فارغ" : "لا توجد خطط حالية"}</strong><p>{planView === "archive" ? "أي خطة تؤرشفها ستظهر هنا مع إمكانية الاسترجاع أو الحذف الآمن." : "أنشئ خطة جديدة أو استرجع خطة من الأرشيف."}</p></div></aside>}
+    </> : null}
 
     {selectedPlan ? <>
       <section className="panel planning-strategy-card">
         <header><div><p className="overline">v{selectedPlan.version} · {formatDate(selectedPlan.starts_on)} — {formatDate(selectedPlan.ends_on)}</p><h2>{selectedPlan.name}</h2></div><StatusBadge tone={contentPlanStatusConfig[selectedPlan.status].tone}>{contentPlanStatusConfig[selectedPlan.status].label}</StatusBadge></header>
         <div className="planning-strategy-grid"><div><Target size={17} /><span>الهدف</span><p>{selectedPlan.objective}</p></div><div><UsersRound size={17} /><span>الجمهور</span><p>{selectedPlan.audience}</p></div>{selectedPlan.offer ? <div><Route size={17} /><span>العرض</span><p>{selectedPlan.offer}</p></div> : null}{selectedPlan.primary_metric ? <div><CheckCircle2 size={17} /><span>المؤشر الرئيسي</span><p>{selectedPlan.primary_metric}</p></div> : null}</div>
         <div className="planning-progress"><div><strong>{progress}%</strong><span>من البنود منشور</span></div><div className="content-progress-track"><span style={{ width: `${progress}%` }} /></div><small>{selectedItems.length} بند · {counts.in_production ?? 0} إنتاج · {counts.scheduled ?? 0} مجدول · {counts.published ?? 0} منشور</small></div>
-        {manager && selectedPlan.status !== "archived" ? <footer className="planning-actions">{selectedPlan.status === "draft" ? <Button type="button" disabled={working} onClick={() => void changePlanStatus("active")}><CheckCircle2 size={14} /> تفعيل الخطة</Button> : null}{selectedPlan.status === "active" ? <Button type="button" variant="secondary" disabled={working} onClick={() => void changePlanStatus("completed")}>إغلاق الفترة كمكتملة</Button> : null}{selectedPlan.status === "completed" ? <Button type="button" variant="ghost" disabled={working} onClick={() => void changePlanStatus("archived")}>أرشفة</Button> : null}</footer> : null}
+        {manager ? <footer className="planning-actions">{selectedPlan.status === "draft" ? <Button type="button" disabled={working} onClick={() => void changePlanStatus("active")}><CheckCircle2 size={14} /> تفعيل الخطة</Button> : null}{selectedPlan.status === "active" ? <Button type="button" variant="secondary" disabled={working} onClick={() => void changePlanStatus("completed")}>إغلاق الفترة كمكتملة</Button> : null}{selectedPlan.status !== "archived" ? <Button type="button" variant="ghost" disabled={working} onClick={() => void changePlanStatus("archived")}><Archive size={14} /> نقل إلى الأرشيف</Button> : <><Button type="button" variant="secondary" disabled={working} onClick={() => void changePlanStatus("draft")}><RefreshCw size={14} /> استرجاع كمسودة</Button>{workspace.membership.role === "owner" && !selectedPlanHasExecution ? <button type="button" className="text-button danger-text" disabled={working} onClick={() => void deletePlan()}><Trash2 size={14} /> حذف نهائي</button> : null}{workspace.membership.role === "owner" && selectedPlanHasExecution ? <small>الحذف النهائي غير متاح لأنها مرتبطة بالتنفيذ؛ الأرشيف يحافظ على سجل الفريق.</small> : null}</>}</footer> : null}
       </section>
 
       <section className="panel planning-pillars-panel">
-        <div className="section-heading"><div><p className="overline">Content pillars</p><h2>أعمدة المحتوى</h2><p>كل عمود له دور وكمية مستهدفة؛ البنود الفعلية تحته تبيّن إن كانت الخطة متوازنة.</p></div>{manager ? <Button type="button" variant="secondary" onClick={() => setShowPillarForm((value) => !value)}><Plus size={14} /> إضافة عمود</Button> : null}</div>
-        {showPillarForm && manager ? <form className="planning-inline-form" onSubmit={(event) => void addPillar(event)}><label><span>اسم العمود</span><input name="title" minLength={2} maxLength={120} required placeholder="تعليمي / ثقة / قصص / بيع" /></label><label><span>الكمية المستهدفة</span><input name="target_quantity" type="number" min="1" max="1000" defaultValue="4" required /></label><label className="span-2"><span>وظيفته في الخطة</span><textarea name="purpose" minLength={5} maxLength={1500} rows={2} required placeholder="ما الرسالة أو القرار الذي يخدمه هذا العمود؟" /></label><div className="form-actions span-2"><Button type="submit" disabled={working}>حفظ العمود</Button><button className="text-button" type="button" onClick={() => setShowPillarForm(false)}>إلغاء</button></div></form> : null}
+        <div className="section-heading"><div><p className="overline">Content pillars</p><h2>أعمدة المحتوى</h2><p>كل عمود له دور وكمية مستهدفة؛ البنود الفعلية تحته تبيّن إن كانت الخطة متوازنة.</p></div>{manager && selectedPlan.status !== "archived" ? <Button type="button" variant="secondary" onClick={() => setShowPillarForm((value) => !value)}><Plus size={14} /> إضافة عمود</Button> : null}</div>
+        {showPillarForm && manager && selectedPlan.status !== "archived" ? <form className="planning-inline-form" onSubmit={(event) => void addPillar(event)}><label><span>اسم العمود</span><input name="title" minLength={2} maxLength={120} required placeholder="تعليمي / ثقة / قصص / بيع" /></label><label><span>الكمية المستهدفة</span><input name="target_quantity" type="number" min="1" max="1000" defaultValue="4" required /></label><label className="span-2"><span>وظيفته في الخطة</span><textarea name="purpose" minLength={5} maxLength={1500} rows={2} required placeholder="ما الرسالة أو القرار الذي يخدمه هذا العمود؟" /></label><div className="form-actions span-2"><Button type="submit" disabled={working}>حفظ العمود</Button><button className="text-button" type="button" onClick={() => setShowPillarForm(false)}>إلغاء</button></div></form> : null}
         <div className="planning-pillars-grid">{selectedPillars.map((pillar) => { const pillarItems = selectedItems.filter((item) => item.pillar_id === pillar.id && item.status !== "cancelled"); return <article key={pillar.id}><header><strong>{pillar.title}</strong><span>{pillarItems.length}/{pillar.target_quantity}</span></header><p>{pillar.purpose}</p><div className="content-progress-track"><span style={{ width: `${Math.min(100, Math.round((pillarItems.length / pillar.target_quantity) * 100))}%` }} /></div></article>; })}{!selectedPillars.length ? <div className="planning-empty-inline"><Target size={20} /><p>لا توجد أعمدة بعد. أضف 3–5 أعمدة تخدم الهدف بدل قائمة أفكار عشوائية.</p></div> : null}</div>
       </section>
 
       {manager ? <TeamCapacityCalendar organizationId={workspace.organization.id} /> : null}
 
       <section className="panel planning-calendar-panel">
-        <div className="section-heading"><div><p className="overline">Execution calendar</p><h2>تقويم التنفيذ والنشر</h2><p>كل بند مسؤول وموعد وهدف؛ ربطه بمصنع المحتوى يجعل حالته تتحرك تلقائيًا.</p></div>{manager ? <Button type="button" onClick={() => setShowItemForm((value) => !value)}><Plus size={14} /> إضافة محتوى للخطة</Button> : null}</div>
-        {showItemForm && manager ? <form className="planning-form planning-item-form" onSubmit={(event) => void addPlanItem(event)}>
+        <div className="section-heading"><div><p className="overline">Execution calendar</p><h2>تقويم التنفيذ والنشر</h2><p>كل بند مسؤول وموعد وهدف؛ ربطه بمصنع المحتوى يجعل حالته تتحرك تلقائيًا.</p></div>{manager && selectedPlan.status !== "archived" ? <Button type="button" onClick={() => setShowItemForm((value) => !value)}><Plus size={14} /> إضافة محتوى للخطة</Button> : null}</div>
+        {showItemForm && manager && selectedPlan.status !== "archived" ? <form className="planning-form planning-item-form" onSubmit={(event) => void addPlanItem(event)}>
           <div className="planning-form-grid">
             <label><span>نوع المحتوى</span><select name="kind" value={selectedKind} onChange={(event) => setSelectedKind(event.target.value as ContentPlanItemKind)}>{contentPlanItemKinds.map((kind) => <option value={kind} key={kind}>{contentPlanItemKindConfig[kind].label}</option>)}</select></label>
             <label><span>عنوان واضح</span><input name="title" minLength={3} maxLength={180} required placeholder="عنوان الفكرة أو الوعد الرئيسي" /></label>
@@ -508,10 +579,10 @@ export function PlanningWorkspace() {
             <div className="planning-date-tile"><CalendarDays size={17} /><strong>{new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</strong><small>{new Intl.DateTimeFormat("ar-EG", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</small></div>
             <div className="planning-item-copy"><div><span>{contentPlanItemKindConfig[item.kind].label}{item.pillar_id ? ` · ${pillarsById.get(item.pillar_id)?.title ?? "عمود"}` : ""}</span><h3>{item.title}</h3></div><p>{item.objective}</p><small>{peopleById.get(item.owner_id)?.name ?? "عضو فريق"} · {item.platforms.join("، ")} · {item.estimated_minutes.toLocaleString("ar-EG")} دقيقة متوقعة</small></div>
             <div className="planning-item-state"><StatusBadge tone={contentPlanItemStatusConfig[item.status].tone}>{contentPlanItemStatusConfig[item.status].label}</StatusBadge>{linked ? <a href={`/content?content=${linked.id}#content-${linked.id}`}>فتح التنفيذ <ArrowUpLeft size={12} /></a> : null}</div>
-            {manager && item.status !== "published" ? <div className="planning-item-actions">{linked ? <button className="text-button" type="button" disabled={working} onClick={() => void linkContent(item, "")}><Link2 size={12} /> فك الربط</button> : <><label><span>ربط بمصنع المحتوى</span><select defaultValue="" disabled={working} onChange={(event) => { if (event.target.value) void linkContent(item, event.target.value); }}><option value="">اختر أصلًا منفذًا</option>{availableContent.map((content) => <option value={content.id} key={content.id}>{content.title}</option>)}</select></label><button className="text-button" type="button" disabled={working} onClick={() => void setItemCancelled(item, item.status !== "cancelled")}>{item.status === "cancelled" ? <RefreshCw size={12} /> : <CircleSlash2 size={12} />} {item.status === "cancelled" ? "إعادة للخطة" : "إلغاء البند"}</button></>}</div> : null}
+            {manager && selectedPlan.status !== "archived" && item.status !== "published" ? <div className="planning-item-actions">{linked ? <button className="text-button" type="button" disabled={working} onClick={() => void linkContent(item, "")}><Link2 size={12} /> فك الربط</button> : <><label><span>ربط بمصنع المحتوى</span><select defaultValue="" disabled={working} onChange={(event) => { if (event.target.value) void linkContent(item, event.target.value); }}><option value="">اختر أصلًا منفذًا</option>{availableContent.map((content) => <option value={content.id} key={content.id}>{content.title}</option>)}</select></label><button className="text-button" type="button" disabled={working} onClick={() => void setItemCancelled(item, item.status !== "cancelled")}>{item.status === "cancelled" ? <RefreshCw size={12} /> : <CircleSlash2 size={12} />} {item.status === "cancelled" ? "إعادة للخطة" : "إلغاء البند"}</button></>}</div> : null}
           </article>;
         })}{!selectedItems.length ? <div className="scripts-empty"><CalendarDays size={26} /><strong>التقويم فارغ</strong><p>ابدأ بأول أسبوع فقط: أربع قطع موزعة على الأعمدة، ثم راقب القدرة الفعلية للفريق.</p>{manager ? <Button type="button" onClick={() => setShowItemForm(true)}><PencilLine size={14} /> خطط أول محتوى</Button> : null}</div> : null}</div>
       </section>
-    </> : <section className="panel scripts-empty"><Target size={28} /><strong>لا توجد خطة محتوى حتى الآن</strong><p>أنشئ أول خطة كمسودة. لن يحفظ النظام أرقامًا أو مهامًا وهمية.</p>{manager ? <Button type="button" onClick={() => setShowPlanForm(true)}><Plus size={15} /> إنشاء أول خطة</Button> : null}</section>}
+    </> : <section className="panel scripts-empty">{planView === "archive" ? <Archive size={28} /> : <Target size={28} />}<strong>{planView === "archive" ? "أرشيف الخطط فارغ" : "لا توجد خطة محتوى حالية"}</strong><p>{planView === "archive" ? "الخطة التي تنقلها للأرشيف ستظهر هنا ويمكن استرجاعها أو حذفها بأمان." : "أنشئ خطة كمسودة أو استرجع واحدة من الأرشيف. لن يحفظ النظام أرقامًا أو مهامًا وهمية."}</p>{manager && planView === "current" ? <Button type="button" onClick={() => setShowPlanForm(true)}><Plus size={15} /> إنشاء خطة جديدة</Button> : null}</section>}
   </section>;
 }
