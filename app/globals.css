@@ -61,13 +61,13 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus);
 .notification-center { position: relative; }
 .notification-trigger { position: relative; }
 .notification-trigger > span { min-width: 17px; height: 17px; padding: 0 4px; position: absolute; top: -5px; inset-inline-start: -5px; display: grid; place-items: center; border: 2px solid var(--canvas); border-radius: 999px; background: var(--red-700); color: white; font-size: 10px; font-weight: 900; }
-.notification-popover { width: min(370px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: min(520px, calc(100dvh - 90px)); position: fixed; z-index: 60; top: 76px; inset-inline-end: clamp(12px, 4vw, 52px); direction: rtl; overflow: hidden; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: 0 22px 55px rgba(16,36,49,.18); }
-.notification-popover > header { min-width: 0; padding: 13px 14px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); }
+.notification-popover { width: min(370px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: min(520px, calc(100dvh - 90px)); position: fixed; z-index: 60; top: 76px; inset-inline-end: clamp(12px, 4vw, 52px); direction: rtl; overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 15px; background: var(--paper); box-shadow: 0 22px 55px rgba(16,36,49,.18); }
+.notification-popover > header { min-width: 0; flex: 0 0 auto; padding: 13px 14px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); }
 .notification-popover > header strong, .notification-popover > header small { display: block; }
 .notification-popover > header strong { font-size: 12px; }
 .notification-popover > header small { margin-top: 3px; color: var(--ink-500); font-size: 11px; }
 .notification-popover > header button { min-width: 0; padding: 3px; display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--teal-700); font-size: 11px; font-weight: 900; cursor: pointer; }
-.notification-telegram-card { margin: 10px; padding: 10px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.notification-telegram-card { flex: 0 0 auto; margin: 10px; padding: 10px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
 .notification-telegram-card.active { border-color: var(--line-strong); background: var(--teal-100); }
 .notification-telegram-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--paper); color: var(--teal-700); }
 .notification-telegram-copy { min-width: 0; }
@@ -79,7 +79,7 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus);
 .notification-telegram-action:disabled { opacity: .48; cursor: wait; }
 .notification-telegram-feedback { grid-column: 1 / -1; margin: 0; padding-top: 7px; border-top: 1px solid var(--line); color: var(--teal-700); font-size: 10px; line-height: 1.6; }
 .notification-telegram-feedback.error { color: var(--red-700); }
-.notification-popover ol { max-height: 300px; margin: 0; padding: 0; list-style: none; overflow: auto; }
+.notification-popover ol { min-height: 0; max-height: 300px; flex: 1 1 auto; margin: 0; padding: 0; list-style: none; overflow: auto; }
 .notification-popover li { position: relative; border-bottom: 1px solid var(--line); }
 .notification-popover li.unread { background: #f0f8f6; }
 .notification-popover li.unread::before { content: ""; width: 6px; height: 6px; position: absolute; top: 17px; inset-inline-start: 10px; border-radius: 50%; background: var(--teal-700); }
