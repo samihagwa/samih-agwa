@@ -44,6 +44,7 @@ type Task = Tables<"tasks">;
 type TaskEvent = Tables<"task_events">;
 type TaskDiscussionMessage = Tables<"task_discussion_messages">;
 type TaskRevisionRequest = Tables<"task_revision_requests">;
+type TaskDelivery = Tables<"task_deliveries">;
 type ContentAsset = Tables<"content_assets">;
 type ContentStepDelivery = Tables<"content_step_deliveries">;
 type Membership = Tables<"memberships">;
@@ -57,6 +58,7 @@ type Workspace = {
   events: TaskEvent[];
   discussion: TaskDiscussionMessage[];
   revisions: TaskRevisionRequest[];
+  taskDeliveries: TaskDelivery[];
   assets: ContentAsset[];
   deliveries: ContentStepDelivery[];
 };
@@ -76,6 +78,10 @@ function friendlyError(error: unknown) {
   if (/Only task participants/i.test(message)) return "النقاش متاح للمسؤول وطالب المهمة وإدارة المنصة فقط.";
   if (/discussion messages must contain/i.test(message)) return "اكتب سؤالًا أو توضيحًا من حرفين على الأقل.";
   if (/Platform leadership cannot execute/i.test(message)) return "تنفيذ المهمة وتغيير حالتها متاحان للمسؤول المسند إليه فقط.";
+  if (/Only the assigned task owner can submit/i.test(message)) return "إضافة أو تعديل التسليم متاح للمسؤول عن المهمة فقط.";
+  if (/Add a delivery note or URL/i.test(message)) return "أضف رابط التسليم أو اكتب ملاحظة التسليم.";
+  if (/Delivery URL must be/i.test(message)) return "اكتب رابط تسليم صحيح يبدأ بـ http:// أو https://.";
+  if (/Delivery note must contain/i.test(message)) return "ملاحظة التسليم لازم تكون 3 حروف على الأقل.";
   return message || "حدث خطأ غير متوقع.";
 }
 
@@ -163,12 +169,16 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         { data: events, error: eventsError },
         { data: discussion, error: discussionError },
         { data: revisions, error: revisionsError },
+        { data: taskDeliveries, error: taskDeliveriesError },
         { data: assets, error: assetsError },
         { data: deliveries, error: deliveriesError },
       ] = await Promise.all([
         supabase.from("task_events").select("*").eq("task_id", task.id).order("occurred_at", { ascending: false }).limit(100),
         supabase.from("task_discussion_messages").select("*").eq("task_id", task.id).order("created_at", { ascending: true }).limit(200),
         supabase.from("task_revision_requests").select("*").eq("task_id", task.id).order("requested_at", { ascending: false }).limit(100),
+        !task.content_item_id && !task.launch_id && !task.launch_deliverable_id && !task.crm_contact_id
+          ? supabase.from("task_deliveries").select("*").eq("task_id", task.id).limit(1)
+          : Promise.resolve({ data: [] as TaskDelivery[], error: null }),
         task.content_item_id
           ? supabase.from("content_assets").select("*").eq("content_item_id", task.content_item_id).order("created_at", { ascending: true })
           : Promise.resolve({ data: [] as ContentAsset[], error: null }),
@@ -179,6 +189,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       if (eventsError) throw eventsError;
       if (discussionError) throw discussionError;
       if (revisionsError) throw revisionsError;
+      if (taskDeliveriesError) throw taskDeliveriesError;
       if (assetsError) throw assetsError;
       if (deliveriesError) throw deliveriesError;
 
@@ -189,6 +200,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         ...(events ?? []).flatMap((event) => event.actor_id ? [event.actor_id] : []),
         ...(discussion ?? []).map((message) => message.author_id),
         ...(revisions ?? []).map((revision) => revision.requested_by),
+        ...(taskDeliveries ?? []).map((delivery) => delivery.submitted_by),
         ...(assets ?? []).map((asset) => asset.created_by),
         ...(deliveries ?? []).map((delivery) => delivery.submitted_by),
       ])];
@@ -218,6 +230,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         events: events ?? [],
         discussion: discussion ?? [],
         revisions: revisions ?? [],
+        taskDeliveries: taskDeliveries ?? [],
         assets: assets ?? [],
         deliveries: deliveries ?? [],
       });
@@ -241,7 +254,8 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_events", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_discussion_messages", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
-      .on("postgres_changes", { event: "*", schema: "public", table: "task_revision_requests", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false));
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_revision_requests", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_deliveries", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false));
     if (workspace.task.content_item_id) {
       channel = channel
         .on("postgres_changes", { event: "*", schema: "public", table: "content_assets", filter: `content_item_id=eq.${workspace.task.content_item_id}` }, () => void loadTaskData(session, false))
@@ -325,6 +339,30 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     setWorking(false);
   }
 
+  async function saveTaskDelivery(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspace || !session) return;
+    const form = new FormData(event.currentTarget);
+    const resultNote = String(form.get("result_note") ?? "").trim();
+    const resultUrl = String(form.get("result_url") ?? "").trim();
+    if (!resultNote && !resultUrl) { setError("أضف رابط التسليم أو اكتب ملاحظة التسليم."); return; }
+    if (resultNote && resultNote.length < 3) { setError("ملاحظة التسليم لازم تكون 3 حروف على الأقل."); return; }
+    if (resultUrl && !/^https?:\/\/\S+$/i.test(resultUrl)) { setError("اكتب رابط تسليم صحيح يبدأ بـ http:// أو https://."); return; }
+
+    setWorking(true); setError(null); setNotice(null);
+    const { error: submissionError } = await getSupabaseBrowserClient().rpc("submit_task_delivery", {
+      target_task_id: workspace.task.id,
+      delivery_result_note: resultNote,
+      delivery_result_url: resultUrl,
+    });
+    if (submissionError) setError(friendlyError(submissionError));
+    else {
+      setNotice(workspace.taskDeliveries.length ? "تم تحديث رابط وملاحظة التسليم." : "تم حفظ رابط وملاحظة التسليم داخل المهمة.");
+      await loadTaskData(session, false);
+    }
+    setWorking(false);
+  }
+
   if (loading) return <section className="panel empty-state"><LoaderCircle className="spin" size={20} /><div><h2>جارٍ فتح ملف المهمة</h2><p>نحمّل التفاصيل وطلبات التعديل وسجل الحالة.</p></div></section>;
   if (!configured) return <section className="panel empty-state"><AlertTriangle size={20} /><div><h2>اتصال تسجيل الدخول غير متاح مؤقتًا</h2><p>حدّث الصفحة بعد استعادة الاتصال.</p></div></section>;
   if (!session || !workspace) return <section className="panel empty-state"><AlertTriangle size={20} /><div><h2>تعذّر فتح ملف المهمة</h2><p>{error ?? "سجّل الدخول بحساب عضو مصرح له."}</p></div><Button href="/tasks" variant="secondary">العودة للمهام</Button></section>;
@@ -345,12 +383,16 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const canDiscuss = isAssignee || isRequester || platformAdmin;
   const owner = peopleById.get(task.owner_id);
   const requester = peopleById.get(task.created_by);
-  const currentDelivery = workspace.deliveries.find((delivery) => delivery.task_id === task.id) ?? null;
+  const currentDelivery = task.content_item_id
+    ? workspace.deliveries.find((delivery) => delivery.task_id === task.id) ?? null
+    : workspace.taskDeliveries.find((delivery) => delivery.task_id === task.id) ?? null;
   const inputDeliverySteps = task.content_step ? deliveryInputsByStep[task.content_step] ?? [] : [];
   const inputDeliveries = workspace.deliveries.filter((delivery) => delivery.task_id !== task.id && inputDeliverySteps.includes(delivery.step));
   const inputAssetSteps = task.content_step ? assetInputsByStep[task.content_step] ?? [task.content_step] : [];
   const taskAssets = workspace.assets.filter((asset) => !asset.stage || inputAssetSteps.includes(asset.stage));
   const hasExecutionResources = taskAssets.length > 0 || inputDeliveries.length > 0;
+  const standaloneTask = !linkedWorkflow;
+  const canSubmitStandaloneDelivery = standaloneTask && isAssignee && task.status !== "cancelled";
   const linkedHref = task.content_item_id ? `/content?content=${task.content_item_id}#content-${task.content_item_id}`
     : task.launch_deliverable_id ? `/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`
       : task.launch_id ? `/campaigns?launch=${task.launch_id}#launch-${task.launch_id}`
@@ -421,9 +463,14 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
               </ul> : <p className="task-resource-empty"><Paperclip size={14} /> لم يرفق طالب المهمة ملفات أو روابط لهذه الخطوة حتى الآن.</p>}
             </div> : null}
 
-            {task.content_item_id ? <div className={`task-current-delivery${currentDelivery ? " has-delivery" : ""}`}>
+            {task.content_item_id || standaloneTask ? <div className={`task-current-delivery${currentDelivery ? " has-delivery" : ""}`}>
               <header><div><PackageCheck size={16} /><div><strong>تسليم هذه المهمة</strong><small>{currentDelivery ? `إصدار ${currentDelivery.version} · ${formatDate(currentDelivery.submitted_at)}` : "النتيجة النهائية التي سلّمها منفّذ هذه الخطوة"}</small></div></div>{currentDelivery ? <StatusBadge tone="success">تم التسليم</StatusBadge> : <StatusBadge tone="neutral">في الانتظار</StatusBadge>}</header>
-              {currentDelivery ? <div className="task-current-delivery-body"><div>{currentDelivery.result_note ? <p>{currentDelivery.result_note}</p> : <p>تم التسليم بدون ملاحظة مكتوبة.</p>}<small>بواسطة {peopleById.get(currentDelivery.submitted_by)?.name ?? "عضو فريق"}</small></div>{currentDelivery.result_url ? <a href={currentDelivery.result_url} target="_blank" rel="noreferrer"><span>{task.content_step === "publishing" ? "فتح المنشور" : "فتح ملف التسليم"}<small dir="ltr">{resourceHost(currentDelivery.result_url)}</small></span><ExternalLink size={15} /></a> : null}</div> : <p className="task-resource-empty"><PackageCheck size={14} /> {isAssignee ? "لم تسلّم نتيجة هذه المهمة بعد. يتم التسليم من ملف المحتوى المرتبط." : "لم يرفع المنفّذ تسليم هذه المهمة حتى الآن."}</p>}
+              {currentDelivery ? <div className="task-current-delivery-body"><div>{currentDelivery.result_note ? <p>{currentDelivery.result_note}</p> : <p>تم التسليم بدون ملاحظة مكتوبة.</p>}<small>بواسطة {peopleById.get(currentDelivery.submitted_by)?.name ?? "عضو فريق"}</small></div>{currentDelivery.result_url ? <a href={currentDelivery.result_url} target="_blank" rel="noreferrer"><span>{task.content_step === "publishing" ? "فتح المنشور" : "فتح ملف التسليم"}<small dir="ltr">{resourceHost(currentDelivery.result_url)}</small></span><ExternalLink size={15} /></a> : null}</div> : <p className="task-resource-empty"><PackageCheck size={14} /> {isAssignee ? task.content_item_id ? "لم تسلّم نتيجة هذه المهمة بعد. يتم التسليم من ملف المحتوى المرتبط." : "لم تحفظ رابط أو ملاحظة التسليم حتى الآن." : "لم يرفع المنفّذ تسليم هذه المهمة حتى الآن."}</p>}
+              {canSubmitStandaloneDelivery ? <form className="task-delivery-compose" key={`delivery-${currentDelivery?.version ?? 0}`} onSubmit={saveTaskDelivery}>
+                <label><span>رابط ملف التسليم</span><input name="result_url" type="url" inputMode="url" dir="ltr" maxLength={2000} defaultValue={currentDelivery?.result_url ?? ""} placeholder="https://drive.google.com/..." disabled={working} /></label>
+                <label><span>ملاحظة التسليم — اختيارية عند وجود رابط</span><textarea name="result_note" rows={3} minLength={3} maxLength={10000} defaultValue={currentDelivery?.result_note ?? ""} placeholder="اكتب مكان النسخة النهائية أو أي ملاحظة مهمة لطالب المهمة." disabled={working} /></label>
+                <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <PackageCheck size={14} />} {currentDelivery ? "تحديث التسليم" : "حفظ التسليم"}</Button><small>الخانة تفضل موجودة حتى بعد اكتمال المهمة.</small></div>
+              </form> : null}
             </div> : null}
 
             {task.acceptance_criteria.trim() ? <div className="task-detail-copy acceptance"><strong>معيار القبول — اختياري</strong><p>{task.acceptance_criteria}</p></div> : null}

@@ -1387,6 +1387,32 @@ test("reel cover work starts beside editing while publishing keeps all final gat
   assert.match(css, /\.task-current-delivery/);
 });
 
+test("standalone task deliveries stay visible and editable by the assignee after completion", async () => {
+  const [migration, detail, types, css] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260829050000_general_task_deliveries.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /create table public\.task_deliveries/);
+  assert.match(migration, /constraint task_deliveries_task_unique unique \(task_id\)/);
+  assert.match(migration, /function public\.submit_task_delivery/);
+  assert.match(migration, /task_record\.owner_id <> actor/);
+  assert.match(migration, /task_record\.status = 'cancelled'/);
+  assert.doesNotMatch(migration, /task_record\.status = 'done'[\s\S]*raise exception/);
+  assert.match(migration, /on conflict \(task_id\) do update/);
+  assert.match(migration, /grant execute on function public\.submit_task_delivery\(uuid, text, text\)[\s\S]*to authenticated/);
+  assert.match(detail, /\.from\("task_deliveries"\)/);
+  assert.match(detail, /rpc\("submit_task_delivery"/);
+  assert.match(detail, /رابط ملف التسليم/);
+  assert.match(detail, /الخانة تفضل موجودة حتى بعد اكتمال المهمة/);
+  assert.match(detail, /standaloneTask && isAssignee && task\.status !== "cancelled"/);
+  assert.match(types, /task_deliveries:/);
+  assert.match(types, /submit_task_delivery:/);
+  assert.match(css, /\.task-delivery-compose/);
+});
+
 test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {
   const [migration, commands, teamWorkspace, onboardingGate, appShell, joinWorkspace, joinPage, config, readme] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821220304_team_onboarding_and_access_control.sql", import.meta.url), "utf8"),

@@ -3796,6 +3796,64 @@ export type Database = {
           },
         ]
       }
+      task_deliveries: {
+        Row: {
+          id: string
+          organization_id: string
+          result_note: string | null
+          result_url: string | null
+          submitted_at: string
+          submitted_by: string
+          task_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          result_note?: string | null
+          result_url?: string | null
+          submitted_at?: string
+          submitted_by: string
+          task_id: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          result_note?: string | null
+          result_url?: string | null
+          submitted_at?: string
+          submitted_by?: string
+          task_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_deliveries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_deliveries_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_deliveries_task_org_fkey"
+            columns: ["task_id", "organization_id"]
+            isOneToOne: true
+            referencedRelation: "tasks"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
       task_revision_requests: {
         Row: {
           id: string
@@ -5637,6 +5695,14 @@ export type Database = {
           delivery_result_url: string
           target_task_id: string
           target_user_id: string
+        }
+        Returns: string
+      }
+      submit_task_delivery: {
+        Args: {
+          delivery_result_note: string
+          delivery_result_url: string
+          target_task_id: string
         }
         Returns: string
       }
