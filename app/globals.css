@@ -75,7 +75,12 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus);
 .notification-telegram-copy strong { font-size: 11px; }
 .notification-telegram-copy small { margin-top: 2px; color: var(--ink-600); font-size: 10px; line-height: 1.5; }
 .notification-telegram-copy .notification-telegram-warning { color: var(--red-700); }
+.notification-telegram-username { grid-column: 2 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 7px; }
+.notification-telegram-username > span { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-700); font-size: 9px; font-weight: 900; }
+.notification-telegram-username input { min-width: 0; min-height: 36px; padding: 6px 9px; border-radius: 9px; background: var(--paper); font-size: 12px; }
+.notification-telegram-actions { grid-column: 2 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
 .notification-telegram-action { min-width: 54px; min-height: 36px; padding: 6px 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--paper); color: var(--teal-700); font-size: 10px; font-weight: 900; cursor: pointer; }
+.notification-telegram-action.test { border-color: var(--teal-700); background: var(--teal-700); color: white; }
 .notification-telegram-action:disabled { opacity: .48; cursor: wait; }
 .notification-telegram-feedback { grid-column: 1 / -1; margin: 0; padding-top: 7px; border-top: 1px solid var(--line); color: var(--teal-700); font-size: 10px; line-height: 1.6; }
 .notification-telegram-feedback.error { color: var(--red-700); }
@@ -1774,7 +1779,9 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .notification-popover { top: 66px; inset-inline: 12px; width: auto; max-width: none; }
   .notification-popover > header { flex-wrap: wrap; }
   .notification-telegram-card { grid-template-columns: 34px minmax(0, 1fr); }
-  .notification-telegram-action { grid-column: 1 / -1; width: 100%; min-height: 44px; }
+  .notification-telegram-username, .notification-telegram-actions { grid-column: 1 / -1; }
+  .notification-telegram-username { grid-template-columns: 1fr; }
+  .notification-telegram-action { flex: 1; min-height: 44px; }
   .crm-create-dialog-backdrop { padding: 10px; place-items: stretch; }
   .crm-import-source-grid, .crm-import-approval, .crm-intake-health, .crm-lead-routing-grid { grid-template-columns: 1fr; }
   .crm-intake-health dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2136,6 +2143,34 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
 .task-detail-copy.acceptance { background: var(--canvas); }
 .task-detail-copy strong { color: var(--ink-950); font-size: 11px; }
 .task-detail-copy p { margin: 6px 0 0; color: var(--ink-600); font-size: 11px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-requirements-section .task-detail-facts { margin-top: 12px; }
+.task-detail-instructions { padding: 15px; border: 1px solid var(--line-strong); border-inline-start: 4px solid var(--teal-700); border-radius: 12px; background: var(--canvas); }
+.task-detail-instructions > span { display: flex; align-items: center; gap: 6px; color: var(--teal-700); font-size: 11px; font-weight: 950; }
+.task-detail-instructions > p { margin: 9px 0 0; color: var(--ink-900); font-size: 13px; font-weight: 700; line-height: 1.95; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-detail-instructions > p a { display: inline-flex; align-items: center; gap: 3px; color: var(--teal-700); font-weight: 900; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.task-resource-block, .task-current-delivery { margin-top: 12px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.task-resource-block > header, .task-current-delivery > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 9px; }
+.task-resource-block > header > div, .task-current-delivery > header > div { min-width: 0; display: flex; align-items: flex-start; gap: 7px; }
+.task-resource-block > header > div > svg, .task-current-delivery > header > div > svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal-700); }
+.task-resource-block header strong, .task-current-delivery header strong { display: block; color: var(--ink-950); font-size: 12px; }
+.task-resource-block header small, .task-current-delivery header small { margin-top: 3px; display: block; color: var(--ink-500); font-size: 10px; line-height: 1.6; }
+.task-resource-list { list-style: none; margin: 11px 0 0; padding: 0; display: grid; gap: 8px; }
+.task-resource-list li { min-width: 0; padding: 10px; display: grid; grid-template-columns: 31px minmax(0, 1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+.task-resource-mark { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px; background: var(--paper); color: var(--teal-700); }
+.task-resource-list li > div { min-width: 0; }
+.task-resource-list li > div > strong { color: var(--ink-900); font-size: 11px; }
+.task-resource-list li > div > p { margin: 3px 0 0; color: var(--ink-600); font-size: 10px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-resource-list li > div > small { margin-top: 3px; display: block; color: var(--ink-400); font-size: 9px; }
+.task-resource-list li > a, .task-current-delivery-body > a { min-width: 112px; min-height: 39px; padding: 6px 9px; display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--paper); color: var(--teal-700); font-size: 10px; font-weight: 950; }
+.task-resource-list li > a span, .task-current-delivery-body > a span { min-width: 0; display: grid; gap: 1px; }
+.task-resource-list li > a small, .task-current-delivery-body > a small { max-width: 130px; color: var(--ink-400); font-size: 8px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-resource-empty { margin: 11px 0 0; padding: 10px; display: flex; align-items: flex-start; gap: 6px; border: 1px dashed var(--line-strong); border-radius: 9px; color: var(--ink-500); font-size: 10px; line-height: 1.7; }
+.task-resource-empty svg { flex: 0 0 auto; margin-top: 2px; color: var(--teal-700); }
+.task-current-delivery.has-delivery { border-color: #9ac9bd; background: var(--teal-100); }
+.task-current-delivery-body { margin-top: 11px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.task-current-delivery-body > div { min-width: 0; }
+.task-current-delivery-body p { margin: 0; color: var(--ink-800); font-size: 11px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-current-delivery-body > div > small { margin-top: 4px; display: block; color: var(--ink-500); font-size: 9px; }
 .task-detail-section .task-review-rule, .task-direct-close-rule { margin: 11px 0 0; padding: 9px 10px; display: flex; align-items: center; gap: 6px; border: 1px solid #ddc88e; border-radius: 10px; background: #fff9e8; color: #765b16; font-size: 10px; font-weight: 850; }
 .task-direct-close-rule { border-color: #b3dbd5; background: var(--teal-100); color: var(--teal-700); }
 .task-revision-compose form, .task-revision-compose label { display: grid; gap: 7px; }
@@ -2190,6 +2225,10 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .task-detail-action .section-heading { grid-column: auto; }
   .task-detail-workspace .panel { padding: 17px 14px; }
   .task-detail-status select, .task-revision-compose textarea, .task-discussion-compose textarea { font-size: 16px; }
+  .task-resource-list li { grid-template-columns: 31px minmax(0, 1fr); }
+  .task-resource-list li > a { grid-column: 1 / -1; width: 100%; }
+  .task-current-delivery-body { grid-template-columns: 1fr; }
+  .task-current-delivery-body > a { width: 100%; }
   .task-discussion-compose > div { grid-template-columns: 1fr; }
   .task-discussion-compose .button { width: 100%; }
 }

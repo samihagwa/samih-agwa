@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CheckCheck, LoaderCircle, Send, X } from "lucide-react";
+import { AtSign, Bell, CheckCheck, LoaderCircle, Send, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
@@ -21,6 +21,7 @@ export function NotificationCenter() {
   const [liveAlert, setLiveAlert] = useState<Notification | null>(null);
   const [telegramConnection, setTelegramConnection] = useState<TelegramConnection | null>(null);
   const [telegramWorking, setTelegramWorking] = useState(false);
+  const [telegramUsername, setTelegramUsername] = useState("");
   const [telegramNotice, setTelegramNotice] = useState<string | null>(null);
   const [telegramError, setTelegramError] = useState<string | null>(null);
   const knownNotificationIds = useRef<Set<number>>(new Set());
@@ -48,7 +49,9 @@ export function NotificationCenter() {
       .eq("organization_id", targetOrganizationId)
       .eq("user_id", targetUserId)
       .maybeSingle();
-    setTelegramConnection(data ?? null);
+    const nextConnection = data ?? null;
+    setTelegramConnection(nextConnection);
+    setTelegramUsername((current) => current || nextConnection?.workflow_expected_username || nextConnection?.telegram_username || "");
   }, []);
 
   useEffect(() => {
@@ -123,24 +126,56 @@ export function NotificationCenter() {
 
   async function connectTelegram() {
     if (!organizationId || !userId || telegramWorking) return;
+    const normalizedUsername = telegramUsername.trim().replace(/^@/, "");
+    if (!/^[A-Za-z0-9_]{5,32}$/.test(normalizedUsername)) {
+      setTelegramError("اكتب يوزرنيم Telegram صحيحًا، مثل @samihagwa، ثم حاول مرة أخرى.");
+      return;
+    }
     const telegramWindow = window.open("about:blank", "_blank");
     setTelegramWorking(true);
     setTelegramNotice(null);
     setTelegramError(null);
     const { data, error } = await getSupabaseBrowserClient().rpc("create_member_telegram_link", {
       target_organization_id: organizationId,
+      target_telegram_username: normalizedUsername,
     });
     setTelegramWorking(false);
     if (error || !data) {
       telegramWindow?.close();
-      setTelegramError("تعذّر إنشاء رابط الربط. حاول مرة أخرى من حسابك المسجل في المنصة.");
+      const message = error?.message ?? "";
+      setTelegramError(/Publishing section access/i.test(message)
+        ? "صلاحية ربط إشعارات الأعضاء لم تُحدّث بعد. حدّث الصفحة ثم حاول مرة أخرى."
+        : /valid Telegram username/i.test(message)
+          ? "يوزرنيم Telegram غير صحيح. اكتبه كما يظهر في حسابك."
+          : "تعذّر إنشاء رابط الربط. حدّث الصفحة وتأكد أنك داخل بحساب عضو فعّال.");
       return;
     }
     const target = `https://t.me/teamwhalesbot?start=notify_${data}`;
     if (telegramWindow) telegramWindow.location.href = target;
     else window.location.assign(target);
-    setTelegramNotice("اضغط Start داخل البوت خلال 15 دقيقة، ثم ارجع للمنصة. لن تصلك إشعارات قديمة.");
+    setTelegramNotice(`افتح البوت من @${normalizedUsername} واضغط Start خلال 15 دقيقة، ثم ارجع للمنصة. لن تصلك إشعارات قديمة.`);
     window.setTimeout(() => void refreshTelegramConnection(organizationId, userId), 4_000);
+    window.setTimeout(() => void refreshTelegramConnection(organizationId, userId), 12_000);
+  }
+
+  async function sendTelegramTest() {
+    if (!organizationId || !userId || telegramWorking || !telegramConnection?.workflow_notifications_enabled) return;
+    setTelegramWorking(true);
+    setTelegramNotice(null);
+    setTelegramError(null);
+    const { error } = await getSupabaseBrowserClient().rpc("send_member_telegram_test_notification", {
+      target_organization_id: organizationId,
+    });
+    if (error) {
+      setTelegramError(/Wait before sending another/i.test(error.message)
+        ? "استنى 30 ثانية قبل إرسال اختبار تاني."
+        : "تعذّر تجهيز الإشعار التجريبي. تأكد إنك عملت Start وإن الإشعارات مفعّلة.");
+    } else {
+      setTelegramNotice("تم تجهيز إشعار تجريبي، وهيوصلك على الخاص خلال دقيقة.");
+      await refresh(userId);
+    }
+    await refreshTelegramConnection(organizationId, userId);
+    setTelegramWorking(false);
   }
 
   async function setTelegramDelivery(enabled: boolean) {
@@ -183,11 +218,16 @@ export function NotificationCenter() {
               ? "الربط محفوظ، ويمكنك تشغيل إشعارات الشغل الآن."
               : "استقبل المهمة أو التعديل على الخاص فور حدوثه."}</small>
           {telegramConnection?.workflow_last_sent_at ? <small>آخر إرسال: {formatNotificationTime(telegramConnection.workflow_last_sent_at)}</small> : null}
+          {telegramConnection?.connected_at && telegramConnection.telegram_username ? <small dir="ltr">@{telegramConnection.telegram_username.replace(/^@/, "")}</small> : null}
           {telegramConnection?.workflow_last_error ? <small className="notification-telegram-warning">آخر إرسال لم يكتمل؛ أعد الربط إذا استمرت المشكلة.</small> : null}
         </div>
-        {!telegramConnection?.connected_at
-          ? <button className="notification-telegram-action" type="button" disabled={telegramWorking} onClick={() => void connectTelegram()}>{telegramWorking ? <LoaderCircle className="spin" size={14} /> : null} ربط</button>
-          : <button className="notification-telegram-action" type="button" disabled={telegramWorking} onClick={() => void setTelegramDelivery(!telegramConnection.workflow_notifications_enabled)}>{telegramWorking ? <LoaderCircle className="spin" size={14} /> : null}{telegramConnection.workflow_notifications_enabled ? "إيقاف" : "تشغيل"}</button>}
+        {!telegramConnection?.connected_at ? <label className="notification-telegram-username"><span><AtSign size={12} /> يوزرنيم Telegram</span><input type="text" dir="ltr" autoComplete="off" value={telegramUsername} onChange={(event) => setTelegramUsername(event.target.value)} placeholder="@username" disabled={telegramWorking} /></label> : null}
+        <div className="notification-telegram-actions">
+          {!telegramConnection?.connected_at
+            ? <button className="notification-telegram-action" type="button" disabled={telegramWorking} onClick={() => void connectTelegram()}>{telegramWorking ? <LoaderCircle className="spin" size={14} /> : null} فتح البوت وعمل Start</button>
+            : <button className="notification-telegram-action" type="button" disabled={telegramWorking} onClick={() => void setTelegramDelivery(!telegramConnection.workflow_notifications_enabled)}>{telegramWorking ? <LoaderCircle className="spin" size={14} /> : null}{telegramConnection.workflow_notifications_enabled ? "إيقاف" : "تشغيل"}</button>}
+          {telegramConnection?.workflow_notifications_enabled ? <button className="notification-telegram-action test" type="button" disabled={telegramWorking} onClick={() => void sendTelegramTest()}>إرسال اختبار</button> : null}
+        </div>
         {telegramNotice ? <p className="notification-telegram-feedback" role="status">{telegramNotice}</p> : null}
         {telegramError ? <p className="notification-telegram-feedback error" role="alert">{telegramError}</p> : null}
       </div>

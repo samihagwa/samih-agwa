@@ -1334,6 +1334,59 @@ test("Telegram workflow notifications are private, opt-in, idempotent, and open 
   assert.match(readme, /Old notifications are not backfilled/);
 });
 
+test("member Telegram linking verifies usernames, works without publishing access, and supports a durable test", async () => {
+  const [migration, notificationCenter, webhook, types] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260829040000_member_telegram_linking_experience.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/NotificationCenter.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/telegram-webhook/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /workflow_expected_username/);
+  assert.match(migration, /\^\[a-z0-9_\]\{5,32\}\$/);
+  assert.match(migration, /user_id = \(select auth\.uid\(\)\)/);
+  assert.match(migration, /tg_table_name <> 'publishing_admin_connections'/);
+  assert.match(migration, /connection\.workflow_expected_username = normalized_username/);
+  assert.match(migration, /function public\.send_member_telegram_test_notification/);
+  assert.match(migration, /interval '30 seconds'/);
+  assert.match(migration, /'telegram_test'/);
+  assert.doesNotMatch(migration, /chat_id\s*:=\s*normalized_username/);
+  assert.match(notificationCenter, /target_telegram_username: normalizedUsername/);
+  assert.match(notificationCenter, /فتح البوت وعمل Start/);
+  assert.match(notificationCenter, /send_member_telegram_test_notification/);
+  assert.match(notificationCenter, /إرسال اختبار/);
+  assert.match(webhook, /نفس @username المكتوب في المنصة/);
+  assert.match(types, /workflow_expected_username: string \| null/);
+  assert.match(types, /send_member_telegram_test_notification:/);
+});
+
+test("reel cover work starts beside editing while publishing keeps all final gates", async () => {
+  const [migration, builder, detail, css] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260829033000_parallel_thumbnail_and_task_resources.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260826020205_rebuild_compact_reel_workflow.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /private\.parallelize_reel_thumbnail_dependency/);
+  assert.match(migration, /dependent_task\.content_step = 'thumbnail'/);
+  assert.match(migration, /prerequisite_task\.content_step = 'editing'/);
+  assert.match(migration, /set status = 'ready'/);
+  assert.match(migration, /return null/);
+  assert.match(migration, /array\['content','tasks'\]::text\[\]/);
+  assert.match(builder, /\(publishing_task_id, editing_task_id\)/);
+  assert.match(builder, /\(publishing_task_id, thumbnail_task_id\)/);
+  assert.match(builder, /\(publishing_task_id, caption_task_id\)/);
+  assert.match(detail, /content_assets/);
+  assert.match(detail, /content_step_deliveries/);
+  assert.match(detail, /شرح المهمة/);
+  assert.match(detail, /ملفات وروابط التنفيذ/);
+  assert.match(detail, /تسليم هذه المهمة/);
+  assert.match(css, /\.task-detail-instructions/);
+  assert.match(css, /\.task-resource-list/);
+  assert.match(css, /\.task-current-delivery/);
+});
+
 test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {
   const [migration, commands, teamWorkspace, onboardingGate, appShell, joinWorkspace, joinPage, config, readme] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821220304_team_onboarding_and_access_control.sql", import.meta.url), "utf8"),

@@ -2602,6 +2602,7 @@ export type Database = {
           telegram_username: string | null
           updated_at: string
           user_id: string
+          workflow_expected_username: string | null
           workflow_last_error: string | null
           workflow_last_sent_at: string | null
           workflow_notifications_enabled: boolean
@@ -2617,6 +2618,7 @@ export type Database = {
           telegram_username?: string | null
           updated_at?: string
           user_id: string
+          workflow_expected_username?: string | null
           workflow_last_error?: string | null
           workflow_last_sent_at?: string | null
           workflow_notifications_enabled?: boolean
@@ -2632,6 +2634,7 @@ export type Database = {
           telegram_username?: string | null
           updated_at?: string
           user_id?: string
+          workflow_expected_username?: string | null
           workflow_last_error?: string | null
           workflow_last_sent_at?: string | null
           workflow_notifications_enabled?: boolean
@@ -4677,7 +4680,10 @@ export type Database = {
         Returns: string
       }
       create_member_telegram_link: {
-        Args: { target_organization_id: string }
+        Args: {
+          target_organization_id: string
+          target_telegram_username: string
+        }
         Returns: string
       }
       create_reel_from_intake: {
@@ -5596,6 +5602,10 @@ export type Database = {
           target_reply_to_id?: number
           target_room_id: string
         }
+        Returns: number
+      }
+      send_member_telegram_test_notification: {
+        Args: { target_organization_id: string }
         Returns: number
       }
       set_default_ai_provider: {

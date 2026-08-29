@@ -9,16 +9,20 @@ import {
   CircleUserRound,
   Clock3,
   ContactRound,
+  ExternalLink,
   FileText,
   History,
+  Link2,
   LoaderCircle,
   MessageSquareText,
+  PackageCheck,
+  Paperclip,
   Route,
   Send,
   ShieldCheck,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { contentStepConfig } from "../../lib/content";
+import { contentAssetKindConfig, contentStepConfig, type ContentStep } from "../../lib/content";
 import { taskReference } from "../../lib/deep-links";
 import { launchGateConfig } from "../../lib/launches";
 import {
@@ -40,6 +44,8 @@ type Task = Tables<"tasks">;
 type TaskEvent = Tables<"task_events">;
 type TaskDiscussionMessage = Tables<"task_discussion_messages">;
 type TaskRevisionRequest = Tables<"task_revision_requests">;
+type ContentAsset = Tables<"content_assets">;
+type ContentStepDelivery = Tables<"content_step_deliveries">;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
 type Person = { id: string; name: string; role: Membership["role"] };
@@ -51,6 +57,8 @@ type Workspace = {
   events: TaskEvent[];
   discussion: TaskDiscussionMessage[];
   revisions: TaskRevisionRequest[];
+  assets: ContentAsset[];
+  deliveries: ContentStepDelivery[];
 };
 
 function formatDate(value: string | null) {
@@ -70,6 +78,36 @@ function friendlyError(error: unknown) {
   if (/Platform leadership cannot execute/i.test(message)) return "تنفيذ المهمة وتغيير حالتها متاحان للمسؤول المسند إليه فقط.";
   return message || "حدث خطأ غير متوقع.";
 }
+
+function resourceHost(value: string) {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    return "رابط خارجي";
+  }
+}
+
+function LinkifiedText({ text }: { text: string }) {
+  return <>{text.split(/(https?:\/\/[^\s]+)/g).map((part, index) => /^https?:\/\//.test(part)
+    ? <a href={part} target="_blank" rel="noreferrer" key={`${part}-${index}`}>{part} <ExternalLink size={11} /></a>
+    : part)}</>;
+}
+
+const deliveryInputsByStep: Partial<Record<ContentStep, ContentStep[]>> = {
+  editing: ["recording"],
+  scheduling: ["caption", "design"],
+  publishing: ["editing", "thumbnail", "caption", "design", "scheduling"],
+};
+
+const assetInputsByStep: Partial<Record<ContentStep, ContentStep[]>> = {
+  recording: ["brief", "recording"],
+  editing: ["brief", "recording", "editing"],
+  thumbnail: ["brief", "thumbnail"],
+  caption: ["brief", "caption"],
+  design: ["brief", "design"],
+  scheduling: ["brief", "caption", "design", "scheduling"],
+  publishing: ["brief", "recording", "editing", "thumbnail", "caption", "design", "scheduling", "publishing"],
+};
 
 function taskEventTitle(event: TaskEvent) {
   if (event.event_type === "created") return "تم إنشاء المهمة";
@@ -121,14 +159,28 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       if (membersError) throw membersError;
       if (!task) throw new Error("المهمة غير موجودة أو خارج صلاحيات حسابك.");
 
-      const [{ data: events, error: eventsError }, { data: discussion, error: discussionError }, { data: revisions, error: revisionsError }] = await Promise.all([
+      const [
+        { data: events, error: eventsError },
+        { data: discussion, error: discussionError },
+        { data: revisions, error: revisionsError },
+        { data: assets, error: assetsError },
+        { data: deliveries, error: deliveriesError },
+      ] = await Promise.all([
         supabase.from("task_events").select("*").eq("task_id", task.id).order("occurred_at", { ascending: false }).limit(100),
         supabase.from("task_discussion_messages").select("*").eq("task_id", task.id).order("created_at", { ascending: true }).limit(200),
         supabase.from("task_revision_requests").select("*").eq("task_id", task.id).order("requested_at", { ascending: false }).limit(100),
+        task.content_item_id
+          ? supabase.from("content_assets").select("*").eq("content_item_id", task.content_item_id).order("created_at", { ascending: true })
+          : Promise.resolve({ data: [] as ContentAsset[], error: null }),
+        task.content_item_id
+          ? supabase.from("content_step_deliveries").select("*").eq("content_item_id", task.content_item_id).order("submitted_at", { ascending: false })
+          : Promise.resolve({ data: [] as ContentStepDelivery[], error: null }),
       ]);
       if (eventsError) throw eventsError;
       if (discussionError) throw discussionError;
       if (revisionsError) throw revisionsError;
+      if (assetsError) throw assetsError;
+      if (deliveriesError) throw deliveriesError;
 
       const profileIds = [...new Set([
         ...(memberRows ?? []).map((member) => member.user_id),
@@ -137,6 +189,8 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         ...(events ?? []).flatMap((event) => event.actor_id ? [event.actor_id] : []),
         ...(discussion ?? []).map((message) => message.author_id),
         ...(revisions ?? []).map((revision) => revision.requested_by),
+        ...(assets ?? []).map((asset) => asset.created_by),
+        ...(deliveries ?? []).map((delivery) => delivery.submitted_by),
       ])];
       const { data: profiles, error: profilesError } = profileIds.length
         ? await supabase.from("profiles").select("id, full_name").in("id", profileIds)
@@ -156,7 +210,17 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         }
       }
 
-      setWorkspace({ organization, membership, people, task, events: events ?? [], discussion: discussion ?? [], revisions: revisions ?? [] });
+      setWorkspace({
+        organization,
+        membership,
+        people,
+        task,
+        events: events ?? [],
+        discussion: discussion ?? [],
+        revisions: revisions ?? [],
+        assets: assets ?? [],
+        deliveries: deliveries ?? [],
+      });
       setError(null);
     } catch (loadError) {
       setError(friendlyError(loadError));
@@ -172,13 +236,18 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   useEffect(() => {
     if (!workspace || !session) return;
     const supabase = getSupabaseBrowserClient();
-    const channel = supabase
+    let channel = supabase
       .channel(`task-detail:${taskId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_events", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_discussion_messages", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
-      .on("postgres_changes", { event: "*", schema: "public", table: "task_revision_requests", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
-      .subscribe();
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_revision_requests", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false));
+    if (workspace.task.content_item_id) {
+      channel = channel
+        .on("postgres_changes", { event: "*", schema: "public", table: "content_assets", filter: `content_item_id=eq.${workspace.task.content_item_id}` }, () => void loadTaskData(session, false))
+        .on("postgres_changes", { event: "*", schema: "public", table: "content_step_deliveries", filter: `content_item_id=eq.${workspace.task.content_item_id}` }, () => void loadTaskData(session, false));
+    }
+    channel.subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [loadTaskData, session, taskId, workspace]);
 
@@ -276,6 +345,12 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const canDiscuss = isAssignee || isRequester || platformAdmin;
   const owner = peopleById.get(task.owner_id);
   const requester = peopleById.get(task.created_by);
+  const currentDelivery = workspace.deliveries.find((delivery) => delivery.task_id === task.id) ?? null;
+  const inputDeliverySteps = task.content_step ? deliveryInputsByStep[task.content_step] ?? [] : [];
+  const inputDeliveries = workspace.deliveries.filter((delivery) => delivery.task_id !== task.id && inputDeliverySteps.includes(delivery.step));
+  const inputAssetSteps = task.content_step ? assetInputsByStep[task.content_step] ?? [task.content_step] : [];
+  const taskAssets = workspace.assets.filter((asset) => !asset.stage || inputAssetSteps.includes(asset.stage));
+  const hasExecutionResources = taskAssets.length > 0 || inputDeliveries.length > 0;
   const linkedHref = task.content_item_id ? `/content?content=${task.content_item_id}#content-${task.content_item_id}`
     : task.launch_deliverable_id ? `/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`
       : task.launch_id ? `/campaigns?launch=${task.launch_id}#launch-${task.launch_id}`
@@ -323,8 +398,35 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
             </form>
           </section> : null}
 
-          <section className="panel task-detail-section">
-            <div className="section-heading compact"><div><p className="overline">تفاصيل الطلب</p><h2>كل المطلوب للتنفيذ</h2></div><FileText size={19} /></div>
+          <section className="panel task-detail-section task-requirements-section">
+            <div className="section-heading compact"><div><p className="overline">المطلوب الآن</p><h2>{isAssignee ? "نفّذ المطلوب بدون بحث أو تخمين" : isRequester ? "الطلب والتسليم في مكان واحد" : "كل المطلوب للتنفيذ"}</h2><p>شرح المهمة أولًا، ثم الملفات والمصادر، وبعدها التسليم النهائي بوضوح.</p></div><FileText size={19} /></div>
+            <div className="task-detail-instructions">
+              <span><FileText size={14} /> شرح المهمة</span>
+              <p><LinkifiedText text={task.description?.trim() || "لا يوجد شرح إضافي لهذه المهمة. ارجع لطالب المهمة من قسم السؤال والجواب إذا احتجت توضيحًا."} /></p>
+            </div>
+
+            {task.content_item_id ? <div className="task-resource-block">
+              <header><div><Paperclip size={15} /><div><strong>ملفات وروابط التنفيذ</strong><small>المصادر والتسليمات السابقة التي تحتاجها في هذه الخطوة.</small></div></div><StatusBadge tone={hasExecutionResources ? "info" : "neutral"}>{hasExecutionResources ? `${taskAssets.length + inputDeliveries.length} مرفق` : "لا يوجد"}</StatusBadge></header>
+              {hasExecutionResources ? <ul className="task-resource-list">
+                {inputDeliveries.map((delivery) => <li key={`delivery-${delivery.id}`}>
+                  <span className="task-resource-mark"><PackageCheck size={15} /></span>
+                  <div><strong>تسليم {contentStepConfig[delivery.step].label}</strong>{delivery.result_note ? <p>{delivery.result_note}</p> : null}<small>سلّمه {peopleById.get(delivery.submitted_by)?.name ?? "عضو فريق"} · {formatDate(delivery.submitted_at)}</small></div>
+                  {delivery.result_url ? <a href={delivery.result_url} target="_blank" rel="noreferrer"><span>فتح التسليم<small dir="ltr">{resourceHost(delivery.result_url)}</small></span><ExternalLink size={14} /></a> : null}
+                </li>)}
+                {taskAssets.map((asset) => <li key={asset.id}>
+                  <span className="task-resource-mark"><Link2 size={15} /></span>
+                  <div><strong>{asset.title}</strong><p>{contentAssetKindConfig[asset.kind].label}{asset.notes ? ` · ${asset.notes}` : ""}</p><small>{asset.stage ? `مخصص لخطوة ${contentStepConfig[asset.stage].label}` : "مرجع مشترك"}</small></div>
+                  <a href={asset.url} target="_blank" rel="noreferrer"><span>فتح الرابط<small dir="ltr">{resourceHost(asset.url)}</small></span><ExternalLink size={14} /></a>
+                </li>)}
+              </ul> : <p className="task-resource-empty"><Paperclip size={14} /> لم يرفق طالب المهمة ملفات أو روابط لهذه الخطوة حتى الآن.</p>}
+            </div> : null}
+
+            {task.content_item_id ? <div className={`task-current-delivery${currentDelivery ? " has-delivery" : ""}`}>
+              <header><div><PackageCheck size={16} /><div><strong>تسليم هذه المهمة</strong><small>{currentDelivery ? `إصدار ${currentDelivery.version} · ${formatDate(currentDelivery.submitted_at)}` : "النتيجة النهائية التي سلّمها منفّذ هذه الخطوة"}</small></div></div>{currentDelivery ? <StatusBadge tone="success">تم التسليم</StatusBadge> : <StatusBadge tone="neutral">في الانتظار</StatusBadge>}</header>
+              {currentDelivery ? <div className="task-current-delivery-body"><div>{currentDelivery.result_note ? <p>{currentDelivery.result_note}</p> : <p>تم التسليم بدون ملاحظة مكتوبة.</p>}<small>بواسطة {peopleById.get(currentDelivery.submitted_by)?.name ?? "عضو فريق"}</small></div>{currentDelivery.result_url ? <a href={currentDelivery.result_url} target="_blank" rel="noreferrer"><span>{task.content_step === "publishing" ? "فتح المنشور" : "فتح ملف التسليم"}<small dir="ltr">{resourceHost(currentDelivery.result_url)}</small></span><ExternalLink size={15} /></a> : null}</div> : <p className="task-resource-empty"><PackageCheck size={14} /> {isAssignee ? "لم تسلّم نتيجة هذه المهمة بعد. يتم التسليم من ملف المحتوى المرتبط." : "لم يرفع المنفّذ تسليم هذه المهمة حتى الآن."}</p>}
+            </div> : null}
+
+            {task.acceptance_criteria.trim() ? <div className="task-detail-copy acceptance"><strong>معيار القبول — اختياري</strong><p>{task.acceptance_criteria}</p></div> : null}
             <dl className="task-detail-facts">
               <div><dt><CircleUserRound size={13} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div>
               <div><dt><CircleUserRound size={13} /> طالب المهمة</dt><dd>{requester?.name ?? "عضو فريق"}</dd></div>
@@ -333,8 +435,6 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
               <div><dt><Clock3 size={13} /> بدأ التنفيذ</dt><dd>{formatDate(task.started_at)}</dd></div>
               <div><dt><CheckCircle2 size={13} /> اكتملت</dt><dd>{formatDate(task.completed_at)}</dd></div>
             </dl>
-            {task.description ? <div className="task-detail-copy"><strong>شرح المهمة</strong><p>{task.description}</p></div> : null}
-            {task.acceptance_criteria.trim() ? <div className="task-detail-copy acceptance"><strong>معيار القبول — اختياري</strong><p>{task.acceptance_criteria}</p></div> : null}
             {task.requires_review ? <p className="task-review-rule"><ShieldCheck size={13} /> هذه المهمة تحتاج اعتماد طالب المهمة قبل الإغلاق.</p> : <p className="task-direct-close-rule"><CheckCircle2 size={13} /> المسؤول يقدر يغلق المهمة مباشرة بعد التنفيذ.</p>}
             {task.content_step ? <span className="workflow-task-label"><FileText size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
             {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}

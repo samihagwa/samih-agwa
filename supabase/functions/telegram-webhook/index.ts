@@ -238,7 +238,7 @@ Deno.serve(async (request: Request) => {
         await telegram("sendMessage", {
           chat_id: chat.id,
           text: error || !data?.length
-            ? "رابط الربط غير صالح أو انتهت مدته، أو حساب Telegram مربوط بعضو آخر. أنشئ رابطًا جديدًا من جرس الإشعارات في الموقع."
+            ? "تعذّر الربط. تأكد إنك فتحت البوت من نفس @username المكتوب في المنصة وإنك ضغطت Start خلال 15 دقيقة، ثم أنشئ رابطًا جديدًا من جرس الإشعارات."
             : "✅ تم ربط إشعارات الشغل بحسابك. سيصلك هنا فقط ما يخص حسابك داخل المنصة، ومع كل إشعار زر يفتح التفاصيل مباشرة.",
           reply_markup: error || !data?.length ? undefined : {
             inline_keyboard: [[{ text: "فتح مهامي", url: `${SITE_URL}/tasks` }]],
