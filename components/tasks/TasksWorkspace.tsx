@@ -58,6 +58,7 @@ type Workspace = {
 
 type TaskFilter = "active" | "mine" | "overdue" | "completed" | "all";
 type BoardEntry = { id: string; contentItemId: string | null; tasks: Task[]; laneId: string };
+type TaskDateRange = { from: string; to: string };
 type TaskSubmission = {
   organization_id: string;
   title: string;
@@ -119,6 +120,51 @@ function taskIsClosed(task: Task) {
   return ["done", "cancelled"].includes(task.status);
 }
 
+function dateBoundary(value: string, endOfDay = false) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0).getTime();
+}
+
+function taskFilterTimestamp(task: Task, filter: TaskFilter) {
+  const value = filter === "completed" ? task.completed_at ?? task.updated_at : task.due_at;
+  return new Date(value).getTime();
+}
+
+function taskMatchesAdvancedFilters(task: Task, filter: TaskFilter, requesterId: string, range: TaskDateRange) {
+  if (requesterId !== "all" && task.created_by !== requesterId) return false;
+  const timestamp = taskFilterTimestamp(task, filter);
+  const from = dateBoundary(range.from);
+  const to = dateBoundary(range.to, true);
+  if (from !== null && timestamp < from) return false;
+  if (to !== null && timestamp > to) return false;
+  return true;
+}
+
+function taskCompletionTimestamp(task: Task) {
+  return new Date(task.completed_at ?? task.updated_at).getTime();
+}
+
+function boardEntryCompletionTimestamp(entry: BoardEntry) {
+  return Math.max(...entry.tasks.map(taskCompletionTimestamp));
+}
+
+function boardEntryDeadlineTimestamp(entry: BoardEntry) {
+  return Math.min(...entry.tasks.map((task) => new Date(task.due_at).getTime()));
+}
+
+function sortBoardEntries(entries: BoardEntry[]) {
+  return [...entries].sort((left, right) => {
+    if (left.laneId === "closed" && right.laneId === "closed") {
+      return boardEntryCompletionTimestamp(right) - boardEntryCompletionTimestamp(left)
+        || right.id.localeCompare(left.id);
+    }
+    return boardEntryDeadlineTimestamp(left) - boardEntryDeadlineTimestamp(right)
+      || left.id.localeCompare(right.id);
+  });
+}
+
 function boardLaneForTasks(tasks: Task[], isContentWorkflow: boolean) {
   if (isContentWorkflow) return tasks.every(taskIsClosed) ? "closed" : "work";
   if (tasks.some((task) => task.status === "blocked")) return "blocked";
@@ -175,6 +221,8 @@ export function TasksWorkspace() {
   const [newTaskRequiresReview, setNewTaskRequiresReview] = useState(false);
   const [capacityWarning, setCapacityWarning] = useState<{ submission: TaskSubmission; snapshot: CapacitySnapshot } | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("active");
+  const [requesterFilter, setRequesterFilter] = useState("all");
+  const [dateRange, setDateRange] = useState<TaskDateRange>({ from: "", to: "" });
   const [linkedTaskId] = useState(() => currentUuidDeepLink("task", "task"));
   const [renderNow, setRenderNow] = useState(() => Date.now());
   const [defaultDue] = useState(() => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
@@ -301,7 +349,7 @@ export function TasksWorkspace() {
       const key = task.content_item_id ? `content:${task.content_item_id}` : `task:${task.id}`;
       grouped.set(key, [...(grouped.get(key) ?? []), task]);
     }
-    return [...grouped.entries()].flatMap(([id, entryTasks]): BoardEntry[] => {
+    const entries = [...grouped.entries()].flatMap(([id, entryTasks]): BoardEntry[] => {
       const contentItemId = entryTasks[0]?.content_item_id ?? null;
       const isContentWorkflow = Boolean(contentItemId);
       const orderedTasks = isContentWorkflow ? sortContentTasks(entryTasks) : entryTasks;
@@ -311,7 +359,9 @@ export function TasksWorkspace() {
       const matches = linkedEntry || (isContentWorkflow
         ? contentWorkflowMatchesFilter(orderedTasks, filter, session.user.id, renderNow)
         : taskMatchesFilter(primaryTask, filter, session.user.id, renderNow));
-      if (!matches) return [];
+      const matchesAdvancedFilters = orderedTasks.some((task) =>
+        taskMatchesAdvancedFilters(task, filter, requesterFilter, dateRange));
+      if (!matches || (!linkedEntry && !matchesAdvancedFilters)) return [];
       return [{
         id,
         contentItemId,
@@ -319,7 +369,8 @@ export function TasksWorkspace() {
         laneId: boardLaneForTasks(orderedTasks, isContentWorkflow),
       }];
     });
-  }, [filter, linkedTaskId, renderNow, session, tasks]);
+    return sortBoardEntries(entries);
+  }, [dateRange, filter, linkedTaskId, renderNow, requesterFilter, session, tasks]);
 
   useEffect(() => {
     if (!linkedTaskId || openedTaskLink.current === linkedTaskId || !tasks.some((task) => task.id === linkedTaskId)) return;
@@ -466,7 +517,13 @@ export function TasksWorkspace() {
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
   const linkedTask = linkedTaskId ? tasks.find((task) => task.id === linkedTaskId) ?? null : null;
   const linkedLaneId = linkedTaskId ? boardEntries.find((entry) => entry.tasks.some((task) => task.id === linkedTaskId))?.laneId : null;
-  const visibleLanes = boardLanes.filter((lane) => lane.id !== "closed" || filter === "completed" || filter === "all" || linkedLaneId === "closed");
+  const advancedFiltersActive = requesterFilter !== "all" || Boolean(dateRange.from || dateRange.to);
+  const visibleLanes = boardLanes.filter((lane) => {
+    if (linkedLaneId === lane.id) return true;
+    if (filter === "all" && !advancedFiltersActive) return true;
+    return boardEntries.some((entry) => entry.laneId === lane.id);
+  });
+  const filteredTaskCount = boardEntries.reduce((total, entry) => total + entry.tasks.length, 0);
   return (
     <section className="tasks-workspace">
       <div className="workspace-toolbar">
@@ -483,6 +540,30 @@ export function TasksWorkspace() {
       {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
       {linkedTask ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح المهمة المطلوبة مباشرة: <strong>{taskReference(linkedTask.id)}</strong> — الكارت المحدد ظاهر بإطار واضح.</p> : linkedTaskId ? <p className="form-notice error" role="alert">المهمة المطلوبة غير موجودة أو ليست ضمن صلاحيات حسابك.</p> : null}
+
+      <div className="panel task-filter-panel" aria-label="فلترة بورد المهام">
+        <div className="task-filter-heading">
+          <CalendarClock size={19} aria-hidden="true" />
+          <div><strong>فلترة أدق</strong><small role="status">ظاهر الآن {filteredTaskCount.toLocaleString("ar-EG")} مهمة</small></div>
+        </div>
+        <label className="task-filter-field">
+          <span><UserRoundCheck size={13} aria-hidden="true" /> طالب المهمة</span>
+          <select value={requesterFilter} onChange={(event) => setRequesterFilter(event.target.value)}>
+            <option value="all">كل طالبي المهام</option>
+            {workspace.people.map((person) => <option value={person.id} key={person.id}>{person.id === session.user.id ? `أنا — ${person.name}` : person.name}</option>)}
+          </select>
+        </label>
+        <label className="task-filter-field">
+          <span>من تاريخ</span>
+          <input type="date" value={dateRange.from} max={dateRange.to || undefined} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} />
+        </label>
+        <label className="task-filter-field">
+          <span>إلى تاريخ</span>
+          <input type="date" value={dateRange.to} min={dateRange.from || undefined} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} />
+        </label>
+        <button className="task-filter-reset" type="button" disabled={!advancedFiltersActive} onClick={() => { setRequesterFilter("all"); setDateRange({ from: "", to: "" }); }}>مسح الفلاتر الإضافية</button>
+        <small className="task-filter-note">الفترة تعتمد على موعد التسليم، وعند اختيار «المكتمل» تعتمد على تاريخ إكمال المهمة.</small>
+      </div>
 
       {showCreate && manager ? (
         <form className="panel task-create-form" onSubmit={createTask} onChange={() => setCapacityWarning(null)}>
@@ -509,7 +590,7 @@ export function TasksWorkspace() {
         </form>
       ) : null}
 
-      <div className="kanban-board" aria-label="بورد مهام الفريق">
+      {visibleLanes.length ? <div className="kanban-board" aria-label="بورد مهام الفريق">
         {visibleLanes.map((lane) => {
           const laneEntries = boardEntries.filter((entry) => entry.laneId === lane.id);
           return (
@@ -608,7 +689,7 @@ export function TasksWorkspace() {
             </section>
           );
         })}
-      </div>
+      </div> : <div className="task-filter-empty" role="status"><CalendarClock size={24} /><div><strong>لا توجد مهام مطابقة</strong><p>غيّر الحالة أو الفترة الزمنية أو طالب المهمة لعرض نتائج أخرى.</p></div><button className="text-button" type="button" onClick={() => { setFilter("all"); setRequesterFilter("all"); setDateRange({ from: "", to: "" }); }}>عرض كل المهام</button></div>}
     </section>
   );
 }

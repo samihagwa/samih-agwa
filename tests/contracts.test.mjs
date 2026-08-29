@@ -804,6 +804,17 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(taskWorkspace, /مهمتك الآن/);
 });
 
+test("task board filters remain deterministic and completion-first", async () => {
+  const taskWorkspace = await readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8");
+
+  assert.match(taskWorkspace, /task\.completed_at \?\? task\.updated_at/);
+  assert.match(taskWorkspace, /boardEntryCompletionTimestamp\(right\) - boardEntryCompletionTimestamp\(left\)/);
+  assert.match(taskWorkspace, /طالب المهمة/);
+  assert.match(taskWorkspace, /type="date"/);
+  assert.match(taskWorkspace, /filter === "all" && !advancedFiltersActive/);
+  assert.match(taskWorkspace, /لا توجد مهام مطابقة/);
+});
+
 test("content production briefs, assets, and revision rounds share one secured workflow", async () => {
   const [migration, completionMigration, nonBlockingMigration, commands, createCommand, workspace, taskWorkspace, contentContract, taskContract, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817014819_content_production_briefs_and_revisions.sql", import.meta.url), "utf8"),
