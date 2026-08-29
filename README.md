@@ -31,7 +31,7 @@ This starter does not use `wrangler.jsonc`.
 
 ## Important status
 
-The identity, owner-controlled team onboarding, task-management, deadline-reminder, quarterly content-planning, reel-production, campaign-launch, reviewed CRM import, brand-knowledge, and Telegram publishing foundations are ready for controlled owner testing. The leadership dashboard reads live operational data and exposes an explicit readiness gate. No real team invitation has been sent, no production customer batch has been approved, and no sales message or external analytics integration is active. Exness storage and role-scoped lookup are prepared, but live provider synchronization stays off until the private Partner API contract is configured.
+The identity, owner-controlled team onboarding, task-management, deadline-reminder, quarterly content-planning, reel-production, campaign-launch, reviewed CRM import, brand-knowledge, Telegram workflow notifications, and Telegram publishing foundations are ready for controlled owner testing. The leadership dashboard reads live operational data and exposes an explicit readiness gate. No real team invitation has been sent, no production customer batch has been approved, and no sales message or external analytics integration is active. Exness storage and role-scoped lookup are prepared, but live provider synchronization stays off until the private Partner API contract is configured.
 
 ## First owner setup
 
@@ -49,6 +49,15 @@ The bootstrap endpoint is authenticated and can create only the first organizati
 3. Copy the one-time link and open it in a private browser window. Request the magic link using the exact invited email, then explicitly activate the membership.
 4. Complete the three onboarding acknowledgements, confirm **My tasks** shows only accountable work, and submit one clearly labeled test result.
 5. Back in the owner account, verify that hidden sections stay absent, direct deep links are refused, presence and notifications are scoped, and suspension is refused until open work is reassigned or closed.
+
+## Personal Telegram notifications
+
+1. Sign in with the member account, open the notification bell, and select **Connect Telegram**.
+2. Press **Start** in `@teamwhalesbot` within 15 minutes. The bot binds the private Telegram chat id to that exact signed-in member; usernames are never used as delivery addresses.
+3. New assignments, revisions, review requests, and other in-app workflow notifications created after opt-in arrive in the member's private chat with the canonical direct link to the exact record.
+4. The member can pause or resume Telegram delivery from the notification bell without disconnecting publishing previews for an authorized publishing administrator.
+
+Connecting sends only the one confirmation reply requested by pressing Start. Old notifications are not backfilled, and this workflow never posts to a channel or group.
 
 ## Personal brand test
 

@@ -3,7 +3,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 type JsonRecord = Record<string, unknown>;
 
 const PREVIEW_BUCKET = "publishing-media-previews";
-const SITE_PUBLISHING_URL = "https://market-whales-os.samihsmaih1234.chatgpt.site/publishing";
+const SITE_URL = "https://os.samihagwa.com";
+const SITE_PUBLISHING_URL = `${SITE_URL}/publishing`;
 
 function adminClient() {
   const url = Deno.env.get("SUPABASE_URL");
@@ -136,6 +137,7 @@ async function saveTelegramMedia(
     .select("organization_id,user_id,connected_at")
     .eq("telegram_chat_id", chatId)
     .eq("telegram_user_id", telegramUserId)
+    .eq("notifications_enabled", true)
     .not("connected_at", "is", null)
     .order("connected_at", { ascending: false })
     .limit(1);
@@ -222,12 +224,29 @@ Deno.serve(async (request: Request) => {
 
     if (message) {
       const text = String(message.text ?? "").trim();
-      const match = text.match(/^\/start(?:@\w+)?\s+([a-f0-9]{36})$/i);
+      const memberLinkMatch = text.match(/^\/start(?:@\w+)?\s+notify_([a-f0-9]{36})$/i);
+      const publishingLinkMatch = text.match(/^\/start(?:@\w+)?\s+([a-f0-9]{36})$/i);
       const chat = message.chat as JsonRecord;
       const from = message.from as JsonRecord;
-      if (match && chat?.type === "private") {
+      if (memberLinkMatch && chat?.type === "private") {
+        const { data, error } = await supabase.rpc("complete_member_telegram_link", {
+          raw_link_code: memberLinkMatch[1],
+          target_telegram_chat_id: Number(chat.id),
+          target_telegram_user_id: Number(from.id),
+          target_telegram_username: String(from.username ?? ""),
+        });
+        await telegram("sendMessage", {
+          chat_id: chat.id,
+          text: error || !data?.length
+            ? "رابط الربط غير صالح أو انتهت مدته، أو حساب Telegram مربوط بعضو آخر. أنشئ رابطًا جديدًا من جرس الإشعارات في الموقع."
+            : "✅ تم ربط إشعارات الشغل بحسابك. سيصلك هنا فقط ما يخص حسابك داخل المنصة، ومع كل إشعار زر يفتح التفاصيل مباشرة.",
+          reply_markup: error || !data?.length ? undefined : {
+            inline_keyboard: [[{ text: "فتح مهامي", url: `${SITE_URL}/tasks` }]],
+          },
+        });
+      } else if (publishingLinkMatch && chat?.type === "private") {
         const { data, error } = await supabase.rpc("complete_publishing_admin_link", {
-          raw_link_code: match[1],
+          raw_link_code: publishingLinkMatch[1],
           target_telegram_chat_id: Number(chat.id),
           target_telegram_user_id: Number(from.id),
           target_telegram_username: String(from.username ?? ""),

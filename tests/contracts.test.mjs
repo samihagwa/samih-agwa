@@ -1290,6 +1290,50 @@ test("notifications, evidence-based team reports, and transparent coarse presenc
   assert.match(teamPage, /دخول واضح، صلاحية محددة/);
 });
 
+test("Telegram workflow notifications are private, opt-in, idempotent, and open exact records", async () => {
+  const [migration, publisher, webhook, notificationCenter, types, readme] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260829020019_telegram_member_workflow_notifications.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/telegram-publisher/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/telegram-webhook/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/NotificationCenter.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /create table private\.telegram_notification_outbox/);
+  assert.match(migration, /notification_id bigint primary key/);
+  assert.match(migration, /after insert on public\.notifications/);
+  assert.match(migration, /workflow_notifications_enabled boolean not null default false/);
+  assert.match(migration, /connection\.workflow_notifications_enabled/);
+  assert.match(migration, /membership\.user_id = connection\.user_id/);
+  assert.match(migration, /network_started_at is null/);
+  assert.match(migration, /target_terminal_status not in \('sent', 'failed', 'unknown'\)/);
+  assert.match(migration, /target_telegram_error_code = 403 then false/);
+  assert.match(migration, /on conflict \(notification_id\) do nothing/);
+  assert.match(migration, /to service_role/);
+  assert.doesNotMatch(migration, /insert into private\.telegram_notification_outbox[\s\S]*select[\s\S]*from public\.notifications/);
+  assert.doesNotMatch(migration, /grant .*telegram_notification_outbox.*authenticated/i);
+
+  assert.match(webhook, /notify_\(\[a-f0-9\]\{36\}\)/);
+  assert.match(webhook, /complete_member_telegram_link/);
+  assert.match(webhook, /chat\?\.type === "private"/);
+  assert.match(webhook, /\.eq\("notifications_enabled", true\)/);
+  assert.match(publisher, /claim_telegram_notification_batch/);
+  assert.match(publisher, /mark_telegram_notification_network_started/);
+  assert.match(publisher, /response\.status === 429/);
+  assert.match(publisher, /target_terminal_status: "unknown"/);
+  assert.match(publisher, /https:\/\/os\.samihagwa\.com/);
+  assert.match(publisher, /sendWorkflowNotifications[\s\S]*chat_id: row\.telegram_chat_id/);
+  assert.doesNotMatch(publisher, /chat_id:\s*row\.telegram_username/);
+
+  assert.match(notificationCenter, /create_member_telegram_link/);
+  assert.match(notificationCenter, /set_member_telegram_workflow_notifications/);
+  assert.match(notificationCenter, /teamwhalesbot\?start=notify_/);
+  assert.match(notificationCenter, /لن تصلك إشعارات قديمة/);
+  assert.match(types, /workflow_notifications_enabled: boolean/);
+  assert.match(readme, /Old notifications are not backfilled/);
+});
+
 test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {
   const [migration, commands, teamWorkspace, onboardingGate, appShell, joinWorkspace, joinPage, config, readme] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821220304_team_onboarding_and_access_control.sql", import.meta.url), "utf8"),

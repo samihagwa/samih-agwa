@@ -67,7 +67,19 @@ button:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus);
 .notification-popover > header strong { font-size: 12px; }
 .notification-popover > header small { margin-top: 3px; color: var(--ink-500); font-size: 11px; }
 .notification-popover > header button { min-width: 0; padding: 3px; display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--teal-700); font-size: 11px; font-weight: 900; cursor: pointer; }
-.notification-popover ol { max-height: 430px; margin: 0; padding: 0; list-style: none; overflow: auto; }
+.notification-telegram-card { margin: 10px; padding: 10px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.notification-telegram-card.active { border-color: var(--line-strong); background: var(--teal-100); }
+.notification-telegram-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--paper); color: var(--teal-700); }
+.notification-telegram-copy { min-width: 0; }
+.notification-telegram-copy strong, .notification-telegram-copy small { display: block; }
+.notification-telegram-copy strong { font-size: 11px; }
+.notification-telegram-copy small { margin-top: 2px; color: var(--ink-600); font-size: 10px; line-height: 1.5; }
+.notification-telegram-copy .notification-telegram-warning { color: var(--red-700); }
+.notification-telegram-action { min-width: 54px; min-height: 36px; padding: 6px 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--paper); color: var(--teal-700); font-size: 10px; font-weight: 900; cursor: pointer; }
+.notification-telegram-action:disabled { opacity: .48; cursor: wait; }
+.notification-telegram-feedback { grid-column: 1 / -1; margin: 0; padding-top: 7px; border-top: 1px solid var(--line); color: var(--teal-700); font-size: 10px; line-height: 1.6; }
+.notification-telegram-feedback.error { color: var(--red-700); }
+.notification-popover ol { max-height: 300px; margin: 0; padding: 0; list-style: none; overflow: auto; }
 .notification-popover li { position: relative; border-bottom: 1px solid var(--line); }
 .notification-popover li.unread { background: #f0f8f6; }
 .notification-popover li.unread::before { content: ""; width: 6px; height: 6px; position: absolute; top: 17px; inset-inline-start: 10px; border-radius: 50%; background: var(--teal-700); }
@@ -1761,6 +1773,8 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .notification-toast { inset-inline: 12px; top: 74px; width: auto; }
   .notification-popover { top: 66px; inset-inline: 12px; width: auto; max-width: none; }
   .notification-popover > header { flex-wrap: wrap; }
+  .notification-telegram-card { grid-template-columns: 34px minmax(0, 1fr); }
+  .notification-telegram-action { grid-column: 1 / -1; width: 100%; min-height: 44px; }
   .crm-create-dialog-backdrop { padding: 10px; place-items: stretch; }
   .crm-import-source-grid, .crm-import-approval, .crm-intake-health, .crm-lead-routing-grid { grid-template-columns: 1fr; }
   .crm-intake-health dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }

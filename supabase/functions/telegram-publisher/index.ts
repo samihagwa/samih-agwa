@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 type JsonRecord = Record<string, unknown>;
 
 const jsonHeaders = { "Content-Type": "application/json" };
+const siteUrl = "https://os.samihagwa.com";
 
 function adminClient() {
   const url = Deno.env.get("SUPABASE_URL");
@@ -235,6 +236,135 @@ async function publishClaims(supabase: ReturnType<typeof adminClient>) {
   return { published, failed, unknown };
 }
 
+function workflowNotificationText(row: JsonRecord) {
+  const title = String(row.notification_title ?? "تنبيه جديد").trim();
+  const body = String(row.notification_body ?? "افتح المنصة لمراجعة التفاصيل.").trim();
+  return [`🔔 ${title}`, "", body].join("\n").slice(0, 4096);
+}
+
+function workflowNotificationButton(row: JsonRecord) {
+  const url = String(row.notification_url ?? "");
+  if (url.startsWith("/tasks/")) return "فتح المهمة";
+  if (url.startsWith("/crm")) return "فتح العميل";
+  if (url.startsWith("/scripts")) return "فتح الاسكريبت";
+  if (url.startsWith("/content")) return "فتح المحتوى";
+  if (url.startsWith("/campaigns")) return "فتح الإطلاق";
+  if (url.startsWith("/chat")) return "فتح الدردشة";
+  return "فتح التفاصيل";
+}
+
+async function sendWorkflowNotifications(supabase: ReturnType<typeof adminClient>) {
+  const { data, error } = await supabase.rpc("claim_telegram_notification_batch", { target_batch_size: 25 });
+  if (error) throw error;
+  let sent = 0;
+  let failed = 0;
+  let unknown = 0;
+  let deferred = 0;
+
+  for (const row of (data ?? []) as JsonRecord[]) {
+    const notificationId = Number(row.notification_id);
+    const claimToken = String(row.claim_token);
+    const { data: maySend, error: gateError } = await supabase.rpc("mark_telegram_notification_network_started", {
+      target_notification_id: notificationId,
+      target_claim_token: claimToken,
+    });
+    if (gateError || !maySend) continue;
+
+    const notificationPath = String(row.notification_url ?? "");
+    const targetUrl = notificationPath.startsWith("/") ? `${siteUrl}${notificationPath}` : `${siteUrl}/tasks`;
+    try {
+      let telegramResult: { response: Response; result: JsonRecord | null };
+      try {
+        telegramResult = await telegram("sendMessage", {
+          chat_id: row.telegram_chat_id,
+          text: workflowNotificationText(row),
+          link_preview_options: { is_disabled: true },
+          reply_markup: {
+            inline_keyboard: [[{ text: workflowNotificationButton(row), url: targetUrl }]],
+          },
+        });
+      } catch (networkError) {
+        await supabase.rpc("complete_telegram_notification_delivery", {
+          target_notification_id: notificationId,
+          target_claim_token: claimToken,
+          target_terminal_status: "unknown",
+          target_message_id: null,
+          target_telegram_error_code: null,
+          target_error: networkError instanceof Error ? networkError.message : "Telegram request result is unknown",
+        });
+        unknown += 1;
+        continue;
+      }
+
+      const { response, result } = telegramResult;
+      if (response.status === 429) {
+        const parameters = result?.parameters as JsonRecord | undefined;
+        const retryAfter = Number(parameters?.retry_after ?? 60);
+        await supabase.rpc("defer_telegram_notification_delivery", {
+          target_notification_id: notificationId,
+          target_claim_token: claimToken,
+          target_retry_after_seconds: Number.isFinite(retryAfter) ? retryAfter : 60,
+          target_error: String(result?.description ?? "Telegram rate limit"),
+        });
+        deferred += 1;
+        continue;
+      }
+
+      if (!response.ok || result?.ok !== true) {
+        const terminal = response.status >= 500 || !result ? "unknown" : "failed";
+        await supabase.rpc("complete_telegram_notification_delivery", {
+          target_notification_id: notificationId,
+          target_claim_token: claimToken,
+          target_terminal_status: terminal,
+          target_message_id: null,
+          target_telegram_error_code: Number(result?.error_code ?? response.status),
+          target_error: String(result?.description ?? `Telegram HTTP ${response.status}`),
+        });
+        if (terminal === "unknown") unknown += 1;
+        else failed += 1;
+        continue;
+      }
+
+      const message = result.result as JsonRecord | undefined;
+      const messageId = Number(message?.message_id);
+      if (!Number.isFinite(messageId) || messageId <= 0) {
+        await supabase.rpc("complete_telegram_notification_delivery", {
+          target_notification_id: notificationId,
+          target_claim_token: claimToken,
+          target_terminal_status: "unknown",
+          target_message_id: null,
+          target_telegram_error_code: null,
+          target_error: "Telegram response did not contain a message id",
+        });
+        unknown += 1;
+        continue;
+      }
+
+      await supabase.rpc("complete_telegram_notification_delivery", {
+        target_notification_id: notificationId,
+        target_claim_token: claimToken,
+        target_terminal_status: "sent",
+        target_message_id: messageId,
+        target_telegram_error_code: null,
+        target_error: null,
+      });
+      sent += 1;
+    } catch (completionError) {
+      await supabase.rpc("complete_telegram_notification_delivery", {
+        target_notification_id: notificationId,
+        target_claim_token: claimToken,
+        target_terminal_status: "unknown",
+        target_message_id: null,
+        target_telegram_error_code: null,
+        target_error: completionError instanceof Error ? completionError.message : "Telegram notification completion is uncertain",
+      });
+      unknown += 1;
+    }
+  }
+
+  return { sent, failed, unknown, deferred };
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
   const suppliedSecret = request.headers.get("x-whales-worker-secret") ?? "";
@@ -247,7 +377,8 @@ Deno.serve(async (request: Request) => {
     const supabase = adminClient();
     const previews = await sendPreviews(supabase);
     const publications = await publishClaims(supabase);
-    return new Response(JSON.stringify({ ok: true, previews, ...publications }), { headers: jsonHeaders });
+    const workflowNotifications = await sendWorkflowNotifications(supabase);
+    return new Response(JSON.stringify({ ok: true, previews, ...publications, workflow_notifications: workflowNotifications }), { headers: jsonHeaders });
   } catch (error) {
     return new Response(JSON.stringify({
       ok: false,

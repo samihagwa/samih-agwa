@@ -2602,6 +2602,9 @@ export type Database = {
           telegram_username: string | null
           updated_at: string
           user_id: string
+          workflow_last_error: string | null
+          workflow_last_sent_at: string | null
+          workflow_notifications_enabled: boolean
         }
         Insert: {
           connected_at?: string | null
@@ -2614,6 +2617,9 @@ export type Database = {
           telegram_username?: string | null
           updated_at?: string
           user_id: string
+          workflow_last_error?: string | null
+          workflow_last_sent_at?: string | null
+          workflow_notifications_enabled?: boolean
         }
         Update: {
           connected_at?: string | null
@@ -2626,6 +2632,9 @@ export type Database = {
           telegram_username?: string | null
           updated_at?: string
           user_id?: string
+          workflow_last_error?: string | null
+          workflow_last_sent_at?: string | null
+          workflow_notifications_enabled?: boolean
         }
         Relationships: [
           {
@@ -4443,6 +4452,20 @@ export type Database = {
           telegram_username: string
         }[]
       }
+      claim_telegram_notification_batch: {
+        Args: { target_batch_size?: number }
+        Returns: {
+          claim_token: string
+          notification_body: string
+          notification_id: number
+          notification_kind: string
+          notification_title: string
+          notification_url: string
+          organization_id: string
+          telegram_chat_id: number
+          user_id: string
+        }[]
+      }
       claim_publishing_preview_batch: {
         Args: { target_batch_size?: number }
         Returns: {
@@ -4495,6 +4518,29 @@ export type Database = {
           organization_id: string
           user_id: string
         }[]
+      }
+      complete_member_telegram_link: {
+        Args: {
+          raw_link_code: string
+          target_telegram_chat_id: number
+          target_telegram_user_id: number
+          target_telegram_username: string
+        }
+        Returns: {
+          organization_id: string
+          user_id: string
+        }[]
+      }
+      complete_telegram_notification_delivery: {
+        Args: {
+          target_claim_token: string
+          target_error: string
+          target_message_id: number
+          target_notification_id: number
+          target_telegram_error_code: number
+          target_terminal_status: string
+        }
+        Returns: boolean
       }
       complete_publishing_preview: {
         Args: {
@@ -4630,6 +4676,10 @@ export type Database = {
         Args: { target_organization_id: string }
         Returns: string
       }
+      create_member_telegram_link: {
+        Args: { target_organization_id: string }
+        Returns: string
+      }
       create_reel_from_intake: {
         Args: {
           approval_owner_id: string
@@ -4684,6 +4734,15 @@ export type Database = {
           thumbnail_owner_id: string
         }
         Returns: string
+      }
+      defer_telegram_notification_delivery: {
+        Args: {
+          target_claim_token: string
+          target_error: string
+          target_notification_id: number
+          target_retry_after_seconds: number
+        }
+        Returns: boolean
       }
       create_reel_from_intake_v3: {
         Args: {
@@ -5242,6 +5301,13 @@ export type Database = {
         Args: { target_notification_id: number }
         Returns: boolean
       }
+      mark_telegram_notification_network_started: {
+        Args: {
+          target_claim_token: string
+          target_notification_id: number
+        }
+        Returns: boolean
+      }
       mark_publication_network_started: {
         Args: {
           target_claim_generation: number
@@ -5534,6 +5600,13 @@ export type Database = {
       }
       set_default_ai_provider: {
         Args: { target_provider_id: string; target_user_id: string }
+        Returns: boolean
+      }
+      set_member_telegram_workflow_notifications: {
+        Args: {
+          target_enabled: boolean
+          target_organization_id: string
+        }
         Returns: boolean
       }
       set_publishing_kill_switch: {

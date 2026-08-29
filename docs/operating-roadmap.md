@@ -10,6 +10,7 @@ This file is the implementation memory for ideas that must not disappear between
 - Focused current views plus terminal archives for operational cards.
 - Internal team community chat with rooms, replies, editing, deletion, and reply notifications.
 - Permission-scoped AI assistant for questions about the signed-in member's work and allowed knowledge.
+- Opt-in private Telegram workflow notifications per member, with exact record links, durable idempotent delivery, and no historical backfill.
 - Telegram publishing with allowlist, idempotency, frozen snapshots, kill switch, and archive.
 
 ## Controlled data migrations
