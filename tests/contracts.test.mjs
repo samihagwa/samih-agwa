@@ -2,17 +2,32 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("shared navigation covers every primary route", async () => {
-  const source = await readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8");
-  for (const route of ["/tasks", "/content", "/planning", "/scripts", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/chat", "/team", "/settings"]) {
-    assert.match(source, new RegExp(`href(?::|=)\\s*["']${route}`));
+test("shared navigation exposes one permission-aware content area while old routes remain valid", async () => {
+  const [navigation, contentNavigation, shell, access] = await Promise.all([
+    readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/ContentSectionNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/access.ts", import.meta.url), "utf8"),
+  ]);
+  for (const route of ["/tasks", "/content", "/scripts", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/chat", "/team", "/settings"]) {
+    assert.match(navigation, new RegExp(`href(?::|=)\\s*["']${route}`));
   }
+  assert.doesNotMatch(navigation, /id:\s*["']planning["']/);
+  assert.match(navigation, /label:\s*["']إدارة المحتوى["']/);
+  assert.match(navigation, /allowed\.has\("content"\) \|\| allowed\.has\("planning"\)/);
+  assert.match(contentNavigation, /href:\s*["']\/planning["']/);
+  assert.match(contentNavigation, /href:\s*["']\/content["']/);
+  assert.match(contentNavigation, /visibleViews = views\.filter\(\(\{ id \}\) => allowed\.has\(id\)\)/);
+  assert.match(shell, /<ContentSectionNav allowedSections=\{allowedSections\}/);
+  assert.match(access, /\{ id: "planning", label: "الخطة وتقويم المحتوى", href: "\/planning" \}/);
+  assert.match(access, /\{ id: "content", label: "طلبات التنفيذ", href: "\/content" \}/);
 });
 
 test("internal navigation remains usable when the experimental client router fails", async () => {
   const sources = await Promise.all([
     "../app/page.tsx",
     "../components/layout/SidebarNav.tsx",
+    "../components/layout/ContentSectionNav.tsx",
     "../components/ui/Button.tsx",
     "../components/content/ContentWorkspace.tsx",
     "../components/planning/PlanningWorkspace.tsx",
@@ -21,7 +36,8 @@ test("internal navigation remains usable when the experimental client router fai
 
   assert.doesNotMatch(sources.join("\n"), /from ["']next\/link["']/);
   assert.match(sources[1], /<a key=\{href\} href=\{href\}/);
-  assert.match(sources[2], /if \(href\) return <a href=\{href\}/);
+  assert.match(sources[2], /<a key=\{href\} href=\{href\}/);
+  assert.match(sources[3], /if \(href\) return <a href=\{href\}/);
 });
 
 test("planning capacity is advisory, atomic, AI-readable, and linked to exact execution", async () => {
@@ -105,7 +121,7 @@ test("workflow execution is assignee-scoped, voice profiles are private, and mob
   assert.match(hardening, /Only the assigned writer can generate this private script/);
   assert.match(scripts, /بصمتي الخاصة/);
   assert.match(editor, /const assignedWriter/);
-  assert.match(editor, /const readOnly = !assignedWriter/);
+  assert.match(editor, /const readOnly = !canWriteScript/);
 
   assert.match(launchCommands, /action === "update_launch"/);
   assert.match(launchCommands, /action === "cancel_launch"/);
@@ -389,6 +405,11 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(archiveDelete, /to service_role/);
   assert.match(types, /delete_archived_script:/);
   assert.match(workspace, /لا يستطيع أي عضو آخر، بما في ذلك مدير المنصة/);
+  assert.match(workspace, /كل المطلوب والروابط/);
+  assert.match(workspace, /script-request-textarea/);
+  assert.match(workspace, /source_url: ""/);
+  assert.match(workspace, /scriptForm\.objective\.trim\(\) \|\| requestText\.slice\(0, 1000\)/);
+  assert.doesNotMatch(workspace, /<span>مسؤول الاسكريبت<\/span>/);
   assert.match(editor, /assignedWriter/);
   assert.match(ai, /get_script_ai_provider_runtime/);
   assert.match(ai, /openai_responses/);
@@ -433,9 +454,9 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(workspace, /حذف نهائي/);
   assert.match(workspace, /window\.confirm/);
   assert.match(workspace, /changeScriptStatus\(script, "archived"\)/);
-  assert.match(editor, /تسليم لمصنع المحتوى/);
+  assert.match(editor, /إنشاء طلب تنفيذ/);
   assert.match(editor, /حذف نهائي/);
-  assert.match(editor, /إما تُنشأ كل المهام معًا/);
+  assert.match(editor, /إما تُنشأ المهام كلها معًا/);
   assert.match(editor, /functions\.invoke/);
   assert.match(editor, /بدون قصة شخصية — الافتراضي/);
   assert.match(editor, /generation_direction/);
@@ -453,7 +474,7 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(captionHandoff, /caption_brief_carried/);
   assert.match(captionHandoff, /to service_role/);
   assert.match(content, /item\.caption_brief/);
-  assert.match(content, /مسودة مختارة من استوديو الاسكريبتات/);
+  assert.match(content, /محفوظ مع ملف الريلز وسيظهر تلقائيًا لمسؤول النشر/);
   assert.match(types, /caption_brief: string/);
   assert.match(editor, /إنشاء حزمة التنفيذ/);
   assert.match(editor, /CTA جزء من النص النهائي/);
@@ -636,12 +657,13 @@ test("background auth events do not reload the active workspace", async () => {
 });
 
 test("quarterly planning, readiness, and deadline reminders are database-governed", async () => {
-  const [migration, indexes, planning, dashboard, navigation, presence, types, packageJson] = await Promise.all([
+  const [migration, indexes, planning, dashboard, navigation, contentNavigation, presence, types, packageJson] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821230406_team_readiness_reminders_and_planning.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260821232458_content_planning_fk_indexes.sql", import.meta.url), "utf8"),
     readFile(new URL("../components/planning/PlanningWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/dashboard/LeadershipDashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/ContentSectionNav.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/auth/PresenceReporter.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -666,11 +688,12 @@ test("quarterly planning, readiness, and deadline reminders are database-governe
     assert.match(indexes, new RegExp(index));
   }
   assert.match(planning, /لن تُنشأ أي مهام تلقائيًا/);
-  assert.match(planning, /ربط بمصنع المحتوى/);
+  assert.match(planning, /إرسال للتنفيذ الآن/);
   assert.match(dashboard, /بوابة حقيقية من البيانات/);
   assert.match(dashboard, /قرار إدخال الفريق يعتمد على البيانات أعلاه/);
   assert.match(dashboard, /تكامل Exness ليس شرطًا/);
-  assert.match(navigation, /href: "\/planning"/);
+  assert.doesNotMatch(navigation, /id: "planning"/);
+  assert.match(contentNavigation, /href: "\/planning"/);
   assert.match(presence, /\["\/planning", "planning"\]/);
   assert.match(packageJson, /"lint": "eslint/);
   assert.match(packageJson, /"typecheck": "tsc --noEmit"/);
@@ -704,12 +727,14 @@ test("content plans support a real archive and owner-safe permanent deletion", a
   assert.match(css, /\.planning-archive-empty/);
 });
 
-test("Telegram intake is an optional reviewed path with a secured execution timeline", async () => {
-  const [migration, parser, quickForm, workspace, createCommand, contentCommands, roadmap] = await Promise.all([
+test("content intake keeps one canonical request while legacy Telegram timelines stay readable", async () => {
+  const [migration, simpleMigration, parser, quickForm, workspace, taskDetail, createCommand, contentCommands, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817025228_telegram_smart_content_intake.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260830070000_simplified_content_request_workflow.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/content-intake.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/content/QuickIntakeForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../docs/roadmap.md", import.meta.url), "utf8"),
@@ -728,15 +753,78 @@ test("Telegram intake is an optional reviewed path with a secured execution time
   assert.match(migration, /thumbnail_task_id, brief_task_id/);
   assert.match(migration, /cue\.completed_at is null/);
   assert.match(parser, /parseProductionRequest/);
-  assert.match(quickForm, /تحليل وترتيب الطلب/);
-  assert.match(quickForm, /لن يتوزع أي شيء قبل مراجعتك/);
-  assert.match(workspace, /طلب كامل من Telegram/);
-  assert.match(workspace, /إدخال يدوي/);
+  assert.match(simpleMigration, /create_simplified_content_workflow_v1/);
+  assert.match(simpleMigration, /content\.simplified_request_created/);
+  assert.match(simpleMigration, /كل المطلوب والروابط/);
+  assert.match(simpleMigration, /create or replace function public\.handoff_script_to_content/);
+  assert.match(simpleMigration, /content_id := public\.create_simplified_content_workflow_v1/);
+  assert.match(simpleMigration, /'workflow', 'simplified_request_v1'/);
+  assert.doesNotMatch(simpleMigration, /create_reel_production_workflow_v3/);
+  assert.doesNotMatch(simpleMigration, /'كابشن الريلز:'/);
+  assert.match(simpleMigration, /visible_work_task_count.*case when material_is_ready then 3 else 4 end/s);
+  assert.match(simpleMigration, /Publishing requires the final caption in the same delivery form/);
+  assert.match(simpleMigration, /drop constraint if exists content_items_intake_fields_together/);
+  assert.match(simpleMigration, /intake_request_key uuid/);
+  assert.match(simpleMigration, /unique \(organization_id, intake_request_key\)/);
+  assert.match(simpleMigration, /expected_content_version bigint/);
+  assert.match(simpleMigration, /membership\.status = 'active'/);
+  assert.match(simpleMigration, /array\['content'\]::text\[\]/);
+  assert.match(simpleMigration, /private\.can_read_content_actor/);
+  assert.match(simpleMigration, /Only an active non-viewer organization member can submit a result/);
+  assert.match(simpleMigration, /Only the assigned step owner can submit its result/);
+  assert.doesNotMatch(simpleMigration, /organization leadership can submit its result/);
+  assert.match(simpleMigration, /target_url text := '\/tasks\/' \|\| new\.id/);
+  assert.match(simpleMigration, /new\.is_work_item and new\.status = 'ready'/);
+  assert.match(simpleMigration, /to service_role/);
+  assert.match(simpleMigration, /from public, anon, authenticated/);
+  assert.match(simpleMigration, /array\['content', 'campaigns', 'scripts', 'tasks'\]/);
+  assert.match(simpleMigration, /private\.can_read_task_actor/);
+  assert.match(simpleMigration, /create policy "tasks_select_involved_members"/);
+  assert.match(simpleMigration, /task_events_select_involved_members/);
+  assert.match(simpleMigration, /task_revision_requests_select_involved_members/);
+  assert.match(simpleMigration, /task_deliveries_select_involved_members/);
+  assert.match(simpleMigration, /task_dependencies_select_involved_members/);
+  assert.match(simpleMigration, /membership\.role <> 'viewer'/);
+  assert.match(simpleMigration, /reject_viewer_operational_write/);
+  for (const table of ["content_items", "content_assets", "content_revision_requests", "content_timeline_cues", "content_brand_references"]) {
+    assert.match(simpleMigration, new RegExp(`before insert or update or delete on public\\.${table}`));
+  }
+  assert.match(simpleMigration, /enforce_task_assignee_reachability/);
+  assert.match(simpleMigration, /'tasks' = any\(membership\.allowed_sections\)/);
+  assert.match(quickForm, /كل المطلوب والروابط/);
+  assert.match(quickForm, /raw_material_sent/);
+  assert.match(quickForm, /crypto\.randomUUID/);
+  assert.doesNotMatch(quickForm, /content_goal|content_hook|content_cta|content_editing_brief/);
+  assert.match(workspace, /طلب ريلز كامل/);
+  assert.doesNotMatch(workspace, /طلب كامل من Telegram|إدخال يدوي/);
   assert.match(workspace, /content_timeline_cues/);
+  assert.match(taskDetail, /content_items/);
+  assert.match(taskDetail, /intake_request/);
+  assert.match(taskDetail, /كل المطلوب والروابط/);
+  assert.match(taskDetail, /submit_step_delivery/);
+  assert.match(taskDetail, /أرسلت المادة الخام على Telegram/);
+  assert.match(createCommand, /create_simplified_content_workflow_v1/);
   assert.match(createCommand, /create_reel_from_intake/);
   assert.match(contentCommands, /change_timeline_cue/);
   assert.match(roadmap, /private Supabase Storage buckets/);
   assert.match(roadmap, /does not download, copy, or re-upload Telegram files/);
+});
+
+test("planning is a thin calendar over the same canonical request instead of a duplicate production board", async () => {
+  const [planning, migration, navigation] = await Promise.all([
+    readFile(new URL("../components/planning/PlanningWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260830070000_simplified_content_request_workflow.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/layout/ContentSectionNav.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(planning, /كل المطلوب والروابط/);
+  assert.match(planning, /هذه الخانة هي المرجع الوحيد/);
+  assert.match(planning, /إرسال للتنفيذ الآن/);
+  assert.match(planning, /حفظ في التقويم فقط/);
+  assert.doesNotMatch(planning, /name="hook_direction"|name="cta"/);
+  assert.match(migration, /if target_kind = 'reel' then[\s\S]*create_simplified_content_workflow_v1/);
+  assert.match(navigation, /الخطة تحدد ماذا ومتى/);
+  assert.match(navigation, /قسم المهام يعرض لكل شخص الجزء المسند إليه فقط/);
 });
 
 test("task workflow is shared between UI types and database enforcement", async () => {
@@ -782,10 +870,13 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(securityMigration, /from public, anon, authenticated/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
+  assert.match(edgeFunction, /create_simplified_content_workflow_v1/);
   assert.match(edgeFunction, /create_reel_production_workflow_v3/);
   assert.match(workspace, /functions\.invoke\("create-content-workflow"/);
-  assert.match(workspace, /3 مهام إذا كانت المادة الخام جاهزة، و4 فقط/);
+  assert.match(workspace, /payload\.raw_material_sent/);
+  assert.match(workspace, /كل المطلوب والروابط/);
   assert.match(workspace, /الكابشن النهائي/);
+  assert.match(workspace, /const activeTasks = workTasks\.filter/);
   assert.match(workspace, /النتيجة تغلق المهمة وتفتح التالية تلقائيًا/);
   assert.doesNotMatch(contentContract, /"brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing"/);
   assert.match(nonBlockingMigration, /task_record\.content_step = 'publishing'/);
@@ -802,6 +893,10 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(taskWorkspace, /if \(isContentWorkflow\) return tasks\.every\(taskIsClosed\) \? "closed" : "work"/);
   assert.match(taskWorkspace, /content-workflow-progress/);
   assert.match(taskWorkspace, /مهمتك الآن/);
+  assert.match(taskWorkspace, /contentRequests\[task\.content_item_id\]/);
+  assert.match(taskWorkspace, /task\.content_item_id[\s\S]*transitions\.filter\(\(option\) => \["in_progress", "blocked"\]\.includes\(option\)\)/);
+  assert.match(taskWorkspace, /فتح وتسليم المهمة/);
+  assert.doesNotMatch(taskWorkspace, /task\.content_item_id \? <a className="task-production-link" href=\{`\/content/);
 });
 
 test("task board filters remain deterministic and completion-first", async () => {
@@ -848,7 +943,8 @@ test("content production briefs, assets, and revision rounds share one secured w
   assert.match(commands, /request_revision/);
   assert.match(commands, /resolve_revision/);
   assert.match(createCommand, /create_reel_production_workflow/);
-  assert.match(workspace, /Production Brief للمونتاج/);
+  assert.match(workspace, /كل المطلوب والروابط/);
+  assert.match(commands, /update_content_request_v1/);
   assert.match(workspace, /مركز الأصول/);
   assert.match(workspace, /جولات التعديل/);
   assert.match(workspace, /functions\.invoke\("content-commands"/);
@@ -907,7 +1003,10 @@ test("social post deliverables expand into parallel copy and design workflows wi
   assert.match(campaignWorkspace, /إنشاء البند ومصنع البوستات/);
   assert.match(campaignWorkspace, /الكابشن والتصميم بالتوازي/);
   assert.match(contentWorkspace, /النتيجة تغلق المهمة وتفتح التالية تلقائيًا/);
-  assert.match(contentWorkspace, /Social Post Brief/);
+  assert.match(contentWorkspace, /كل المطلوب والروابط/);
+  assert.match(contentWorkspace, /item\.copy_brief/);
+  assert.match(contentWorkspace, /item\.design_brief/);
+  assert.doesNotMatch(contentWorkspace, /Social Post Brief/);
   assert.match(taskWorkspace, /فتح للمراجعة والاعتماد/);
   assert.match(completionMigration, /content_step_deliveries_step_allowed/);
   assert.match(nonBlockingMigration, /prerequisite\.content_step in \('caption', 'design'\)/);
@@ -1023,8 +1122,8 @@ test("brand knowledge is versioned, owner-approved, and linked to content by an 
   assert.match(commands, /createSupabaseContext/);
   assert.match(commands, /auth: "user"/);
   assert.match(brandWorkspace, /المسودة لا تؤثر على الشغل الحالي/);
-  assert.match(contentWorkspace, /brand_article_ids/);
-  assert.match(contentWorkspace, /مراجع البراند المعتمدة/);
+  assert.match(contentWorkspace, /approvedBrandArticles/);
+  assert.match(contentWorkspace, /مراجع البراند/);
   assert.match(createWorkflow, /create_reel_production_workflow_v3/);
   assert.match(createWorkflow, /create_reel_from_intake_v3/);
   assert.match(architecture, /approved body is immutable/i);
@@ -1418,7 +1517,8 @@ test("standalone task deliveries stay visible and editable by the assignee after
   assert.match(detail, /rpc\("submit_task_delivery"/);
   assert.match(detail, /رابط ملف التسليم/);
   assert.match(detail, /الخانة تفضل موجودة حتى بعد اكتمال المهمة/);
-  assert.match(detail, /standaloneTask && isAssignee && task\.status !== "cancelled"/);
+  assert.match(detail, /const canSubmitDelivery = !readOnly && isAssignee/);
+  assert.match(detail, /standaloneTask \|\| contentTask/);
   assert.match(types, /task_deliveries:/);
   assert.match(types, /submit_task_delivery:/);
   assert.match(css, /\.task-delivery-compose/);
@@ -1497,7 +1597,7 @@ test("workspace is invite-only, section-scoped, and enforced before rendering or
   assert.match(shell, /\.from\("memberships"\)/);
   assert.match(shell, /\.select\("organization_id, role, status, allowed_sections, onboarding_acknowledgements, onboarding_completed_at"\)/);
   assert.match(shell, /if \(!session\) return <LoginWorkspace/);
-  assert.match(shell, /sectionAllowed \? children/);
+  assert.match(shell, /\{sectionAllowed\s*\?\s*contentSectionOpen/);
   assert.match(shell, /<SidebarNav allowedSections=\{allowedSections\}/);
   assert.match(navigation, /allowedSections: WorkspaceSection\[\]/);
   assert.match(access, /membership\.role === "owner"/);

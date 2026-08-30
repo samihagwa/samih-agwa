@@ -70,8 +70,8 @@ Existing Market Whales application
 
 - `content_plans` owns the period, commercial objective, audience, offer, and primary metric. Only one plan can be active for an organization at a time.
 - `content_plan_pillars` expresses the few recurring content themes and target quantities; it is planning input, not evidence of production.
-- `content_plan_items` is the dated calendar. Every item has one owner, one publish time, a format, an objective, and optional platforms, hook, and CTA direction inside the plan period.
-- Saving a calendar item never creates tasks automatically. Leadership explicitly links it to one canonical `content_items` record after the brief is ready, avoiding a second workflow and duplicate work.
+- `content_plan_items` is the dated calendar. Every item has a title, format, publish time, and one canonical request containing the instructions and inline links; assignment metadata remains optional.
+- Leadership explicitly chooses between **calendar only** (no task or notification) and **send to execution**. The latter creates the same canonical `content_items` request and compact task graph as direct intake, so planning is not a second production workflow.
 - Once linked, database triggers derive the calendar state from the content source of truth. Published or cancelled history is retained rather than deleted.
 - The leadership dashboard reads live domain tables and the `get_workspace_readiness` RPC. Readiness checks are explainable links to their source sections, not a self-reported percentage.
 
@@ -79,13 +79,13 @@ Existing Market Whales application
 
 - `content_items` is the source of truth for a publishable asset and its brief.
 - A reel workflow is created atomically through the JWT-protected `create-content-workflow` Edge Function; its database command is executable by `service_role` only, so partial task sets cannot be saved.
-- The original manual brief stays available. The optional Telegram intake accepts the full request as one draft, parses it in the browser, and requires an editable review before the same guarded command stores anything.
-- Telegram remains the raw-file location in this phase. The approved request and direct Telegram message link are retained on the content item; extracted reference links and second-by-second instructions are stored as governed content assets and timeline cues.
-- Each workflow produces seven normal tasks: brief, recording, editing, thumbnail, caption, approval, and publishing.
+- `intake_request` preserves one canonical, manager-authored request containing every instruction and inline link. Legacy structured fields remain available for compatibility and internal AI use, but they are no longer a parallel manager-facing workflow.
+- Telegram remains the raw-file location in this phase. The optional direct Telegram message/file link is retained separately, while links inside the canonical request stay in place and render as clickable links.
+- Each simplified workflow creates only real execution work: recording/raw-material delivery when needed, editing, thumbnail, and publishing. Thumbnail is immediately actionable; editing waits only when raw material has not already been sent. Caption is an internal content deliverable rather than a second counted task, and no mandatory approval task is added.
 - A campaign social-post line is one counted launch deliverable but expands atomically into one content card per planned post. Each card has six tasks: brief, caption and design in parallel, approval, scheduling, and publishing. This avoids asking managers to enter separate design and publishing lines for the same post.
 - `content_step_deliveries` is the governed result record for caption, design, scheduling, and publishing. A task cannot enter review without its result; design and publishing require a real URL. The table is read-only to authenticated clients and mutations use service-only commands.
 - `task_dependencies` models the handoff graph. Completing a predecessor unlocks only downstream tasks whose dependencies are all done.
-- In the Telegram intake path, raw-material verification follows brief approval, editing follows verification, and thumbnail plus caption can run in parallel after the brief. Final approval waits for editing, thumbnail, caption, every open revision, and every timeline cue.
+- A reel has only the work the team can act on: raw handoff when needed, editing, thumbnail, and publishing. The caption is stored on the reel rather than becoming a hidden fifth task; the creator can add it with the raw handoff and the publisher must complete it in the same form before confirming the live post. Publishing still waits only for editing and thumbnail, while review remains optional per task instead of becoming an owner bottleneck.
 - Content status is derived by database triggers from linked task state, and important changes are written to the audit log.
 - External social publishing remains manual until a verified platform integration returns a real publish confirmation.
 
@@ -119,7 +119,7 @@ Existing Market Whales application
 - An approved body is immutable. A change starts a new numbered draft while the current approved version stays active; approving the revision archives the previous version without deleting history.
 - The browser has read-only table access through RLS. Every mutation goes through the JWT-protected `brand-commands` Edge Function and service-only database commands, with an audit event for each privileged change.
 - `content_brand_references` records the exact approved version used when a content workflow is created. Archived versions remain readable for content already linked to them, while new briefs can select only currently approved versions.
-- Item-specific brand notes are exceptions or clarifications, not a replacement for the approved knowledge center. The content command validates and links up to eight approved references atomically with the brief and seven tasks.
+- Item-specific brand notes are exceptions or clarifications, not a replacement for the approved knowledge center. The content command validates and links up to eight approved references atomically with the canonical request and its execution steps.
 
 ## Initial domains
 

@@ -25,7 +25,7 @@ type Plan = Tables<"content_plans">;
 type Pillar = Tables<"content_plan_pillars">;
 type PlanItem = Tables<"content_plan_items">;
 type ContentItem = Tables<"content_items">;
-type Person = { id: string; name: string; role: Membership["role"] };
+type Person = { id: string; name: string; role: Membership["role"]; allowedSections: string[] };
 type Workspace = {
   organization: Organization;
   membership: Membership;
@@ -142,7 +142,7 @@ export function PlanningWorkspace() {
 
       const [organizationResult, membershipsResult, plansResult, pillarsResult, itemsResult, contentResult] = await Promise.all([
         supabase.from("organizations").select("*").eq("id", membership.organization_id).single(),
-        supabase.from("memberships").select("user_id, role").eq("organization_id", membership.organization_id).eq("status", "active").neq("role", "viewer"),
+        supabase.from("memberships").select("user_id, role, allowed_sections").eq("organization_id", membership.organization_id).eq("status", "active"),
         supabase.from("content_plans").select("*").eq("organization_id", membership.organization_id).order("starts_on", { ascending: false }),
         supabase.from("content_plan_pillars").select("*").eq("organization_id", membership.organization_id).order("sort_order", { ascending: true }),
         supabase.from("content_plan_items").select("*").eq("organization_id", membership.organization_id).order("publish_at", { ascending: true }),
@@ -151,14 +151,21 @@ export function PlanningWorkspace() {
       const firstError = [organizationResult.error, membershipsResult.error, plansResult.error, pillarsResult.error, itemsResult.error, contentResult.error].find(Boolean);
       if (firstError) throw firstError;
       if (!organizationResult.data) throw new Error("مساحة الشركة غير موجودة.");
-      const memberRows = membershipsResult.data ?? [];
+      const memberRows = (membershipsResult.data ?? []).filter((row) =>
+        row.role !== "viewer" && (row.role === "owner" || row.allowed_sections.includes("tasks"))
+      );
       const memberIds = memberRows.map((row) => row.user_id);
       const profilesResult = memberIds.length
         ? await supabase.from("profiles").select("id, full_name").in("id", memberIds)
         : { data: [], error: null };
       if (profilesResult.error) throw profilesResult.error;
       const names = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.full_name ?? "عضو فريق"]));
-      const people = memberRows.map((row) => ({ id: row.user_id, role: row.role, name: names.get(row.user_id) ?? "عضو فريق" }));
+      const people = memberRows.map((row) => ({
+        id: row.user_id,
+        role: row.role,
+        allowedSections: row.allowed_sections,
+        name: names.get(row.user_id) ?? "عضو فريق",
+      }));
       const plans = plansResult.data ?? [];
       const directPlanItemId = currentUuidDeepLink("plan_item", "plan-item");
       const directPlanId = (itemsResult.data ?? []).find((item) => item.id === directPlanItemId)?.plan_id ?? null;
@@ -190,6 +197,8 @@ export function PlanningWorkspace() {
 
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading, clearTransientState });
   const manager = Boolean(workspace && leadershipRoles.has(workspace.membership.role));
+  const canCreateExecution = Boolean(workspace && manager && (workspace.membership.role === "owner"
+    || workspace.membership.allowed_sections.includes("tasks")));
   const currentPlans = useMemo(() => workspace?.plans.filter((plan) => plan.status !== "archived") ?? [], [workspace?.plans]);
   const archivedPlans = useMemo(() => workspace?.plans.filter((plan) => plan.status === "archived") ?? [], [workspace?.plans]);
   const visiblePlans = planView === "current" ? currentPlans : archivedPlans;
@@ -429,7 +438,7 @@ export function PlanningWorkspace() {
       }
       setCapacityWarning(null); setShowItemForm(false); setSelectedKind("reel"); setPlanSaveMode("execution");
       setNotice(submission.mode === "execution"
-        ? "تم إنشاء بند الخطة وملف مصنع المحتوى ومهام التنفيذ والإشعارات معًا."
+        ? "تم إنشاء بند الخطة وطلب التنفيذ ومهام الأشخاص والإشعارات معًا."
         : "تم حفظ الموعد في التقويم فقط؛ لم تُنشأ مهمة أو إشعار.");
       await refresh();
     } catch (saveError) {
@@ -448,26 +457,42 @@ export function PlanningWorkspace() {
     if (!workspace || !selectedPlan || !session) return;
     const form = new FormData(event.currentTarget);
     const publishDate = new Date(String(form.get("publish_at") ?? ""));
-    const platforms = String(form.get("platforms") ?? "").split(/[،,]/).map((value) => value.trim()).filter(Boolean);
+    const kind = String(form.get("kind") ?? "reel") as ContentPlanItemKind;
+    const platforms = String(form.get("platforms") ?? (kind === "telegram_post" ? "Telegram" : kind === "email" ? "Email" : "Instagram"))
+      .split(/[،,]/).map((value) => value.trim()).filter(Boolean);
     const ownerId = String(form.get("owner_id") ?? "");
+    const requestText = String(form.get("request_text") ?? "").trim();
+    if (requestText.length < 10) {
+      setError("اكتب كل المطلوب والروابط في الخانة الواحدة قبل الحفظ.");
+      return;
+    }
+    const requestedMode: PlanSaveMode = planSaveMode === "execution" && canCreateExecution ? "execution" : "calendar";
     const submission: PlanSubmission = {
       organization_id: workspace.organization.id,
       plan_id: selectedPlan.id,
       pillar_id: String(form.get("pillar_id") ?? "") || null,
-      kind: String(form.get("kind") ?? "reel") as ContentPlanItemKind,
+      kind,
       title: String(form.get("title") ?? ""),
-      objective: String(form.get("objective") ?? ""),
-      hook_direction: String(form.get("hook_direction") ?? "") || null,
-      cta: String(form.get("cta") ?? "") || null,
+      objective: requestText,
+      hook_direction: null,
+      cta: null,
       platforms,
       owner_id: ownerId,
       publish_at: publishDate.toISOString(),
       estimated_minutes: Number(form.get("estimated_minutes") ?? 120),
-      mode: planSaveMode,
+      mode: requestedMode,
       editing_owner_id: String(form.get("editing_owner_id") ?? ownerId) || ownerId,
       design_owner_id: String(form.get("design_owner_id") ?? ownerId) || ownerId,
       publishing_owner_id: String(form.get("publishing_owner_id") ?? ownerId) || ownerId,
     };
+    const assignableIds = new Set(workspace.people.map((person) => person.id));
+    const selectedAssignees = requestedMode === "execution"
+      ? [submission.owner_id, submission.editing_owner_id, submission.design_owner_id, submission.publishing_owner_id]
+      : [submission.owner_id];
+    if (selectedAssignees.some((assigneeId) => !assignableIds.has(assigneeId))) {
+      setError("اختر عضوًا نشطًا لديه صلاحية المهام لكل مسؤولية.");
+      return;
+    }
     setCapacityWarning(null);
     await persistPlanItem(submission);
   }
@@ -479,7 +504,7 @@ export function PlanningWorkspace() {
       .eq("id", item.id).eq("version", item.version);
     setWorking(false);
     if (updateError) { setError(updateError.message); return; }
-    setNotice(contentItemId ? "تم ربط بند الخطة بمصنع المحتوى؛ حالته ستتحدث تلقائيًا." : "تم فك الربط مع الاحتفاظ ببند الخطة.");
+    setNotice(contentItemId ? "تم ربط بند الخطة بطلب التنفيذ؛ حالته ستتحدث تلقائيًا." : "تم فك الربط مع الاحتفاظ ببند الخطة.");
     await refresh();
   }
 
@@ -499,9 +524,12 @@ export function PlanningWorkspace() {
   if (!workspace) return <section className="workspace-state workspace-onboarding"><ShieldCheck size={27} /><div><h2>أنشئ مساحة الشركة أولًا</h2><p>ابدأ من قسم المهام ثم ارجع لبناء الخطة.</p></div><Button href="/tasks">فتح المهام</Button></section>;
 
   const quarter = defaultQuarter();
+  const defaultAssigneeId = workspace.people.find((person) => person.id === session.user.id)?.id
+    ?? workspace.people[0]?.id
+    ?? "";
   return <section className="planning-workspace">
     <header className="panel planning-toolbar">
-      <div><p className="overline">{workspace.organization.name}</p><h2>الخطة الربع سنوية وتقويم المحتوى</h2><p>الخطة تحدد ماذا ولماذا، والتقويم يوازن متى ومَن، ثم مصنع المحتوى والمهام ينفذان.</p></div>
+      <div><p className="overline">{workspace.organization.name}</p><h2>الخطة والتقويم</h2><p>هنا نقرر ماذا سينشر ومتى. عند الإرسال للتنفيذ ينشئ النظام نفس طلب المحتوى ونفس مهام الأشخاص؛ لا توجد بورد ثانية مكررة.</p></div>
       <div className="toolbar-actions">{manager ? <Button type="button" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent("workspace-ai:ask", { detail: { question: "ساعدني أبني خطة محتوى متوازنة من بيانات الخطة الحالية، ومواعيد الفريق، والحمل الموجود في التقويم. لا تغيّر أي بيانات؛ قدّم اقتراحًا عمليًا فقط." } }))}><Bot size={14} /> اسأل AI عن الخطة</Button> : null}<button className="icon-button" type="button" aria-label="تحديث الخطة" onClick={() => void refresh()}><RefreshCw size={17} /></button>{manager ? <Button type="button" onClick={() => setShowPlanForm((value) => !value)}><Plus size={15} /> خطة جديدة</Button> : null}</div>
     </header>
 
@@ -548,28 +576,31 @@ export function PlanningWorkspace() {
       {manager ? <TeamCapacityCalendar organizationId={workspace.organization.id} /> : null}
 
       <section className="panel planning-calendar-panel">
-        <div className="section-heading"><div><p className="overline">Execution calendar</p><h2>تقويم التنفيذ والنشر</h2><p>كل بند مسؤول وموعد وهدف؛ ربطه بمصنع المحتوى يجعل حالته تتحرك تلقائيًا.</p></div>{manager && selectedPlan.status !== "archived" ? <Button type="button" onClick={() => setShowItemForm((value) => !value)}><Plus size={14} /> إضافة محتوى للخطة</Button> : null}</div>
+        <div className="section-heading"><div><p className="overline">Content calendar</p><h2>مواعيد المحتوى</h2><p>أضف القطعة مرة واحدة. إما تظل فكرة في التقويم، أو تتحول فورًا إلى طلب تنفيذ موحد.</p></div>{manager && selectedPlan.status !== "archived" ? <Button type="button" onClick={() => setShowItemForm((value) => !value)}><Plus size={14} /> إضافة محتوى للخطة</Button> : null}</div>
         {showItemForm && manager && selectedPlan.status !== "archived" ? <form className="planning-form planning-item-form" onSubmit={(event) => void addPlanItem(event)}>
           <div className="planning-form-grid">
             <label><span>نوع المحتوى</span><select name="kind" value={selectedKind} onChange={(event) => setSelectedKind(event.target.value as ContentPlanItemKind)}>{contentPlanItemKinds.map((kind) => <option value={kind} key={kind}>{contentPlanItemKindConfig[kind].label}</option>)}</select></label>
             <label><span>عنوان واضح</span><input name="title" minLength={3} maxLength={180} required placeholder="عنوان الفكرة أو الوعد الرئيسي" /></label>
             <label><span>عمود المحتوى — اختياري</span><select name="pillar_id" defaultValue=""><option value="">بدون عمود مؤقتًا</option>{selectedPillars.map((pillar) => <option value={pillar.id} key={pillar.id}>{pillar.title}</option>)}</select></label>
-            <label><span>المسؤول عن تحريكها</span><select name="owner_id" defaultValue={workspace.people[0]?.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
             <label><span>موعد النشر — القاهرة</span><input name="publish_at" type="datetime-local" defaultValue={planItemInputDate(selectedPlan)} required /></label>
-            <label><span>الوقت المتوقع على المسؤول</span><select name="estimated_minutes" defaultValue="120"><option value="30">30 دقيقة</option><option value="60">ساعة</option><option value="90">ساعة ونصف</option><option value="120">ساعتان</option><option value="180">3 ساعات</option><option value="240">4 ساعات</option><option value="360">6 ساعات</option></select></label>
-            <label><span>المنصات</span><input name="platforms" minLength={2} required defaultValue={selectedKind === "telegram_post" ? "Telegram" : "Instagram"} placeholder="Instagram, Facebook" /></label>
-            <label className="span-2"><span>هدف القطعة</span><textarea name="objective" minLength={5} maxLength={2000} rows={2} required placeholder="ما الفهم أو القرار المطلوب من الجمهور؟" /></label>
-            <label><span>اتجاه الهوك — اختياري</span><textarea name="hook_direction" maxLength={2000} rows={2} placeholder="الخطر أو الموقف أو السؤال الذي نبدأ منه" /></label>
-            <label><span>CTA — اختياري</span><textarea name="cta" maxLength={1000} rows={2} placeholder="الإجراء المطلوب من المشاهد" /></label>
+            <label className="span-2"><span>كل المطلوب والروابط</span><textarea name="request_text" minLength={10} maxLength={30000} rows={14} required placeholder="الصق الطلب كاملًا هنا: الفكرة أو الاسكريبت، المطلوب، التوقيتات، تعليمات المونتاج والتصميم، وأي روابط…" /><small>هذه الخانة هي المرجع الوحيد. النص والروابط يظلان معًا كما كتبتهما ويظهران لكل مسؤول داخل مهمته.</small></label>
             <fieldset className="span-2 planning-execution-choice">
               <legend>ماذا يحدث بعد الحفظ؟</legend>
-              <label aria-label="إرسال بند الخطة للتنفيذ الآن" htmlFor="plan-save-execution" className={planSaveMode === "execution" ? "active" : ""}><input id="plan-save-execution" type="radio" name="save_mode" value="execution" checked={planSaveMode === "execution"} onChange={() => { setPlanSaveMode("execution"); setCapacityWarning(null); }} /><span><strong>إرسال للتنفيذ الآن</strong><small>ينشئ ملف مصنع المحتوى والمهام والإشعارات معًا.</small></span></label>
-              <label aria-label="حفظ بند الخطة في التقويم فقط" htmlFor="plan-save-calendar" className={planSaveMode === "calendar" ? "active" : ""}><input id="plan-save-calendar" type="radio" name="save_mode" value="calendar" checked={planSaveMode === "calendar"} onChange={() => { setPlanSaveMode("calendar"); setCapacityWarning(null); }} /><span><strong>حفظ في التقويم فقط</strong><small>للتخطيط المبدئي؛ بدون مهمة أو إشعار.</small></span></label>
+              {canCreateExecution ? <label aria-label="إرسال بند الخطة للتنفيذ الآن" htmlFor="plan-save-execution" className={planSaveMode === "execution" ? "active" : ""}><input id="plan-save-execution" type="radio" name="save_mode" value="execution" checked={planSaveMode === "execution"} onChange={() => { setPlanSaveMode("execution"); setCapacityWarning(null); }} /><span><strong>إرسال للتنفيذ الآن</strong><small>ينشئ طلب تنفيذ واحدًا، ثم تظهر لكل عضو مهمته فقط.</small></span></label> : null}
+              <label aria-label="حفظ بند الخطة في التقويم فقط" htmlFor="plan-save-calendar" className={planSaveMode === "calendar" || !canCreateExecution ? "active" : ""}><input id="plan-save-calendar" type="radio" name="save_mode" value="calendar" checked={planSaveMode === "calendar" || !canCreateExecution} onChange={() => { setPlanSaveMode("calendar"); setCapacityWarning(null); }} /><span><strong>حفظ في التقويم فقط</strong><small>فكرة وموعد فقط؛ بدون مهام أو إشعارات.</small></span></label>
             </fieldset>
-            {planSaveMode === "execution" ? <fieldset className="span-2 planning-assignment-grid"><legend>توزيع التنفيذ</legend><label><span>المونتاج</span><select name="editing_owner_id" defaultValue={workspace.people[0]?.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label><span>التصميم / الغلاف</span><select name="design_owner_id" defaultValue={workspace.people[0]?.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label><span>النشر</span><select name="publishing_owner_id" defaultValue={workspace.people[0]?.id} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><p>حسب نوع المحتوى، النظام ينشئ الخطوات المطلوبة فقط؛ الريلز يمر بالتسجيل والمونتاج والغلاف والنشر، والبوست يمر بالكابشن والتصميم والنشر.</p></fieldset> : null}
+            <details className="content-request-advanced span-2">
+              <summary>التوزيع والوقت المتوقع — اختياري</summary>
+              <div className="content-request-advanced-body planning-form-grid">
+                <label><span>صاحب المادة أو الفكرة</span><select name="owner_id" defaultValue={defaultAssigneeId} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+                <label><span>الوقت المتوقع عليه</span><select name="estimated_minutes" defaultValue="120"><option value="30">30 دقيقة</option><option value="60">ساعة</option><option value="90">ساعة ونصف</option><option value="120">ساعتان</option><option value="180">3 ساعات</option><option value="240">4 ساعات</option><option value="360">6 ساعات</option></select></label>
+                <label><span>المنصات</span><input key={selectedKind} name="platforms" minLength={2} required defaultValue={selectedKind === "telegram_post" ? "Telegram" : selectedKind === "email" ? "Email" : "Instagram"} placeholder="Instagram, Facebook" /></label>
+                {planSaveMode === "execution" && canCreateExecution ? <fieldset className="span-2 planning-assignment-grid"><legend>المسؤول عن كل نتيجة</legend><label><span>المونتاج</span><select name="editing_owner_id" defaultValue={defaultAssigneeId} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label><span>التصميم / الغلاف</span><select name="design_owner_id" defaultValue={defaultAssigneeId} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label><span>النشر</span><select name="publishing_owner_id" defaultValue={defaultAssigneeId} required>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><p>للريلز: خام، مونتاج، غلاف، نشر. الكابشن جزء من تسليم الخام أو النشر وليس مهمة إضافية.</p></fieldset> : null}
+              </div>
+            </details>
           </div>
           {capacityWarning ? <div className="capacity-decision" role="alert"><AlertTriangle size={18} /><div><strong>الموعد عليه حمل زائد</strong><p>{capacityWarning.snapshots.map((snapshot) => `${peopleById.get(snapshot.user_id)?.name ?? "عضو فريق"}: ${snapshot.projected_minutes.toLocaleString("ar-EG")} من ${snapshot.daily_capacity_minutes.toLocaleString("ar-EG")} دقيقة`).join(" · ")}</p><small>عدّل المسؤول أو الموعد، أو أكمل عن قصد وسيُسجل القرار.</small></div><div><button className="text-button" type="button" onClick={() => setCapacityWarning(null)}>تعديل الموعد أو المسؤول</button><Button type="button" variant="secondary" disabled={working} onClick={() => void persistPlanItem(capacityWarning.submission, true)}>إسناد رغم الضغط</Button></div></div> : null}
-          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : null}{planSaveMode === "execution" ? "حفظ وإرسال للتنفيذ" : "حفظ في التقويم فقط"}</Button><button className="text-button" type="button" onClick={() => { setShowItemForm(false); setCapacityWarning(null); }}>إلغاء</button></div>
+          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : null}{planSaveMode === "execution" && canCreateExecution ? "حفظ وإرسال للتنفيذ" : "حفظ في التقويم فقط"}</Button><button className="text-button" type="button" onClick={() => { setShowItemForm(false); setCapacityWarning(null); }}>إلغاء</button><small>لن تعيد كتابة الطلب في مكان آخر.</small></div>
         </form> : null}
 
         <div className="planning-calendar-list">{selectedItems.map((item) => {
@@ -579,7 +610,7 @@ export function PlanningWorkspace() {
             <div className="planning-date-tile"><CalendarDays size={17} /><strong>{new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</strong><small>{new Intl.DateTimeFormat("ar-EG", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</small></div>
             <div className="planning-item-copy"><div><span>{contentPlanItemKindConfig[item.kind].label}{item.pillar_id ? ` · ${pillarsById.get(item.pillar_id)?.title ?? "عمود"}` : ""}</span><h3>{item.title}</h3></div><p>{item.objective}</p><small>{peopleById.get(item.owner_id)?.name ?? "عضو فريق"} · {item.platforms.join("، ")} · {item.estimated_minutes.toLocaleString("ar-EG")} دقيقة متوقعة</small></div>
             <div className="planning-item-state"><StatusBadge tone={contentPlanItemStatusConfig[item.status].tone}>{contentPlanItemStatusConfig[item.status].label}</StatusBadge>{linked ? <a href={`/content?content=${linked.id}#content-${linked.id}`}>فتح التنفيذ <ArrowUpLeft size={12} /></a> : null}</div>
-            {manager && selectedPlan.status !== "archived" && item.status !== "published" ? <div className="planning-item-actions">{linked ? <button className="text-button" type="button" disabled={working} onClick={() => void linkContent(item, "")}><Link2 size={12} /> فك الربط</button> : <><label><span>ربط بمصنع المحتوى</span><select defaultValue="" disabled={working} onChange={(event) => { if (event.target.value) void linkContent(item, event.target.value); }}><option value="">اختر أصلًا منفذًا</option>{availableContent.map((content) => <option value={content.id} key={content.id}>{content.title}</option>)}</select></label><button className="text-button" type="button" disabled={working} onClick={() => void setItemCancelled(item, item.status !== "cancelled")}>{item.status === "cancelled" ? <RefreshCw size={12} /> : <CircleSlash2 size={12} />} {item.status === "cancelled" ? "إعادة للخطة" : "إلغاء البند"}</button></>}</div> : null}
+            {manager && selectedPlan.status !== "archived" && item.status !== "published" ? <div className="planning-item-actions">{linked ? <button className="text-button" type="button" disabled={working} onClick={() => void linkContent(item, "")}><Link2 size={12} /> فك الربط</button> : <><label><span>ربط بطلب تنفيذ موجود</span><select defaultValue="" disabled={working} onChange={(event) => { if (event.target.value) void linkContent(item, event.target.value); }}><option value="">اختر طلبًا منفذًا</option>{availableContent.map((content) => <option value={content.id} key={content.id}>{content.title}</option>)}</select></label><button className="text-button" type="button" disabled={working} onClick={() => void setItemCancelled(item, item.status !== "cancelled")}>{item.status === "cancelled" ? <RefreshCw size={12} /> : <CircleSlash2 size={12} />} {item.status === "cancelled" ? "إعادة للخطة" : "إلغاء البند"}</button></>}</div> : null}
           </article>;
         })}{!selectedItems.length ? <div className="scripts-empty"><CalendarDays size={26} /><strong>التقويم فارغ</strong><p>ابدأ بأول أسبوع فقط: أربع قطع موزعة على الأعمدة، ثم راقب القدرة الفعلية للفريق.</p>{manager ? <Button type="button" onClick={() => setShowItemForm(true)}><PencilLine size={14} /> خطط أول محتوى</Button> : null}</div> : null}</div>
       </section>

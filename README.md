@@ -81,10 +81,10 @@ Only an active organization owner can list or mutate provider settings. Team mem
 ## Personal content test
 
 1. Sign in and create the owner workspace from `/tasks`.
-2. Open `/content`. Choose **Full request from Telegram** to paste an existing production request and review the extracted brief, timeline, links, and owners; or choose **Manual entry** to use the original form unchanged.
-3. Complete the review and publish date. Nothing from a pasted request is saved until **Approve and create production workflow** is selected. The owner account is assigned to all seven steps by default.
-4. Move linked tasks through the allowed states on `/tasks`. Completing a dependency unlocks the next eligible task automatically.
-5. The final publishing task is a manual confirmation until a verified Meta/platform integration is added.
+2. Open **Content management** and switch to **Execution**. Paste the complete request and every link into the single **Everything required and links** field; the stored request remains unchanged and links stay clickable.
+3. Set the publish deadline. If the raw material was already sent on Telegram, mark that one checkbox. Assignment and brand-reference controls remain under the optional advanced section and reuse the most recent owners by default.
+4. Select **Create and assign request** once. The editor and thumbnail designer receive independent tasks immediately when raw material is ready; otherwise only the recording/raw-material step blocks editing. Caption remains part of the content record instead of becoming another counted team task.
+5. Each member opens `/tasks` to see only the steps requiring their action. The final publishing step remains a manual confirmation until a verified Meta/platform integration is added.
 
 Telegram remains the raw-material inbox for now: paste the direct message/file link with the request. Direct uploads are deliberately deferred to the private Storage phase documented in `docs/roadmap.md`.
 
@@ -92,8 +92,8 @@ Telegram remains the raw-material inbox for now: paste the direct message/file l
 
 1. Open `/planning` and create a draft covering roughly one quarter with one commercial objective, audience, and optional offer/primary metric.
 2. Add two or three real content pillars with target quantities. Add only the first week to the calendar so capacity is tested before the quarter is filled.
-3. Give every calendar item a format, owner, publish time in Cairo, objective, platforms, and optional hook/CTA direction. Saving a plan item does not create tasks.
-4. Create or review the execution brief in `/content`, then link it from the calendar item. From that point, the calendar status follows the canonical content item instead of becoming a second workflow.
+3. Give every calendar item a title, format, publish time in Cairo, and one canonical request containing all instructions and inline links. Assignment and platform controls are optional advanced fields.
+4. Choose **calendar only** for an idea/date with no work, or **send to execution** to create the same canonical content request and compact task graph used by `/content`. The request is never re-entered in another section.
 5. Activate the plan only after its first four items exist. Open `/` and use the readiness panel to see which operating prerequisites are still missing.
 
 The database creates deduplicated in-app due-soon, overdue, and leadership-escalation notifications every ten minutes. The job remains silent while the workspace has only one active member, so owner testing does not generate fake team alerts.

@@ -48,6 +48,7 @@ type TeamPerson = {
   id: string;
   name: string;
   role: Membership["role"];
+  allowedSections: string[];
 };
 
 type Workspace = {
@@ -142,6 +143,17 @@ function taskMatchesAdvancedFilters(task: Task, filter: TaskFilter, requesterId:
   return true;
 }
 
+function taskBelongsToViewer(task: Task, currentUserId: string) {
+  return task.owner_id === currentUserId
+    || (task.status === "review" && task.created_by === currentUserId);
+}
+
+function taskNeedsViewerAction(task: Task, currentUserId: string) {
+  if (task.status === "review") return task.created_by === currentUserId;
+  return task.owner_id === currentUserId
+    && ["ready", "in_progress", "blocked"].includes(task.status);
+}
+
 function taskCompletionTimestamp(task: Task) {
   return new Date(task.completed_at ?? task.updated_at).getTime();
 }
@@ -173,7 +185,13 @@ function boardLaneForTasks(tasks: Task[], isContentWorkflow: boolean) {
   return "closed";
 }
 
-function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string, now: number) {
+function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string, now: number, personalOnly = false) {
+  if (personalOnly) {
+    if (filter === "mine" || filter === "active") return taskNeedsViewerAction(task, currentUserId);
+    if (filter === "overdue") return taskNeedsViewerAction(task, currentUserId) && isOverdue(task, now);
+    if (filter === "completed") return task.owner_id === currentUserId && taskIsClosed(task);
+    return taskBelongsToViewer(task, currentUserId);
+  }
   if (filter === "active") return !taskIsClosed(task);
   if (filter === "mine") {
     return !taskIsClosed(task)
@@ -182,6 +200,19 @@ function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string
   if (filter === "overdue") return isOverdue(task, now);
   if (filter === "completed") return taskIsClosed(task);
   return true;
+}
+
+function personalActionLabel(task: Task, nextStatus: TaskStatus) {
+  if (nextStatus === "in_progress") {
+    return task.status === "blocked" ? "تم حل العائق — أكمل" : "استلمت وبدأت";
+  }
+  if (nextStatus === "review") return "تم التسليم للمراجعة";
+  if (nextStatus === "done") {
+    if (task.status === "review") return "اعتماد النتيجة";
+    return task.content_step === "publishing" ? "تم النشر" : "تم التسليم";
+  }
+  if (nextStatus === "blocked") return "عندي عائق";
+  return taskTransitionLabel(task.status, nextStatus);
 }
 
 function contentWorkflowMatchesFilter(tasks: Task[], filter: TaskFilter, currentUserId: string, now: number) {
@@ -212,6 +243,7 @@ export function TasksWorkspace() {
   const configured = isSupabaseConfigured();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [contentRequests, setContentRequests] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
@@ -220,17 +252,19 @@ export function TasksWorkspace() {
   const [newTaskOwnerId, setNewTaskOwnerId] = useState("");
   const [newTaskRequiresReview, setNewTaskRequiresReview] = useState(false);
   const [capacityWarning, setCapacityWarning] = useState<{ submission: TaskSubmission; snapshot: CapacitySnapshot } | null>(null);
-  const [filter, setFilter] = useState<TaskFilter>("active");
+  const [filter, setFilter] = useState<TaskFilter>("mine");
   const [requesterFilter, setRequesterFilter] = useState("all");
   const [dateRange, setDateRange] = useState<TaskDateRange>({ from: "", to: "" });
   const [linkedTaskId] = useState(() => currentUuidDeepLink("task", "task"));
   const [renderNow, setRenderNow] = useState(() => Date.now());
   const [defaultDue] = useState(() => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16));
   const openedTaskLink = useRef<string | null>(null);
+  const visibleContentIdsRef = useRef<Set<string>>(new Set());
 
   const clearWorkspace = useCallback(() => {
     setWorkspace(null);
     setTasks([]);
+    setContentRequests({});
   }, []);
 
   const clearTransientState = useCallback(() => setNotice(null), []);
@@ -247,6 +281,19 @@ export function TasksWorkspace() {
 
     if (tasksError) throw tasksError;
     setTasks(data ?? []);
+  }, []);
+
+  const fetchContentRequests = useCallback(async (organizationId: string, contentItemIds: string[]) => {
+    if (!contentItemIds.length) return null;
+    const { data, error: contentError } = await getSupabaseBrowserClient()
+      .from("content_items")
+      .select("id, intake_request")
+      .eq("organization_id", organizationId)
+      .in("id", contentItemIds);
+
+    if (contentError) return null;
+    const rowsById = new Map((data ?? []).map((item) => [item.id, item.intake_request?.trim() || null]));
+    return Object.fromEntries(contentItemIds.map((contentItemId) => [contentItemId, rowsById.get(contentItemId) ?? null]));
   }, []);
 
   const loadWorkspace = useCallback(async (activeSession: Session) => {
@@ -267,6 +314,7 @@ export function TasksWorkspace() {
       if (!membership) {
         setWorkspace(null);
         setTasks([]);
+        setContentRequests({});
         return;
       }
 
@@ -274,7 +322,7 @@ export function TasksWorkspace() {
         supabase.from("organizations").select("*").eq("id", membership.organization_id).single(),
         supabase
           .from("memberships")
-          .select("user_id, role")
+          .select("user_id, role, allowed_sections")
           .eq("organization_id", membership.organization_id)
           .eq("status", "active"),
       ]);
@@ -292,6 +340,7 @@ export function TasksWorkspace() {
       const people = (memberRows ?? []).map((member) => ({
         id: member.user_id,
         role: member.role,
+        allowedSections: member.allowed_sections,
         name:
           profiles?.find((profile) => profile.id === member.user_id)?.full_name
           ?? (member.user_id === activeSession.user.id ? activeSession.user.email : null)
@@ -342,35 +391,90 @@ export function TasksWorkspace() {
     return () => window.clearInterval(interval);
   }, []);
 
+  const manager = canManageTasks(workspace?.membership.role ?? null);
+  const platformAdmin = canManageAllTaskExecution(workspace?.membership.role ?? null);
+  const personalView = !manager || filter === "mine";
+
   const boardEntries = useMemo(() => {
     if (!session) return [];
     const grouped = new Map<string, Task[]>();
     for (const task of tasks) {
-      const key = task.content_item_id ? `content:${task.content_item_id}` : `task:${task.id}`;
+      if (personalView && !taskBelongsToViewer(task, session.user.id) && task.id !== linkedTaskId) continue;
+      const key = !personalView && task.content_item_id ? `content:${task.content_item_id}` : `task:${task.id}`;
       grouped.set(key, [...(grouped.get(key) ?? []), task]);
     }
     const entries = [...grouped.entries()].flatMap(([id, entryTasks]): BoardEntry[] => {
       const contentItemId = entryTasks[0]?.content_item_id ?? null;
-      const isContentWorkflow = Boolean(contentItemId);
+      const isContentWorkflow = Boolean(contentItemId) && !personalView;
       const orderedTasks = isContentWorkflow ? sortContentTasks(entryTasks) : entryTasks;
       const primaryTask = orderedTasks[0];
       if (!primaryTask) return [];
       const linkedEntry = Boolean(linkedTaskId && orderedTasks.some((task) => task.id === linkedTaskId));
       const matches = linkedEntry || (isContentWorkflow
         ? contentWorkflowMatchesFilter(orderedTasks, filter, session.user.id, renderNow)
-        : taskMatchesFilter(primaryTask, filter, session.user.id, renderNow));
-      const matchesAdvancedFilters = orderedTasks.some((task) =>
+        : taskMatchesFilter(primaryTask, filter, session.user.id, renderNow, personalView));
+      const matchesAdvancedFilters = personalView || orderedTasks.some((task) =>
         taskMatchesAdvancedFilters(task, filter, requesterFilter, dateRange));
       if (!matches || (!linkedEntry && !matchesAdvancedFilters)) return [];
       return [{
         id,
         contentItemId,
         tasks: orderedTasks,
-        laneId: boardLaneForTasks(orderedTasks, isContentWorkflow),
+        laneId: personalView ? filter === "completed" ? "closed" : "focus" : boardLaneForTasks(orderedTasks, isContentWorkflow),
       }];
     });
     return sortBoardEntries(entries);
-  }, [dateRange, filter, linkedTaskId, renderNow, requesterFilter, session, tasks]);
+  }, [dateRange, filter, linkedTaskId, personalView, renderNow, requesterFilter, session, tasks]);
+
+  const visibleContentItemIds = useMemo(() => [...new Set(boardEntries
+    .map((entry) => entry.contentItemId)
+    .filter((contentItemId): contentItemId is string => Boolean(contentItemId)))], [boardEntries]);
+  const visibleContentItemKey = visibleContentItemIds.join(",");
+
+  useEffect(() => {
+    visibleContentIdsRef.current = new Set(visibleContentItemKey ? visibleContentItemKey.split(",") : []);
+  }, [visibleContentItemKey]);
+
+  useEffect(() => {
+    if (!workspace || !visibleContentItemKey) return;
+    let active = true;
+    void fetchContentRequests(workspace.organization.id, visibleContentItemKey.split(",")).then((requests) => {
+      if (active && requests) setContentRequests((current) => ({ ...current, ...requests }));
+    });
+    return () => {
+      active = false;
+    };
+  }, [fetchContentRequests, visibleContentItemKey, workspace]);
+
+  useEffect(() => {
+    if (!workspace) return;
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`task-content-requests:${workspace.organization.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "content_items",
+          filter: `organization_id=eq.${workspace.organization.id}`,
+        },
+        (payload) => {
+          const nextRecord = payload.new as { id?: string };
+          const previousRecord = payload.old as { id?: string };
+          const changedId = nextRecord.id ?? previousRecord.id;
+          if (!changedId || !visibleContentIdsRef.current.has(changedId)) return;
+          void fetchContentRequests(workspace.organization.id, [changedId]).then((requests) => {
+            if (requests) setContentRequests((current) => ({ ...current, ...requests }));
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchContentRequests, workspace]);
 
   useEffect(() => {
     if (!linkedTaskId || openedTaskLink.current === linkedTaskId || !tasks.some((task) => task.id === linkedTaskId)) return;
@@ -512,25 +616,38 @@ export function TasksWorkspace() {
     );
   }
 
-  const manager = canManageTasks(workspace.membership.role);
-  const platformAdmin = canManageAllTaskExecution(workspace.membership.role);
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
+  const assignablePeople = workspace.people.filter((person) => person.role !== "viewer"
+    && (person.role === "owner" || person.allowedSections.includes("tasks")));
   const linkedTask = linkedTaskId ? tasks.find((task) => task.id === linkedTaskId) ?? null : null;
   const linkedLaneId = linkedTaskId ? boardEntries.find((entry) => entry.tasks.some((task) => task.id === linkedTaskId))?.laneId : null;
   const advancedFiltersActive = requesterFilter !== "all" || Boolean(dateRange.from || dateRange.to);
-  const visibleLanes = boardLanes.filter((lane) => {
+  const personalLaneLabel = filter === "completed"
+    ? "اللي خلصته"
+    : filter === "overdue"
+      ? "المتأخر عندي"
+      : "المطلوب مني الآن";
+  const availableLanes = personalView
+    ? [{ id: filter === "completed" ? "closed" : "focus", label: personalLaneLabel }]
+    : boardLanes;
+  const visibleLanes = availableLanes.filter((lane) => {
     if (linkedLaneId === lane.id) return true;
+    if (personalView) return boardEntries.some((entry) => entry.laneId === lane.id);
     if (filter === "all" && !advancedFiltersActive) return true;
     return boardEntries.some((entry) => entry.laneId === lane.id);
   });
   const filteredTaskCount = boardEntries.reduce((total, entry) => total + entry.tasks.length, 0);
+  const myOpenTaskCount = tasks.filter((task) => taskNeedsViewerAction(task, session.user.id)).length;
+  const quickFilters: TaskFilter[] = manager
+    ? ["mine", "active", "overdue", "completed", "all"]
+    : ["mine", "overdue", "completed"];
   return (
     <section className="tasks-workspace">
       <div className="workspace-toolbar">
-        <div><p className="overline">{workspace.organization.name}</p><h2>بورد التنفيذ</h2><p>{tasks.length ? `${tasks.length} مهمة تنفيذ فعلية — بوابات الـBrief والكابشن والاعتماد لا تُحسب هنا` : "لا توجد مهام تنفيذ فعلية الآن."}</p></div>
+        <div><p className="overline">{workspace.organization.name}</p><h2>{manager ? "مهامي والفريق" : "مهامي"}</h2><p>{manager ? `عندك ${myOpenTaskCount.toLocaleString("ar-EG")} مهمة تحتاج إجراء منك. افتح عرض الفريق فقط عند المتابعة.` : myOpenTaskCount ? `عندك ${myOpenTaskCount.toLocaleString("ar-EG")} مهمة مطلوبة منك الآن. افتح المهمة ونفّذ الإجراء التالي فقط.` : "لا يوجد شيء مطلوب منك الآن."}</p></div>
         <div className="toolbar-actions">
           <div className="segmented-control" aria-label="تصفية المهام">
-            {(["active", "mine", "overdue", "completed", "all"] as TaskFilter[]).map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "active" ? "الجاري" : value === "mine" ? "مهامي" : value === "overdue" ? "متأخرة" : value === "completed" ? "المكتمل" : "الكل"}</button>)}
+            {quickFilters.map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "mine" ? "المطلوب مني" : value === "active" ? "شغل الفريق" : value === "overdue" ? manager ? "متأخر عند الفريق" : "المتأخر عندي" : value === "completed" ? manager ? "مكتمل الفريق" : "اللي خلصته" : "كل الفريق"}</button>)}
           </div>
           <button className="icon-button" type="button" aria-label="تحديث المهام" onClick={() => void refreshTasks(workspace.organization.id)}><RefreshCw size={17} /></button>
           {manager ? <Button type="button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> مهمة جديدة</Button> : null}
@@ -541,7 +658,7 @@ export function TasksWorkspace() {
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
       {linkedTask ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح المهمة المطلوبة مباشرة: <strong>{taskReference(linkedTask.id)}</strong> — الكارت المحدد ظاهر بإطار واضح.</p> : linkedTaskId ? <p className="form-notice error" role="alert">المهمة المطلوبة غير موجودة أو ليست ضمن صلاحيات حسابك.</p> : null}
 
-      <div className="panel task-filter-panel" aria-label="فلترة بورد المهام">
+      {manager && !personalView ? <div className="panel task-filter-panel" aria-label="فلترة بورد المهام">
         <div className="task-filter-heading">
           <CalendarClock size={19} aria-hidden="true" />
           <div><strong>فلترة أدق</strong><small role="status">ظاهر الآن {filteredTaskCount.toLocaleString("ar-EG")} مهمة</small></div>
@@ -563,49 +680,59 @@ export function TasksWorkspace() {
         </label>
         <button className="task-filter-reset" type="button" disabled={!advancedFiltersActive} onClick={() => { setRequesterFilter("all"); setDateRange({ from: "", to: "" }); }}>مسح الفلاتر الإضافية</button>
         <small className="task-filter-note">الفترة تعتمد على موعد التسليم، وعند اختيار «المكتمل» تعتمد على تاريخ إكمال المهمة.</small>
-      </div>
+      </div> : null}
 
       {showCreate && manager ? (
         <form className="panel task-create-form" onSubmit={createTask} onChange={() => setCapacityWarning(null)}>
-          <div className="section-heading"><div><p className="overline">تعريف واضح قبل التنفيذ</p><h2>إنشاء مهمة حقيقية</h2></div><div className="toolbar-actions"><Button type="button" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent("workspace-ai:ask", { detail: { question: "راجع تقويم الفريق والمهام المفتوحة، وساعدني أختار مسؤولًا وموعدًا واقعيين للمهمة الجديدة. وضّح أي حمل زائد، ولا تغيّر أي بيانات من نفسك." } }))}><Bot size={14} /> اسأل AI قبل الإسناد</Button><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div></div>
+          <div className="section-heading"><div><p className="overline">طلب مباشر</p><h2>إسناد مهمة</h2></div><div className="toolbar-actions"><Button type="button" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent("workspace-ai:ask", { detail: { question: "راجع تقويم الفريق والمهام المفتوحة، وساعدني أختار مسؤولًا وموعدًا واقعيين للمهمة الجديدة. وضّح أي حمل زائد، ولا تغيّر أي بيانات من نفسك." } }))}><Bot size={14} /> اسأل AI قبل الإسناد</Button><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div></div>
           <div className="form-grid">
             <label><span>عنوان المهمة</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: مونتاج ريلز خطة التداول" /></label>
-            <label><span>المسؤول المباشر</span><select name="owner_id" value={newTaskOwnerId || session.user.id} required onChange={(event) => { setNewTaskOwnerId(event.target.value); if (event.target.value === session.user.id) setNewTaskRequiresReview(false); }}>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+            <label><span>المسؤول المباشر</span><select name="owner_id" value={newTaskOwnerId || session.user.id} required onChange={(event) => { setNewTaskOwnerId(event.target.value); if (event.target.value === session.user.id) setNewTaskRequiresReview(false); }}>{assignablePeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
             <label><span>الموعد النهائي</span><input name="due_at" type="datetime-local" defaultValue={defaultDue} required /></label>
-            <label><span>الأولوية</span><select name="priority" defaultValue="normal">{(Object.keys(taskPriorityConfig) as TaskPriority[]).map((priority) => <option value={priority} key={priority}>{taskPriorityConfig[priority].label}</option>)}</select></label>
-            <label><span>الوقت المتوقع</span><select name="estimated_minutes" defaultValue="60"><option value="30">30 دقيقة</option><option value="60">ساعة</option><option value="90">ساعة ونصف</option><option value="120">ساعتان</option><option value="180">3 ساعات</option><option value="240">4 ساعات</option><option value="360">6 ساعات</option></select></label>
-            <label className="full-field"><span>شرح مختصر</span><textarea name="description" maxLength={5000} rows={3} placeholder="السياق والملفات المطلوبة وأي ملاحظات مهمة" /></label>
-            <label className="full-field"><span>معيار القبول — اختياري</span><textarea name="acceptance_criteria" maxLength={4000} rows={3} placeholder="اكتبه فقط لو النتيجة المطلوبة تحتاج شروطًا واضحة، مثل المقاس أو صيغة التسليم" /></label>
-            <fieldset className="full-field task-review-choice">
-              <legend>هل المهمة تحتاج مراجعة؟</legend>
-              <div className="task-review-option">
-                <input aria-label="تحتاج اعتماد طالب المهمة قبل الإغلاق" type="checkbox" checked={newTaskRequiresReview} disabled={(newTaskOwnerId || session.user.id) === session.user.id} onChange={(event) => setNewTaskRequiresReview(event.target.checked)} />
-                <span><strong>تحتاج اعتماد طالب المهمة قبل الإغلاق</strong><small>{(newTaskOwnerId || session.user.id) === session.user.id ? "غير متاح عند إسناد المهمة لنفسك." : "العضو يرسلها للمراجعة، وأنت توافق أو تعيدها للتنفيذ."}</small></span>
+            <label className="full-field"><span>كل المطلوب والروابط</span><textarea name="description" required minLength={5} maxLength={5000} rows={7} placeholder="اكتب الطلب كما سترسله في الجروب: الشرح، الملفات، الروابط، وأي ملاحظات في نفس الخانة" /><small>سيظهر النص نفسه للمنفذ داخل صفحة المهمة، وتبقى الروابط في موضعها وقابلة للفتح.</small></label>
+            <details className="content-request-advanced full-field">
+              <summary>الأولوية والوقت والمراجعة — اختياري</summary>
+              <div className="content-request-advanced-body form-grid">
+                <label><span>الأولوية</span><select name="priority" defaultValue="normal">{(Object.keys(taskPriorityConfig) as TaskPriority[]).map((priority) => <option value={priority} key={priority}>{taskPriorityConfig[priority].label}</option>)}</select></label>
+                <label><span>الوقت المتوقع</span><select name="estimated_minutes" defaultValue="60"><option value="30">30 دقيقة</option><option value="60">ساعة</option><option value="90">ساعة ونصف</option><option value="120">ساعتان</option><option value="180">3 ساعات</option><option value="240">4 ساعات</option><option value="360">6 ساعات</option></select></label>
+                <label className="full-field"><span>معيار القبول — اختياري</span><textarea name="acceptance_criteria" maxLength={4000} rows={3} placeholder="اكتبه فقط لو النتيجة المطلوبة تحتاج شروطًا واضحة، مثل المقاس أو صيغة التسليم" /></label>
+                <fieldset className="full-field task-review-choice">
+                  <legend>هل المهمة تحتاج مراجعة؟</legend>
+                  <div className="task-review-option">
+                    <input aria-label="تحتاج اعتماد طالب المهمة قبل الإغلاق" type="checkbox" checked={newTaskRequiresReview} disabled={(newTaskOwnerId || session.user.id) === session.user.id} onChange={(event) => setNewTaskRequiresReview(event.target.checked)} />
+                    <span><strong>تحتاج اعتماد طالب المهمة قبل الإغلاق</strong><small>{(newTaskOwnerId || session.user.id) === session.user.id ? "غير متاح عند إسناد المهمة لنفسك." : "العضو يرسلها للمراجعة، وأنت توافق أو تعيدها للتنفيذ."}</small></span>
+                  </div>
+                  <small>لو لم تفعّل هذا الاختيار، يقدر المسؤول الضغط على «تم التنفيذ» وإغلاق المهمة مباشرة.</small>
+                </fieldset>
               </div>
-              <small>لو لم تفعّل هذا الاختيار، يقدر المسؤول الضغط على «تم التنفيذ» وإغلاق المهمة مباشرة.</small>
-            </fieldset>
+            </details>
           </div>
           {capacityWarning ? <div className="capacity-decision" role="alert"><AlertTriangle size={18} /><div><strong>المسؤول عليه حمل زائد في هذا اليوم</strong><p>بعد الإسناد سيصبح الحمل {capacityWarning.snapshot.projected_minutes.toLocaleString("ar-EG")} من {capacityWarning.snapshot.daily_capacity_minutes.toLocaleString("ar-EG")} دقيقة، وعدد البنود {capacityWarning.snapshot.projected_count.toLocaleString("ar-EG")} من {capacityWarning.snapshot.max_parallel_tasks.toLocaleString("ar-EG")}.</p><small>غيّر الموعد أو المسؤول من الأعلى، أو أكمل عن قصد.</small></div><div><button className="text-button" type="button" onClick={() => setCapacityWarning(null)}>تعديل الإسناد</button><Button type="button" variant="secondary" disabled={working} onClick={() => void persistTask(capacityWarning.submission, true)}>إسناد رغم الضغط</Button></div></div> : null}
-          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <CheckCircle2 size={16} />} حفظ المهمة</Button><small>ستظهر مباشرة داخل «شغل مطلوب تنفيذه»، وكل تغيير بعدها مسموح ومسجّل.</small></div>
+          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <CheckCircle2 size={16} />} إسناد المهمة</Button><small>ستظهر فورًا للمسؤول داخل «مهامي»، وكل تغيير بعدها محفوظ في السجل.</small></div>
         </form>
       ) : null}
 
-      {visibleLanes.length ? <div className="kanban-board" aria-label="بورد مهام الفريق">
+      {visibleLanes.length ? <div className="kanban-board" aria-label={personalView ? "مهامي" : "بورد مهام الفريق"}>
         {visibleLanes.map((lane) => {
           const laneEntries = boardEntries.filter((entry) => entry.laneId === lane.id);
+          const laneTone = lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info";
           return (
             <section className="kanban-column" key={lane.id} aria-labelledby={`column-${lane.id}`}>
-              <header><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info"}>{lane.label}</StatusBadge><strong id={`column-${lane.id}`}>{laneEntries.length}</strong></header>
+              <header><StatusBadge tone={laneTone}>{lane.label}</StatusBadge><strong id={`column-${lane.id}`}>{laneEntries.length}</strong></header>
               <div className="kanban-stack">
                 {laneEntries.map((entry) => {
-                  if (entry.contentItemId) {
+                  if (entry.contentItemId && !personalView) {
                     const overdueTasks = entry.tasks.filter((task) => isOverdue(task, renderNow));
                     const completedTasks = entry.tasks.filter(taskIsClosed).length;
                     const progress = Math.round((completedTasks / entry.tasks.length) * 100);
+                    const contentRequest = contentRequests[entry.contentItemId]?.trim()
+                      || entry.tasks.find((task) => task.description?.trim())?.description?.trim()
+                      || "";
                     return <article className={`task-card content-workflow-group ${overdueTasks.length ? "task-overdue" : ""}`} data-state={lane.id} key={entry.id}>
                       <div className="task-card-top"><span className="workflow-task-label"><Film size={12} /> محتوى · {entry.tasks.length} خطوات تنفيذ</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info"}>{lane.label}</StatusBadge></div>
                       <h3>{contentGroupTitle(entry.tasks[0])}</h3>
                       <a className="task-production-link" href={`/content?content=${entry.contentItemId}#content-${entry.contentItemId}`}><FileText size={12} /> فتح ملف المحتوى ونتائج التنفيذ</a>
+                      {contentRequest ? <CollapsibleText text={contentRequest} maxCharacters={220} className="task-description" /> : null}
                       <div className="content-workflow-progress">
                         <div><span>تقدم التنفيذ</span><strong>{progress}%</strong></div>
                         <span className="content-workflow-progress-track" role="progressbar" aria-label="نسبة تقدم ملف المحتوى" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></span>
@@ -618,10 +745,11 @@ export function TasksWorkspace() {
                         const completed = taskIsClosed(task);
                         const isMine = task.owner_id === session.user.id && !completed;
                         const isRequester = task.created_by === session.user.id;
-                        const canOpenAction = task.owner_id === session.user.id
-                          || (task.status === "review" && (isRequester || platformAdmin));
+                        const canOpenAction = task.status === "review"
+                          ? isRequester || platformAdmin
+                          : task.owner_id === session.user.id;
                         const actionLabel = task.status === "review"
-                          ? platformAdmin ? "فتح للمراجعة والاعتماد" : "بانتظار اعتماد الإدارة"
+                          ? canOpenAction ? "فتح للمراجعة والاعتماد" : "بانتظار مراجعة طالب المهمة"
                           : task.content_step === "publishing"
                             ? "فتح وتأكيد النشر"
                             : "فتح وتسليم المهمة";
@@ -634,8 +762,8 @@ export function TasksWorkspace() {
                           </div>
                           <div className="content-subtask-action">
                             <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
-                            {!completed && task.status !== "backlog" && canOpenAction && !(task.status === "review" && !platformAdmin)
-                              ? <a href={`/content?content=${entry.contentItemId}#content-${entry.contentItemId}`}><FileText size={12} /> {actionLabel}</a>
+                            {!completed && task.status !== "backlog" && canOpenAction
+                              ? <a href={taskDeepLink(task.id)}><FileText size={12} /> {actionLabel}</a>
                               : !completed ? <small>{task.status === "backlog" ? "تفتح تلقائيًا بعد الخطوة السابقة" : actionLabel}</small> : null}
                           </div>
                         </section>;
@@ -653,34 +781,38 @@ export function TasksWorkspace() {
                     isRequester,
                     role: workspace.membership.role,
                   });
-                  const options = transitions.filter((option) =>
-                    (!task.launch_deliverable_id || option !== "review" || task.status === "review")
-                    && (!task.content_step || !["caption", "design", "scheduling", "publishing"].includes(task.content_step)
-                      || option !== "review" || task.status === "review")
-                  );
+                  const options = task.content_item_id
+                    ? transitions.filter((option) => ["in_progress", "blocked"].includes(option))
+                    : transitions.filter((option) =>
+                      (!task.launch_deliverable_id || option !== "review" || task.status === "review")
+                      && (!task.content_step || !["caption", "design", "scheduling", "publishing"].includes(task.content_step)
+                        || option !== "review" || task.status === "review")
+                    );
                   const canMove = !task.crm_contact_id && options.length > 0;
                   const requester = peopleById.get(task.created_by);
+                  const taskDescription = task.content_item_id
+                    ? contentRequests[task.content_item_id]?.trim() || task.description?.trim() || ""
+                    : task.description?.trim() || "";
                   return (
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""}`} data-priority={task.priority} data-status={task.status} data-direct-target={linkedTaskId === task.id || undefined} id={taskDomId(task.id)} tabIndex={linkedTaskId === task.id ? -1 : undefined} key={task.id}>
-                      <div className="task-card-top"><span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small className="task-reference">{taskReference(task.id)}</small><small>v{task.version}</small></div>
+                      <div className="task-card-top">{!personalView || ["high", "urgent"].includes(task.priority) ? <span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span> : null}<StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small className="task-reference">{taskReference(task.id)}</small>{!personalView ? <small>v{task.version}</small> : null}</div>
                       {linkedTaskId === task.id ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
-                      {task.content_item_id ? <a className="task-production-link" href={`/content?content=${task.content_item_id}#content-${task.content_item_id}`}><FileText size={12} /> فتح ملف المحتوى وتسليم النتيجة</a> : null}
                       {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
                       {task.launch_deliverable_id ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · بند تنفيذي</span> : null}
                       {task.launch_deliverable_id ? <a className="task-production-link" href={`/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`}><FileText size={12} /> فتح التفاصيل وتسليم النتيجة</a> : null}
                       {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> CRM · متابعة عميل</span> : null}
                       {task.crm_contact_id ? <a className="task-production-link" href={`/crm/${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
                       <h3>{task.title}</h3>
-                      <a className="task-open-link" href={taskDeepLink(task.id)}><FileText size={13} /> فتح صفحة المهمة {taskReference(task.id)}</a>
-                      {task.description ? <CollapsibleText text={task.description} maxCharacters={170} className="task-description" /> : null}
+                      <a className="task-open-link" href={taskDeepLink(task.id)}><FileText size={13} /> {task.content_item_id ? "فتح وتسليم المهمة" : "فتح صفحة المهمة"} {taskReference(task.id)}</a>
+                      {taskDescription ? <CollapsibleText text={taskDescription} maxCharacters={170} className="task-description" /> : null}
                       {task.acceptance_criteria.trim() ? <div className="acceptance-note"><CheckCircle2 size={14} /><span><strong>معيار القبول</strong><CollapsibleText text={task.acceptance_criteria} maxCharacters={130} /></span></div> : null}
-                      {task.requires_review ? <p className="task-review-rule"><ShieldCheck size={13} /> تحتاج اعتماد {requester?.name ?? "طالب المهمة"} قبل الإغلاق.</p> : null}
-                      <dl className="task-meta"><div><dt><CircleUserRound size={14} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div><div><dt><UserRoundCheck size={14} /> طالب المهمة</dt><dd>{requester?.name ?? "عضو فريق"}</dd></div><div><dt><CalendarClock size={14} /> الموعد</dt><dd>{formatDeadline(task.due_at)}</dd></div></dl>
+                      {task.requires_review ? <p className="task-review-rule"><ShieldCheck size={13} /> بعد التسليم يراجعها {requester?.name ?? "طالب المهمة"}.</p> : null}
+                      <dl className="task-meta">{!personalView ? <div><dt><CircleUserRound size={14} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div> : null}<div><dt><UserRoundCheck size={14} /> طلبها</dt><dd>{requester?.name ?? "عضو فريق"}</dd></div><div><dt><CalendarClock size={14} /> موعد التسليم</dt><dd>{formatDeadline(task.due_at)}</dd></div></dl>
                       {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة منذ {formatOverdueDuration(task, renderNow)}</span> : null}
                       {task.crm_contact_id
-                        ? <p className="crm-task-guard"><ShieldCheck size={13} /> تتحرك هذه المهمة تلقائيًا عند تسجيل النتيجة من CRM.</p>
-                        : <>{canMove ? <label className="status-select"><span>الإجراء التالي</span><select value={task.status} disabled={working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}><option value={task.status}>{taskStatusLabel(task.status, task.content_step)} — الحالة الحالية</option>{options.map((option) => <option key={option} value={option}>{taskTransitionLabel(task.status, option)}</option>)}</select></label> : null}{task.requires_review && task.status === "review" && isAssignee ? <small className="task-review-waiting">تم التسليم. بانتظار قرار طالب المهمة، ولا يمكنك اعتمادها بنفسك.</small> : task.requires_review && task.status === "review" && canMove ? <small className="task-review-waiting reviewer">راجع النتيجة ثم اعتمدها، أو افتح صفحة المهمة لكتابة طلب التعديل وإرجاعها للتنفيذ.</small> : !isAssignee && !canMove && !taskIsClosed(task) ? <small className="task-review-waiting">التنفيذ متاح للمسؤول المسند إليه فقط. المتابعة وطلب التعديل من صفحة المهمة.</small> : null}</>}
+                        ? <p className="crm-task-guard"><ShieldCheck size={13} /> سجّل نتيجة التواصل من ملف العميل، والمهمة ستتحدث تلقائيًا.</p>
+                        : <>{canMove ? personalView ? <div className="form-actions" aria-label="الإجراء التالي">{options.map((option) => <Button type="button" variant={option === "blocked" ? "secondary" : "primary"} disabled={working} onClick={() => void changeStatus(task, option)} key={option}>{personalActionLabel(task, option)}</Button>)}</div> : <label className="status-select"><span>الإجراء التالي</span><select value={task.status} disabled={working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}><option value={task.status}>{taskStatusLabel(task.status, task.content_step)} — الحالة الحالية</option>{options.map((option) => <option key={option} value={option}>{taskTransitionLabel(task.status, option)}</option>)}</select></label> : null}{task.requires_review && task.status === "review" && isAssignee ? <small className="task-review-waiting">تم التسليم. لا يوجد إجراء آخر عليك الآن، ولا يمكنك اعتمادها بنفسك.</small> : task.requires_review && task.status === "review" && canMove ? <small className="task-review-waiting reviewer">النتيجة جاهزة لك: اعتمدها من الزر، أو افتح صفحة المهمة واكتب التعديل المطلوب.</small> : !isAssignee && !canMove && !taskIsClosed(task) ? <small className="task-review-waiting">هذه المهمة ليست مسندة إليك. يمكنك متابعتها أو طلب تعديل من صفحتها.</small> : null}</>}
                     </article>
                   );
                 })}
@@ -689,7 +821,7 @@ export function TasksWorkspace() {
             </section>
           );
         })}
-      </div> : <div className="task-filter-empty" role="status"><CalendarClock size={24} /><div><strong>لا توجد مهام مطابقة</strong><p>غيّر الحالة أو الفترة الزمنية أو طالب المهمة لعرض نتائج أخرى.</p></div><button className="text-button" type="button" onClick={() => { setFilter("all"); setRequesterFilter("all"); setDateRange({ from: "", to: "" }); }}>عرض كل المهام</button></div>}
+      </div> : <div className="task-filter-empty" role="status"><CalendarClock size={24} /><div><strong>{personalView ? "لا يوجد شيء مطلوب منك هنا" : "لا توجد مهام مطابقة"}</strong><p>{personalView ? "عندما تُسند إليك مهمة ستظهر هنا ومعها المطلوب والموعد وزر الإجراء التالي." : "غيّر الحالة أو الفترة الزمنية أو طالب المهمة لعرض نتائج أخرى."}</p></div>{filter !== "mine" ? <button className="text-button" type="button" onClick={() => { setFilter("mine"); setRequesterFilter("all"); setDateRange({ from: "", to: "" }); }}>العودة إلى مهامي</button> : manager ? <button className="text-button" type="button" onClick={() => setFilter("active")}>فتح شغل الفريق</button> : null}</div>}
     </section>
   );
 }

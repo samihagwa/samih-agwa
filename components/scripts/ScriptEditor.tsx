@@ -17,7 +17,7 @@ type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
 type Script = Tables<"scripts">;
 type ScriptVersion = Tables<"script_versions">;
-type Person = { id: string; name: string; role: Membership["role"] };
+type Person = { id: string; name: string; role: Membership["role"]; allowedSections: string[] };
 type Workspace = { organization: Organization; membership: Membership; people: Person[]; storyBank: string[]; script: Script; versions: ScriptVersion[] };
 type WritingMode = "idea" | "reference" | "improve";
 type AiScope = "script_variants" | "hooks" | "production_pack" | "recording" | "editing" | "thumbnail" | "caption";
@@ -49,6 +49,10 @@ function localDateTime(date: Date) {
 
 function thumbnailOptionText(option: ThumbnailOption) {
   return `النص على الغلاف: ${option.cover_text}\nالاتجاه البصري: ${option.visual_direction}\nصلته بالاسكريبت: ${option.script_connection}`;
+}
+
+function canReceiveTasks(person: Person) {
+  return person.role !== "viewer" && (person.role === "owner" || person.allowedSections.includes("tasks"));
 }
 
 async function invokeFunction(name: string, body: Record<string, unknown>) {
@@ -104,9 +108,13 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     const loadedScript = scriptResult.data;
     setWorkspace({ ...base, script: loadedScript, versions: versionsResult.data ?? [] });
     setForm(formFromScript(loadedScript));
-    setContentCreatorId((value) => value || loadedScript.assigned_to);
-    const fallback = base.people.find((person) => person.role === "owner")?.id ?? base.membership.user_id;
-    setEditingOwnerId((value) => value || fallback); setThumbnailOwnerId((value) => value || fallback); setPublishingOwnerId((value) => value || fallback);
+    const assignablePeople = base.people.filter(canReceiveTasks);
+    const assignableIds = new Set(assignablePeople.map((person) => person.id));
+    const fallback = assignablePeople.find((person) => person.role === "owner")?.id ?? assignablePeople[0]?.id ?? "";
+    setContentCreatorId(assignableIds.has(loadedScript.assigned_to) ? loadedScript.assigned_to : fallback);
+    setEditingOwnerId((value) => assignableIds.has(value) ? value : fallback);
+    setThumbnailOwnerId((value) => assignableIds.has(value) ? value : fallback);
+    setPublishingOwnerId((value) => assignableIds.has(value) ? value : fallback);
   }, [scriptId]);
 
   const loadWorkspace = useCallback(async (activeSession: Session) => {
@@ -127,7 +135,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
       const { data: profiles, error: profilesError } = ids.length ? await supabase.from("profiles").select("id, full_name").in("id", ids) : { data: [], error: null };
       if (profilesError) throw profilesError;
       const people = (membershipsResult.data ?? []).map((row) => ({
-        id: row.user_id, role: row.role,
+        id: row.user_id, role: row.role, allowedSections: row.allowed_sections,
         name: profiles?.find((profile) => profile.id === row.user_id)?.full_name ?? (row.user_id === activeSession.user.id ? activeSession.user.email : null) ?? "عضو فريق",
       }));
       await loadScriptRows({ organization: organizationResult.data, membership, people, storyBank: voiceProfileResult.data?.story_bank ?? [] });
@@ -145,7 +153,9 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   }, []);
 
   const assignedWriter = Boolean(workspace && session && workspace.script.assigned_to === session.user.id);
-  const readOnly = !assignedWriter || workspace?.script.status === "handed_off" || workspace?.script.status === "archived";
+  const canWriteScript = assignedWriter && workspace?.membership.role !== "viewer";
+  const readOnly = !canWriteScript || workspace?.script.status === "handed_off" || workspace?.script.status === "archived";
+  const assignablePeople = useMemo(() => workspace?.people.filter(canReceiveTasks) ?? [], [workspace?.people]);
   const wordCount = useMemo(() => form?.spoken_script.trim().split(/\s+/).filter(Boolean).length ?? 0, [form?.spoken_script]);
   const estimatedSeconds = Math.max(0, Math.round(wordCount / 2.15));
   const writingHasUnsavedChanges = useMemo(() => {
@@ -182,7 +192,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   }
 
   async function changeStatus(status: "draft" | "ready_to_record" | "archived") {
-    if (!workspace || !form) return;
+    if (!workspace || !form || !canWriteScript) return;
     if (writingHasUnsavedChanges) { setError("احفظ تعديلات النص أولًا قبل تغيير حالته."); return; }
     setSaving(true); setError(null); setNotice(null);
     try {
@@ -195,7 +205,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   }
 
   async function deleteScript() {
-    if (!workspace || workspace.script.status !== "archived" || workspace.script.content_item_id) return;
+    if (!workspace || !canWriteScript || workspace.script.status !== "archived" || workspace.script.content_item_id) return;
     if (!window.confirm(`حذف «${workspace.script.title}» نهائيًا؟\n\nلن يمكن استرجاع النص أو سجل نسخه بعد الحذف.`)) return;
     setSaving(true); setError(null); setNotice(null);
     try {
@@ -225,7 +235,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
       if (scope === "script_variants") setScriptVariants(variants);
       if (Array.isArray(generated?.hook_variants)) update("hook_variants", generated.hook_variants.join("\n"));
       setNotice(scope === "script_variants"
-        ? `عدد البدائل السليمة: ${variants.length}. دي معاينة فقط؛ اختر نسخة ثم احفظها بنفسك، ولم نغيّر الاسكريبت أو مصنع المحتوى.${guardNotice}`
+        ? `عدد البدائل السليمة: ${variants.length}. دي معاينة فقط؛ اختر نسخة ثم احفظها بنفسك، ولم نغيّر الاسكريبت أو طلبات التنفيذ.${guardNotice}`
         : `عدد الهوكات السليمة: ${hooks.length}. ظهرت داخل المحرر ولم تُحفظ بعد.${guardNotice}`);
     } catch (generateError) { setError(generateError instanceof Error ? generateError.message : "تعذّر توليد بدائل الكتابة."); }
     finally { setAiScope(null); }
@@ -239,7 +249,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   }
 
   async function generateProduction(scope: Exclude<AiScope, "script_variants" | "hooks">) {
-    if (!workspace || workspace.script.status !== "ready_to_record") return;
+    if (!workspace || readOnly || workspace.script.status !== "ready_to_record") return;
     if (productionHasUnsavedChanges) { setError("احفظ تعديلات حزمة التنفيذ أولًا قبل إعادة توليد أي جزء."); return; }
     setAiScope(scope); setError(null); setNotice(null);
     try {
@@ -266,19 +276,19 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   }
 
   function chooseCaptionOption(option: CaptionOption) {
-    if (!form) return;
+    if (!form || readOnly) return;
     setForm({ ...form, caption: option.caption, hashtags: option.hashtags.join("\n") });
     setNotice(`تم تحديد كابشن «${option.label}» بعلامة صح داخل المحرر. راجعه ثم اضغط حفظ لاعتماده.`);
   }
 
   function chooseThumbnailOption(option: ThumbnailOption) {
-    if (!form) return;
+    if (!form || readOnly) return;
     setForm({ ...form, thumbnail_notes: thumbnailOptionText(option) });
     setNotice(`تم تحديد غلاف «${option.label}» بعلامة صح داخل المحرر. راجعه ثم اضغط حفظ لاعتماده.`);
   }
 
   async function approveVoiceSample() {
-    if (!workspace || !form || !assignedWriter) return;
+    if (!workspace || !form || !canWriteScript) return;
     setSaving(true); setError(null); setNotice(null);
     try {
       await invokeFunction("script-commands", { action: "approve_voice_sample", script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version });
@@ -288,8 +298,13 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   }
 
   async function handoff(event: FormEvent) {
-    event.preventDefault(); if (!workspace) return;
-    if (writingHasUnsavedChanges || productionHasUnsavedChanges) { setError("احفظ كل التعديلات أولًا قبل تسليم النسخة لمصنع المحتوى."); return; }
+    event.preventDefault(); if (!workspace || !canWriteScript) return;
+    const selectedOwnerIds = [contentCreatorId, editingOwnerId, thumbnailOwnerId, publishingOwnerId];
+    if (selectedOwnerIds.some((ownerId) => !assignablePeople.some((person) => person.id === ownerId))) {
+      setError("اختر مسؤولًا نشطًا لديه صلاحية المهام لكل خطوة.");
+      return;
+    }
+    if (writingHasUnsavedChanges || productionHasUnsavedChanges) { setError("احفظ كل التعديلات أولًا قبل تسليم النسخة لطلبات التنفيذ."); return; }
     setSaving(true); setError(null); setNotice(null);
     try {
       const result = await invokeFunction("script-commands", {
@@ -297,7 +312,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         publish_at: new Date(publishAt).toISOString(), content_creator_id: contentCreatorId,
         editing_owner_id: editingOwnerId, thumbnail_owner_id: thumbnailOwnerId, publishing_owner_id: publishingOwnerId,
       });
-      setNotice("تم إنشاء خط الإنتاج كاملًا داخل مصنع المحتوى."); setShowHandoff(false); await refresh();
+      setNotice("تم إنشاء طلب التنفيذ ومهام الأشخاص المطلوبة."); setShowHandoff(false); await refresh();
       const contentId = String(result.contentId ?? ""); if (contentId) window.location.assign(`/content?content=${contentId}#content-${contentId}`);
     } catch (handoffError) { setError(handoffError instanceof Error ? handoffError.message : "تعذّر تسليم الاسكريبت."); }
     finally { setSaving(false); }
@@ -319,7 +334,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     <div className="script-editor-topbar"><Button href="/scripts" variant="ghost"><ArrowRight size={15} /> العودة للاستوديو</Button><div><StatusBadge tone={status.tone}>{status.label}</StatusBadge><span><UserRound size={13} /> {assignee}</span><span><FileClock size={13} /> النسخة {workspace.script.edit_version.toLocaleString("ar-EG")}</span></div></div>
     {error ? <p className="form-notice error">{error}</p> : null}
     {notice ? <p className="form-notice success">{notice}</p> : null}
-    {readOnly ? <aside className="script-readonly-note"><CheckCircle2 size={18} /><div><strong>{!assignedWriter ? "عرض إشرافي فقط — صاحب الاسكريبت هو من يكتب ويولّد" : workspace.script.status === "handed_off" ? "هذه هي النسخة التي دخلت مصنع المحتوى" : "الاسكريبت مؤرشف"}</strong><p>{!assignedWriter ? "يمكن للمالك متابعة النسخة، لكن لا يمكنه كشف بصمة الكاتب أو التوليد والتعديل مكانه." : "أي تنفيذ لاحق يتم من مصنع المحتوى وليس بتعديل هذا الأصل."}</p>{workspace.script.content_item_id ? <a href={`/content?content=${workspace.script.content_item_id}#content-${workspace.script.content_item_id}`}>فتح خط الإنتاج <ExternalLink size={13} /></a> : null}</div></aside> : null}
+    {readOnly ? <aside className="script-readonly-note"><CheckCircle2 size={18} /><div><strong>{workspace.membership.role === "viewer" ? "صلاحية مشاهدة فقط" : !assignedWriter ? "عرض إشرافي فقط — صاحب الاسكريبت هو من يكتب ويولّد" : workspace.script.status === "handed_off" ? "هذه هي النسخة التي دخلت طلبات التنفيذ" : "الاسكريبت مؤرشف"}</strong><p>{workspace.membership.role === "viewer" ? "يمكنك قراءة الاسكريبت، لكن لا يمكنك تعديله أو توليد محتوى أو تغيير حالته أو تسليمه." : !assignedWriter ? "يمكن للمالك متابعة النسخة، لكن لا يمكنه كشف بصمة الكاتب أو التوليد والتعديل مكانه." : "أي تنفيذ لاحق يتم من طلب التنفيذ وليس بتعديل هذا الأصل."}</p>{workspace.script.content_item_id ? <a href={`/content?content=${workspace.script.content_item_id}#content-${workspace.script.content_item_id}`}>فتح طلب التنفيذ <ExternalLink size={13} /></a> : null}</div></aside> : null}
 
     <form className="script-editor-form" onSubmit={(event) => void save(event)}>
       <section className="panel script-editor-section">
@@ -357,7 +372,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
           <label className="span-2"><span>بدائل الهوك — واحد في كل سطر</span><textarea disabled={readOnly} value={form.hook_variants} onChange={(event) => update("hook_variants", event.target.value)} />{!readOnly ? <Button type="button" variant="ghost" disabled={Boolean(aiScope) || saving} onClick={() => void generateWriting(form.spoken_script ? "improve" : "idea", "hooks")}>{aiScope === "hooks" ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} إعادة توليد الهوكات فقط</Button> : null}</label>
           <label className="span-2"><span>نص الكلام النهائي</span><textarea className="spoken-script-textarea" disabled={readOnly} value={form.spoken_script} onChange={(event) => update("spoken_script", event.target.value)} placeholder="اكتب الكلام كما سيُقال فعلًا، بما فيه الدعوة للإجراء..." /></label>
         </div>
-        {assignedWriter ? <aside className="script-calibration-note"><CheckCircle2 size={18} /><div><strong>هل النص بقى أنت فعلًا بعد تعديلك؟</strong><p>احفظ تعديلك اليدوي أولًا، ثم أضفه إلى بصمتك الخاصة.</p></div><Button type="button" variant="secondary" disabled={saving || Boolean(aiScope) || form.spoken_script.trim().length < 20 || spokenScriptHasUnsavedChanges || !latestVersionIsManual} onClick={() => void approveVoiceSample()}>{spokenScriptHasUnsavedChanges || !latestVersionIsManual ? "احفظ تعديلك أولًا" : "اعتمد النص كعينة لصوتي"}</Button></aside> : null}
+        {canWriteScript ? <aside className="script-calibration-note"><CheckCircle2 size={18} /><div><strong>هل النص بقى أنت فعلًا بعد تعديلك؟</strong><p>احفظ تعديلك اليدوي أولًا، ثم أضفه إلى بصمتك الخاصة.</p></div><Button type="button" variant="secondary" disabled={saving || Boolean(aiScope) || form.spoken_script.trim().length < 20 || spokenScriptHasUnsavedChanges || !latestVersionIsManual} onClick={() => void approveVoiceSample()}>{spokenScriptHasUnsavedChanges || !latestVersionIsManual ? "احفظ تعديلك أولًا" : "اعتمد النص كعينة لصوتي"}</Button></aside> : null}
       </section>
 
       {showProduction ? <>
@@ -397,20 +412,20 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     </form>
 
     <section className="panel script-status-panel">
-      <div className="section-heading"><div><p className="overline">الحالة</p><h2>أنت الذي يحدد انتقال الاسكريبت</h2><p>لا ينتقل إلى مصنع المحتوى ولا تتولد تعليماته لمجرد ضغط زر AI.</p></div><StatusBadge tone={status.tone}>{status.label}</StatusBadge></div>
-      <div className="script-status-actions">
+      <div className="section-heading"><div><p className="overline">الحالة</p><h2>أنت الذي يحدد انتقال الاسكريبت</h2><p>لا يتحول إلى طلب تنفيذ ولا تتولد مهامه لمجرد ضغط زر AI.</p></div><StatusBadge tone={status.tone}>{status.label}</StatusBadge></div>
+      {canWriteScript ? <div className="script-status-actions">
         {workspace.script.status === "draft" ? <Button type="button" disabled={saving || form.spoken_script.trim().length < 20} onClick={() => void changeStatus("ready_to_record")}><CheckCircle2 size={15} /> جاهز للتصوير</Button> : null}
-        {workspace.script.status === "ready_to_record" ? <><Button type="button" variant="secondary" disabled={saving} onClick={() => void changeStatus("draft")}><RefreshCw size={15} /> إرجاع لقيد الكتابة</Button>{assignedWriter ? <Button type="button" onClick={() => setShowHandoff((value) => !value)}><Factory size={15} /> تسليم لمصنع المحتوى</Button> : null}</> : null}
+        {workspace.script.status === "ready_to_record" ? <><Button type="button" variant="secondary" disabled={saving} onClick={() => void changeStatus("draft")}><RefreshCw size={15} /> إرجاع لقيد الكتابة</Button><Button type="button" disabled={!assignablePeople.length} onClick={() => setShowHandoff((value) => !value)}><Factory size={15} /> إنشاء طلب تنفيذ</Button></> : null}
         {workspace.script.status !== "archived" ? <Button type="button" variant="ghost" disabled={saving} onClick={() => void changeStatus("archived")}><Archive size={15} /> أرشفة</Button> : null}
         {workspace.script.status === "archived" && !workspace.script.content_item_id ? <Button type="button" variant="secondary" disabled={saving} onClick={() => void changeStatus("draft")}><RefreshCw size={15} /> استعادة لقيد الكتابة</Button> : null}
-        {assignedWriter && workspace.script.status === "archived" && !workspace.script.content_item_id ? <Button type="button" variant="ghost" className="danger-text" disabled={saving} onClick={() => void deleteScript()}><Trash2 size={15} /> حذف نهائي</Button> : null}
-      </div>
-      {showHandoff && assignedWriter ? <form className="script-handoff-form" onSubmit={(event) => void handoff(event)}><div className="script-handoff-heading"><Factory size={19} /><div><strong>التسليم الذري</strong><p>عند تأكيدك فقط تتحول نسخة التنفيذ إلى مصنع المحتوى وتظهر للمكلفين. إما تُنشأ كل المهام معًا، أو لا يُحفظ شيء.</p></div></div><div className="script-fields-grid"><label><span>موعد النشر</span><input required type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} /></label><label><span>التسجيل وصناعة المحتوى</span><select value={contentCreatorId} onChange={(event) => setContentCreatorId(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>المونتاج</span><select value={editingOwnerId} onChange={(event) => setEditingOwnerId(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>الغلاف</span><select value={thumbnailOwnerId} onChange={(event) => setThumbnailOwnerId(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>النشر</span><select value={publishingOwnerId} onChange={(event) => setPublishingOwnerId(event.target.value)}>{workspace.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></div><div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Factory size={15} />} إنشاء خط الإنتاج</Button><Button type="button" variant="ghost" onClick={() => setShowHandoff(false)}>إلغاء</Button></div></form> : null}
+        {workspace.script.status === "archived" && !workspace.script.content_item_id ? <Button type="button" variant="ghost" className="danger-text" disabled={saving} onClick={() => void deleteScript()}><Trash2 size={15} /> حذف نهائي</Button> : null}
+      </div> : <p className="tool-empty">هذه الحالة للعرض فقط، ولا توجد إجراءات متاحة لحسابك.</p>}
+      {showHandoff && canWriteScript && assignablePeople.length ? <form className="script-handoff-form" onSubmit={(event) => void handoff(event)}><div className="script-handoff-heading"><Factory size={19} /><div><strong>إنشاء طلب التنفيذ</strong><p>عند تأكيدك فقط تُنسخ النسخة النهائية ويصل لكل مكلف الجزء الخاص به. إما تُنشأ المهام كلها معًا، أو لا يُحفظ شيء.</p></div></div><div className="script-fields-grid"><label><span>موعد النشر</span><input required type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} /></label><label><span>التسجيل وصناعة المحتوى</span><select value={contentCreatorId} onChange={(event) => setContentCreatorId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>المونتاج</span><select value={editingOwnerId} onChange={(event) => setEditingOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>الغلاف</span><select value={thumbnailOwnerId} onChange={(event) => setThumbnailOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>النشر</span><select value={publishingOwnerId} onChange={(event) => setPublishingOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></div><div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Factory size={15} />} إنشاء الطلب والمهام</Button><Button type="button" variant="ghost" onClick={() => setShowHandoff(false)}>إلغاء</Button></div></form> : null}
     </section>
 
     <section className="panel script-history-panel">
       <div className="section-heading"><div><p className="overline">سجل النسخ</p><h2>ما الذي حُفظ ومتى؟</h2><p>«ملاحظة النسخة» مجرد وصف اختياري يساعدك تفتكر سبب التعديل.</p></div><History size={21} /></div>
-      {workspace.versions.length ? <ol>{workspace.versions.map((version) => <li key={version.id}><span><strong>v{version.version_number.toLocaleString("ar-EG")}</strong><small>{version.source === "ai_generation" ? "حزمة AI" : version.source === "handoff" ? "تسليم للمصنع" : "حفظ يدوي"}</small></span><div><strong>{version.note || "بدون ملاحظة"}</strong><small>{formatScriptDate(version.created_at)}</small></div></li>)}</ol> : <p className="tool-empty">لا توجد نسخ مسجلة.</p>}
+      {workspace.versions.length ? <ol>{workspace.versions.map((version) => <li key={version.id}><span><strong>v{version.version_number.toLocaleString("ar-EG")}</strong><small>{version.source === "ai_generation" ? "حزمة AI" : version.source === "handoff" ? "إرسال للتنفيذ" : "حفظ يدوي"}</small></span><div><strong>{version.note || "بدون ملاحظة"}</strong><small>{formatScriptDate(version.created_at)}</small></div></li>)}</ol> : <p className="tool-empty">لا توجد نسخ مسجلة.</p>}
     </section>
   </section>;
 }

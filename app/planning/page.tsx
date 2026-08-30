@@ -9,8 +9,8 @@ export default function PlanningPage() {
   return <main className="page-stack">
     <PageHeader
       eyebrow="التخطيط الربع سنوي"
-      title="نعرف لماذا وماذا ومتى قبل فتح خط الإنتاج"
-      description="خطة واحدة تربط الهدف والجمهور والعرض بأعمدة المحتوى وتقويم واضح، ثم تتابع التنفيذ الحقيقي من مصنع المحتوى."
+      title="نعرف لماذا وماذا ومتى قبل إرسال أي شغل"
+      description="الخطة والتقويم يحددان القرار والموعد فقط؛ وعند الإرسال يتحول البند إلى نفس طلب التنفيذ بدون إعادة كتابة أو بورد مكرر."
       actions={<StatusBadge tone="success">خطة ← تقويم ← تنفيذ</StatusBadge>}
     />
     <PlanningWorkspace />

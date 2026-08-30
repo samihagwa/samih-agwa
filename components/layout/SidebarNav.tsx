@@ -1,14 +1,13 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { BarChart3, BookOpenCheck, CalendarRange, Clapperboard, FilePenLine, LayoutDashboard, MessageCircleMore, Rocket, Send, Settings, SquareKanban, UsersRound } from "lucide-react";
+import { BarChart3, BookOpenCheck, Clapperboard, FilePenLine, LayoutDashboard, MessageCircleMore, Rocket, Send, Settings, SquareKanban, UsersRound } from "lucide-react";
 import type { WorkspaceSection } from "../../lib/access";
 
 const items = [
   { id: "dashboard", href: "/", label: "مركز القيادة", icon: LayoutDashboard },
-  { id: "tasks", href: "/tasks", label: "مهام الفريق", icon: SquareKanban },
-  { id: "planning", href: "/planning", label: "الخطة وتقويم المحتوى", icon: CalendarRange },
-  { id: "content", href: "/content", label: "مصنع المحتوى", icon: Clapperboard },
+  { id: "tasks", href: "/tasks", label: "مهامي", icon: SquareKanban },
+  { id: "content", href: "/content", label: "إدارة المحتوى", icon: Clapperboard },
   { id: "scripts", href: "/scripts", label: "استوديو الاسكريبتات", icon: FilePenLine },
   { id: "publishing", href: "/publishing", label: "النشر التلقائي", icon: Send },
   { id: "brand", href: "/brand", label: "مركز معرفة البراند", icon: BookOpenCheck },
@@ -21,11 +20,15 @@ const items = [
 export function SidebarNav({ allowedSections, onNavigate }: { allowedSections: WorkspaceSection[]; onNavigate?: () => void }) {
   const pathname = usePathname();
   const allowed = new Set(allowedSections);
+  const canOpenContentArea = allowed.has("content") || allowed.has("planning");
   return (
     <nav className="sidebar-nav" aria-label="التنقل الرئيسي">
       <p className="nav-label">مساحة العمل</p>
-      {items.filter(({ id }) => allowed.has(id)).map(({ href, label, icon: Icon }) => {
-        const active = href === "/" ? pathname === href : pathname.startsWith(href);
+      {items.filter(({ id }) => id === "content" ? canOpenContentArea : allowed.has(id)).map(({ id, href: defaultHref, label, icon: Icon }) => {
+        const href = id === "content" && !allowed.has("content") ? "/planning" : defaultHref;
+        const active = id === "content"
+          ? pathname.startsWith("/content") || pathname.startsWith("/planning")
+          : href === "/" ? pathname === href : pathname.startsWith(href);
         return <a key={href} href={href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={onNavigate}><Icon size={19} /><span>{label}</span></a>;
       })}
       {allowed.has("team") || allowed.has("settings") ? <p className="nav-label nav-label-spaced">النظام</p> : null}

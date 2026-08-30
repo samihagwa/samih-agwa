@@ -2,9 +2,9 @@ import type { Tables } from "./supabase/database.types";
 
 export const workspaceSectionDefinitions = [
   { id: "dashboard", label: "مركز القيادة", href: "/" },
-  { id: "tasks", label: "مهام الفريق", href: "/tasks" },
+  { id: "tasks", label: "المهام", href: "/tasks" },
   { id: "planning", label: "الخطة وتقويم المحتوى", href: "/planning" },
-  { id: "content", label: "مصنع المحتوى", href: "/content" },
+  { id: "content", label: "طلبات التنفيذ", href: "/content" },
   { id: "scripts", label: "استوديو الاسكريبتات", href: "/scripts" },
   { id: "publishing", label: "النشر التلقائي", href: "/publishing" },
   { id: "brand", label: "مركز معرفة البراند", href: "/brand" },

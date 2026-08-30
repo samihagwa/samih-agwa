@@ -673,6 +673,7 @@ export type Database = {
           hook: string
           id: string
           intake_request: string | null
+          intake_request_key: string | null
           intake_source_url: string | null
           organization_id: string
           platforms: string[]
@@ -699,6 +700,7 @@ export type Database = {
           hook: string
           id?: string
           intake_request?: string | null
+          intake_request_key?: string | null
           intake_source_url?: string | null
           organization_id: string
           platforms?: string[]
@@ -725,6 +727,7 @@ export type Database = {
           hook?: string
           id?: string
           intake_request?: string | null
+          intake_request_key?: string | null
           intake_source_url?: string | null
           organization_id?: string
           platforms?: string[]
@@ -4744,6 +4747,24 @@ export type Database = {
         }
         Returns: string
       }
+      create_simplified_content_workflow_v1: {
+        Args: {
+          content_creator_id: string
+          content_request_text: string
+          content_title: string
+          editing_owner_id: string
+          publishing_owner_id: string
+          raw_material_sent: boolean
+          request_id: string
+          request_source_url: string
+          target_brand_article_ids: string[]
+          target_organization_id: string
+          target_publish_at: string
+          target_user_id: string
+          thumbnail_owner_id: string
+        }
+        Returns: string
+      }
       create_reel_from_intake: {
         Args: {
           approval_owner_id: string
@@ -5739,6 +5760,16 @@ export type Database = {
           content_editing_brief: string
           content_script_outline: string
           content_thumbnail_brief: string
+          target_content_item_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
+      update_content_request_v1: {
+        Args: {
+          content_request_text: string
+          expected_content_version: number
+          request_source_url: string
           target_content_item_id: string
           target_user_id: string
         }

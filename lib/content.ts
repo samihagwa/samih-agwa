@@ -36,11 +36,11 @@ export const contentSteps = (Object.keys(contentStepConfig) as ContentStep[]).so
 );
 
 export const reelContentSteps: ContentStep[] = [
-  "brief", "recording", "editing", "thumbnail", "caption", "publishing",
+  "recording", "editing", "thumbnail", "publishing",
 ];
 
 export const socialPostContentSteps: ContentStep[] = [
-  "brief", "caption", "design", "scheduling", "publishing",
+  "caption", "design", "publishing",
 ];
 
 export function contentWorkflowSteps(format: ContentFormat) {

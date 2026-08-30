@@ -53,6 +53,7 @@ export function allowedTaskTransitionsForActor({
   isRequester,
   role,
 }: TaskTransitionContext): TaskStatus[] {
+  if (role === "viewer") return [];
   const platformAdmin = canManageAllTaskExecution(role);
 
   if (status === "review") {

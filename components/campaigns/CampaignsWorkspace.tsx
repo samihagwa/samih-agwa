@@ -651,7 +651,7 @@ export function CampaignsWorkspace() {
         <div className="toolbar-actions">
           <button className="icon-button" type="button" aria-label="تحديث الحملات" onClick={() => void refreshLaunches(workspace.organization.id)}><RefreshCw size={17} /></button>
           <Button href="/tasks" variant="secondary"><Route size={16} /> كل المهام</Button>
-          <Button href="/content" variant="secondary"><Film size={16} /> مصنع المحتوى</Button>
+          <Button href="/content" variant="secondary"><Film size={16} /> طلبات التنفيذ</Button>
           {manager ? <Button type="button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> إطلاق جديد</Button> : null}
         </div>
       </div>
@@ -879,7 +879,7 @@ export function CampaignsWorkspace() {
 
                   <section className="launch-assets-panel">
                     <div className="launch-subheading"><div><p className="overline">أصول الحملة</p><h4>{linkedItems.length ? `${linkedItems.length} أصل محتوى مرتبط` : "لا يوجد محتوى مرتبط"}</h4></div><a className="text-link" href="/content">فتح المصنع <Link2 size={13} /></a></div>
-                    {linkedItems.length ? <ul className="linked-content-list">{linkedItems.map((item) => <li key={item.id}><div><Film size={14} /><span>{item.title}</span></div>{manager ? <button type="button" disabled={working} onClick={() => void changeContentLink(launch.id, item.id, false)}>إزالة الربط</button> : null}</li>)}</ul> : <p className="launch-assets-empty">أنشئ أصلًا من مصنع المحتوى، ثم اربطه هنا بالخطة.</p>}
+                    {linkedItems.length ? <ul className="linked-content-list">{linkedItems.map((item) => <li key={item.id}><div><Film size={14} /><span>{item.title}</span></div>{manager ? <button type="button" disabled={working} onClick={() => void changeContentLink(launch.id, item.id, false)}>إزالة الربط</button> : null}</li>)}</ul> : <p className="launch-assets-empty">أنشئ طلب تنفيذ للمحتوى، ثم اربطه هنا بالخطة.</p>}
                     {manager && availableContent.length ? <div className="content-link-control"><select aria-label={`اختر محتوى لحملة ${launch.title}`} value={contentSelection[launch.id] ?? ""} onChange={(event) => setContentSelection((current) => ({ ...current, [launch.id]: event.target.value }))}><option value="">اختر أصل محتوى…</option>{availableContent.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}</select><Button type="button" variant="secondary" disabled={working || !contentSelection[launch.id]} onClick={() => void changeContentLink(launch.id, contentSelection[launch.id], true)}><Link2 size={14} /> ربط</Button></div> : null}
                   </section>
                 </div>

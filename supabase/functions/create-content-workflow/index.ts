@@ -100,6 +100,76 @@ export default {
       return jsonResponse({ message: "بيانات الطلب غير صالحة." }, 400);
     }
 
+    const canonicalRequest = typeof body.content_request_text === "string"
+      ? body.content_request_text.trim()
+      : "";
+
+    // This is the default human workflow: one unchanged request, one deadline,
+    // and the four accountable owners. Legacy structured callers remain
+    // supported below so old links and saved drafts do not break.
+    if (canonicalRequest) {
+      const simpleRequiredFields = [
+        "target_organization_id",
+        "request_id",
+        "content_title",
+        "target_publish_at",
+        ...ownerFields,
+      ];
+      if (simpleRequiredFields.some((field) => !isNonEmptyString(body[field]))) {
+        return jsonResponse({ message: "أكمل عنوان الطلب وموعده والمسؤولين قبل الحفظ." }, 400);
+      }
+      if (canonicalRequest.length < 10 || canonicalRequest.length > 30000) {
+        return jsonResponse({ message: "اكتب كل المطلوب بوضوح، بحد أقصى 30000 حرف." }, 400);
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(body.request_id))) {
+        return jsonResponse({ message: "معرّف الطلب غير صالح. حدّث الصفحة ثم حاول مرة أخرى." }, 400);
+      }
+      if (typeof body.raw_material_sent !== "boolean") {
+        return jsonResponse({ message: "حدد هل تم إرسال المادة الخام أم لا." }, 400);
+      }
+
+      const sourceUrl = typeof body.telegram_source_url === "string"
+        ? body.telegram_source_url.trim()
+        : "";
+      if (sourceUrl && !isTelegramUrl(sourceUrl)) {
+        return jsonResponse({ message: "رابط رسالة Telegram الاختياري غير صالح." }, 400);
+      }
+
+      const simpleBrandArticleIds = approvedBrandArticleIds(body.brand_article_ids);
+      if (simpleBrandArticleIds.length > 8 || simpleBrandArticleIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+        return jsonResponse({ message: "اختر بحد أقصى 8 مراجع براند معتمدة وصحيحة." }, 400);
+      }
+
+      const { data: contentId, error } = await context.supabaseAdmin.rpc(
+        "create_simplified_content_workflow_v1",
+        {
+          target_user_id: context.userClaims.id,
+          target_organization_id: body.target_organization_id,
+          request_id: body.request_id,
+          content_title: body.content_title,
+          content_request_text: canonicalRequest,
+          target_publish_at: body.target_publish_at,
+          raw_material_sent: body.raw_material_sent,
+          request_source_url: sourceUrl,
+          content_creator_id: body.content_creator_id,
+          editing_owner_id: body.editing_owner_id,
+          thumbnail_owner_id: body.thumbnail_owner_id,
+          publishing_owner_id: body.publishing_owner_id,
+          target_brand_article_ids: simpleBrandArticleIds,
+        },
+      );
+
+      if (error) {
+        const userError = /Only organization leadership|active organization member|Publish time|title|full request|Telegram|brand reference|approved brand/i.test(error.message);
+        return jsonResponse(
+          { message: userError ? error.message : "تعذّر إنشاء طلب المحتوى. لم يتم حفظ أي جزء من العملية." },
+          userError ? 400 : 500,
+        );
+      }
+
+      return jsonResponse({ contentId }, 201);
+    }
+
     const requiredTextFields = [
       "target_organization_id",
       "content_title",

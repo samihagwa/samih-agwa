@@ -363,7 +363,7 @@ export function TeamWorkspace() {
           const row = reportByUser.get(person.id);
           return <tr key={person.id}><th><strong>{person.name}</strong><small>{roleLabel(person.role)}</small></th><td>{row?.tasks_requested ?? 0}</td><td>{row?.tasks_assigned ?? 0}</td><td>{row?.tasks_completed ?? 0}</td><td className="positive-cell"><CheckCircle2 size={12} /> {row?.completed_on_time ?? 0}</td><td className="warning-cell"><Clock3 size={12} /> {row?.completed_late ?? 0}</td><td className="danger-cell">{row?.overdue_open ?? 0}</td><td>{row?.review_submissions ?? 0}</td><td>{row?.revisions_requested ?? 0}</td><td>{row?.revisions_received ?? 0}</td><td>{formatDate(row?.last_activity_at ?? null)}</td></tr>;
         })}</tbody></table></div>
-      </> : <p className="team-report-guard"><ShieldCheck size={15} /> التقرير الشامل متاح للمالك والمدير فقط. العضو يرى مهامه من بورد التنفيذ.</p>}
+      </> : <p className="team-report-guard"><ShieldCheck size={15} /> التقرير الشامل متاح للمالك والمدير فقط. العضو يرى المطلوب منه في «مهامي».</p>}
     </section>
   </section>;
 }

@@ -5,7 +5,7 @@ const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const contentSteps = new Set(["brief", "recording", "editing", "thumbnail", "caption", "design", "approval", "scheduling", "publishing"]);
 const revisionSteps = new Set(["recording", "editing", "thumbnail", "caption", "design"]);
 const resultSteps = new Set(["recording", "editing", "thumbnail", "caption", "design", "scheduling", "publishing"]);
-const resultUrlSteps = new Set(["recording", "editing", "thumbnail", "design", "publishing"]);
+const resultUrlSteps = new Set(["editing", "thumbnail", "design", "publishing"]);
 const assetKinds = new Set([
   "raw_video", "source", "b_roll", "image", "audio", "reference",
   "draft_video", "thumbnail", "caption", "final_export",
@@ -34,6 +34,27 @@ function commandError(error: { message: string } | null, fallback: string) {
   if (!error) return null;
   const userError = /Only |active organization|not found|invalid|cannot|must |required|allowed|unknown|workflow|reviewer|leadership|creator|owner|membership/i.test(error.message);
   return jsonResponse({ message: userError ? error.message : fallback }, userError ? 400 : 500);
+}
+
+async function updateContentRequest(body: Record<string, unknown>, context: Context) {
+  const contentId = text(body.content_item_id);
+  const requestText = text(body.content_request_text);
+  const sourceUrl = text(body.telegram_source_url);
+  const expectedVersion = Number(body.expected_content_version);
+  if (!contentId || requestText.length < 10 || requestText.length > 30000
+    || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+    || (sourceUrl && (!isHttpUrl(sourceUrl) || !/^https:\/\/(t\.me|telegram\.me)\//i.test(sourceUrl)))) {
+    return jsonResponse({ message: "اكتب كل المطلوب بوضوح، واستخدم رابط Telegram صحيحًا إن أضفته." }, 400);
+  }
+
+  const { data, error } = await context!.supabaseAdmin.rpc("update_content_request_v1", {
+    target_user_id: context!.userClaims!.id,
+    target_content_item_id: contentId,
+    expected_content_version: expectedVersion,
+    content_request_text: requestText,
+    request_source_url: sourceUrl,
+  });
+  return commandError(error, "تعذّر تحديث نص الطلب الكامل.") ?? jsonResponse({ updated: data });
 }
 
 async function updateBrief(body: Record<string, unknown>, context: Context) {
@@ -89,7 +110,7 @@ async function submitStepDelivery(body: Record<string, unknown>, context: Contex
   if (!taskId || !resultSteps.has(step) || (!note && !url)
     || note.length > 10000 || url.length > 2000 || (url && !isHttpUrl(url))
     || (resultUrlSteps.has(step) && !url)) {
-    return jsonResponse({ message: "أضف نتيجة المرحلة بشكل صحيح؛ التسجيل والمونتاج والغلاف والتصميم والنشر تحتاج رابطًا." }, 400);
+    return jsonResponse({ message: "أضف نتيجة المرحلة بشكل صحيح؛ المونتاج والغلاف والتصميم والنشر تحتاج رابطًا، أما إرسال المادة الخام على Telegram فيكفي تأكيده." }, 400);
   }
   const { data, error } = await context!.supabaseAdmin.rpc("submit_content_step_delivery", {
     target_user_id: context!.userClaims!.id,
@@ -222,6 +243,7 @@ export default {
       return jsonResponse({ message: "بيانات الطلب غير صالحة." }, 400);
     }
 
+    if (body.action === "update_request_text") return updateContentRequest(body, context);
     if (body.action === "update_brief") return updateBrief(body, context);
     if (body.action === "update_social_post_brief") return updateSocialPostBrief(body, context);
     if (body.action === "submit_step_delivery") return submitStepDelivery(body, context);

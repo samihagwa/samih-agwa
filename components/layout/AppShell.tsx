@@ -19,6 +19,7 @@ import { NotificationCenter } from "../auth/NotificationCenter";
 import { Button } from "../ui/Button";
 import { WorkspaceAssistant } from "../assistant/WorkspaceAssistant";
 import { MemberOnboardingGate } from "../team/MemberOnboardingGate";
+import { ContentSectionNav } from "./ContentSectionNav";
 import { SidebarNav } from "./SidebarNav";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -133,6 +134,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const requestedSection = sectionForPathname(pathname);
   const allowedSections = membershipSections(membership);
   const sectionAllowed = canAccessWorkspaceSection(membership, requestedSection);
+  const contentSectionOpen = requestedSection === "planning" || requestedSection === "content";
 
   return (
     <div className="app-shell">
@@ -159,7 +161,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SessionChip />
           </div>
         </header>
-        <div className="page-container">{sectionAllowed ? children : <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><p className="overline">خارج صلاحيات حسابك</p><h2>هذا القسم غير متاح لك</h2><p>مالك المنصة يحدد الأقسام لكل عضو. لو تحتاج هذا القسم اطلب تعديل صلاحيتك.</p></div><Button href={firstAllowedSectionHref(membership)} variant="secondary">العودة لمساحة عملي</Button></section>}</div>
+        <div className="page-container">{sectionAllowed
+          ? contentSectionOpen
+            ? <div className="page-stack"><ContentSectionNav allowedSections={allowedSections} />{children}</div>
+            : children
+          : <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><p className="overline">خارج صلاحيات حسابك</p><h2>هذا القسم غير متاح لك</h2><p>مالك المنصة يحدد الأقسام لكل عضو. لو تحتاج هذا القسم اطلب تعديل صلاحيتك.</p></div><Button href={firstAllowedSectionHref(membership)} variant="secondary">العودة لمساحة عملي</Button></section>}</div>
       </div>
       <WorkspaceAssistant />
     </div>
