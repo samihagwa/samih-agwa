@@ -49,7 +49,7 @@ const wizardSteps = [
   { label: "العنوان", hint: "اسم الريلز" },
   { label: "الموعد", hint: "موعد النشر" },
   { label: "الطلب", hint: "كل المطلوب" },
-  { label: "الخامات", hint: "روابط Telegram" },
+  { label: "الخامات", hint: "روابط الملفات" },
   { label: "المونتاج", hint: "المسؤول" },
   { label: "الغلاف", hint: "المصمم" },
   { label: "النشر", hint: "من سينشر" },
@@ -62,15 +62,13 @@ const rawMaterialLabels: Record<RawMaterialKind, string> = {
   source: "مصدر أو ملف آخر",
 };
 
-function isTelegramUrl(value: string) {
+function isWebUrl(value: string) {
   try {
     const source = new URL(value);
-    return source.protocol === "https:"
-      && ["t.me", "telegram.me"].includes(source.hostname.toLowerCase())
+    return ["http:", "https:"].includes(source.protocol)
+      && Boolean(source.hostname)
       && !source.username
-      && !source.password
-      && !source.port
-      && source.pathname !== "/";
+      && !source.password;
   } catch {
     return false;
   }
@@ -139,8 +137,8 @@ export function QuickIntakeForm({
     }
     if (targetStep === 3) {
       if (!rawMaterials.length) return "أضف رابط مادة خام واحدًا على الأقل قبل المتابعة.";
-      const invalidMaterial = rawMaterials.find((material) => !isTelegramUrl(material.url.trim()));
-      if (invalidMaterial) return "كل مادة خام تحتاج رابط Telegram صحيحًا يبدأ بـ https://t.me/.";
+      const invalidMaterial = rawMaterials.find((material) => !isWebUrl(material.url.trim()));
+      if (invalidMaterial) return "كل مادة خام تحتاج رابط ويب صحيحًا يبدأ بـ http:// أو https://.";
       const normalizedLinks = rawMaterials.map((material) => material.url.trim().toLowerCase());
       if (new Set(normalizedLinks).size !== normalizedLinks.length) return "يوجد رابط مادة خام مكرر. احذفه أو استبدله برابط آخر.";
     }
@@ -264,13 +262,13 @@ export function QuickIntakeForm({
         </> : null}
 
         {step === 3 ? <>
-          <div className="quick-intake-step-heading"><Link2 size={20} /><div><p className="overline">بوابة إجبارية</p><h3 id="quick-intake-step-3" ref={stepHeadingRef} tabIndex={-1}>فين المادة الخام على Telegram؟</h3><p>لن تخرج أي مهمة للفريق قبل إضافة رابط خام صحيح واحد على الأقل.</p></div></div>
+          <div className="quick-intake-step-heading"><Link2 size={20} /><div><p className="overline">بوابة إجبارية</p><h3 id="quick-intake-step-3" ref={stepHeadingRef} tabIndex={-1}>فين رابط المادة الخام؟</h3><p>أضف Drive أو Dropbox أو Telegram أو أي رابط ويب مباشر؛ لن تخرج مهام الفريق قبل وجود رابط صالح.</p></div></div>
           <div className="raw-material-list">
             {rawMaterials.map((material, index) => <article key={material.id}>
               <header><div>{material.kind === "audio" ? <Mic2 size={15} /> : material.kind === "raw_video" ? <Film size={15} /> : <Link2 size={15} />}<strong>مادة خام {index + 1}</strong></div><button type="button" onClick={() => removeRawMaterial(material.id)} aria-label={`حذف المادة الخام ${index + 1}`}><Trash2 size={14} /> حذف</button></header>
               <div>
                 <label><span>النوع</span><select value={material.kind} onChange={(event) => updateRawMaterial(material.id, { kind: event.target.value as RawMaterialKind })}>{(Object.keys(rawMaterialLabels) as RawMaterialKind[]).map((kind) => <option key={kind} value={kind}>{rawMaterialLabels[kind]}</option>)}</select></label>
-                <label><span>رابط Telegram</span><input value={material.url} onChange={(event) => updateRawMaterial(material.id, { url: event.target.value })} type="url" inputMode="url" dir="ltr" maxLength={2000} placeholder="https://t.me/c/..." /></label>
+                <label><span>رابط المادة الخام</span><input value={material.url} onChange={(event) => updateRawMaterial(material.id, { url: event.target.value })} type="url" inputMode="url" dir="ltr" maxLength={2000} placeholder="https://drive.google.com/..." /><small>يقبل أي رابط ويب صالح، بما فيه Drive وDropbox وTelegram.</small></label>
               </div>
             </article>)}
             {!rawMaterials.length ? <p className="raw-material-empty"><Link2 size={15} /> لا توجد خامات. أضف رابطًا حتى تقدر تكمل.</p> : null}
@@ -306,7 +304,7 @@ export function QuickIntakeForm({
             <ReviewItem label="المونتاج" value={peopleById.get(editingOwnerId)?.name ?? "غير محدد"} onEdit={() => goToStep(4)} />
             <ReviewItem label="الغلاف" value={peopleById.get(thumbnailOwnerId)?.name ?? "غير محدد"} onEdit={() => goToStep(5)} />
             <ReviewItem label="النشر" value={publishingMode === "self" ? peopleById.get(currentUserId)?.name ?? "بنفسي" : peopleById.get(publishingOwnerId)?.name ?? "غير محدد"} onEdit={() => goToStep(6)} />
-            <ReviewItem label="المواد الخام" value={`${rawMaterials.length} رابط Telegram`} onEdit={() => goToStep(3)} />
+            <ReviewItem label="المواد الخام" value={`${rawMaterials.length} ${rawMaterials.length === 1 ? "رابط" : "روابط"}`} onEdit={() => goToStep(3)} />
             <ReviewItem label="كل المطلوب" value={requestText} onEdit={() => goToStep(2)} wide />
           </div>
           <BrandReferenceSelector articles={approvedBrandArticles} selectedIds={brandArticleIds} onToggle={toggleBrandArticle} />

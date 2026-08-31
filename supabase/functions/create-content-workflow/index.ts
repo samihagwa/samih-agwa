@@ -68,6 +68,18 @@ function isTelegramUrl(value: string) {
   }
 }
 
+function isWebUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return ["http:", "https:"].includes(parsed.protocol)
+      && Boolean(parsed.hostname)
+      && !parsed.username
+      && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
 function directRawMaterials(value: unknown): DirectRawMaterial[] | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > 10) return null;
 
@@ -81,7 +93,7 @@ function directRawMaterials(value: unknown): DirectRawMaterial[] | null {
     const kind = typeof raw.kind === "string" ? raw.kind.trim().toLowerCase() : "";
     const url = typeof raw.url === "string" ? raw.url.trim() : "";
     const title = typeof raw.title === "string" ? raw.title.trim() : "";
-    if (!directRawMaterialTypes.has(kind) || url.length > 2000 || !isTelegramUrl(url)) return null;
+    if (!directRawMaterialTypes.has(kind) || url.length > 2000 || !isWebUrl(url)) return null;
     if (raw.title !== undefined && raw.title !== null && (title.length < 2 || title.length > 160)) return null;
     const duplicateKey = url.toLowerCase();
     if (urls.has(duplicateKey)) return null;
@@ -173,7 +185,7 @@ export default {
       const materials = directRawMaterials(body.raw_materials);
       if (!materials) {
         return jsonResponse({
-          message: "أضف من رابط إلى 10 روابط للمادة الخام من Telegram، وحدد نوع كل رابط بدون تكرار.",
+          message: "أضف من رابط إلى 10 روابط ويب صالحة للمادة الخام، وحدد نوع كل رابط بدون تكرار.",
         }, 400);
       }
 

@@ -24,7 +24,10 @@ function text(value: unknown) {
 function isHttpUrl(value: string) {
   try {
     const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
+    return (parsed.protocol === "http:" || parsed.protocol === "https:")
+      && Boolean(parsed.hostname)
+      && !parsed.username
+      && !parsed.password;
   } catch {
     return false;
   }
@@ -39,12 +42,12 @@ function commandError(error: { message: string } | null, fallback: string) {
 async function updateContentRequest(body: Record<string, unknown>, context: Context) {
   const contentId = text(body.content_item_id);
   const requestText = text(body.content_request_text);
-  const sourceUrl = text(body.telegram_source_url);
+  const sourceUrl = text(body.request_source_url ?? body.telegram_source_url);
   const expectedVersion = Number(body.expected_content_version);
   if (!contentId || requestText.length < 10 || requestText.length > 30000
     || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1
-    || (sourceUrl && (!isHttpUrl(sourceUrl) || !/^https:\/\/(t\.me|telegram\.me)\//i.test(sourceUrl)))) {
-    return jsonResponse({ message: "اكتب كل المطلوب بوضوح، واستخدم رابط Telegram صحيحًا إن أضفته." }, 400);
+    || sourceUrl.length > 2000 || (sourceUrl && !isHttpUrl(sourceUrl))) {
+    return jsonResponse({ message: "اكتب كل المطلوب بوضوح، واستخدم رابط ويب صحيحًا إن أضفته." }, 400);
   }
 
   const { data, error } = await context!.supabaseAdmin.rpc("update_content_request_v1", {

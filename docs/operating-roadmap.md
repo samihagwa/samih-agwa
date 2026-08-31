@@ -20,7 +20,7 @@ This file is the implementation memory for ideas that must not disappear between
 - Reaction mapping: Ayman 👍 = activated, Asmaa 👍 = contacted, 👎 = account correction required.
 - Import must be reviewed as a batch, deduplicated, auditable, and reversible. No message or reaction is ever sent to Telegram during import.
 - Owner/admin import UI is implemented in CRM: Telegram JSON, CSV/TSV, and pasted labeled messages are parsed locally, invalid rows block approval, and the batch history exposes version-guarded rollback.
-- File uploads may later move from Telegram-first raw material to managed platform storage without breaking existing links.
+- Raw material currently accepts external HTTP/HTTPS links from Telegram, Drive, Dropbox, or another trusted source. Managed platform uploads can be added later without breaking existing links.
 
 ## Next AI phases
 

@@ -734,11 +734,12 @@ test("content plans support a real archive and owner-safe permanent deletion", a
   assert.match(css, /\.planning-archive-empty/);
 });
 
-test("content intake keeps one canonical request while legacy Telegram timelines stay readable", async () => {
-  const [migration, simpleMigration, rawGateMigration, parser, quickForm, workspace, taskDetail, createCommand, contentCommands, roadmap] = await Promise.all([
+test("content intake accepts generic raw-material web links while legacy Telegram timelines stay readable", async () => {
+  const [migration, simpleMigration, rawGateMigration, genericLinksMigration, parser, quickForm, workspace, taskDetail, createCommand, contentCommands, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817025228_telegram_smart_content_intake.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260830070000_simplified_content_request_workflow.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260831015354_enforce_direct_reel_raw_material_gate.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260831032124_allow_generic_raw_material_links.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/content-intake.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/content/QuickIntakeForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
@@ -808,10 +809,20 @@ test("content intake keeps one canonical request while legacy Telegram timelines
   assert.match(rawGateMigration, /Recording, editing, thumbnail, design, and publishing steps require a result URL/);
   assert.match(rawGateMigration, /to service_role/);
   assert.match(rawGateMigration, /from public, anon, authenticated/);
+  assert.match(genericLinksMigration, /drop constraint if exists content_items_intake_source_url_http/);
+  assert.match(genericLinksMigration, /validate constraint content_items_intake_source_url_http/);
+  assert.ok(genericLinksMigration.includes("'^https?://[^[:space:]@/?#]+([/?#][^[:space:]]*)?$'"));
+  assert.match(genericLinksMigration, /Each raw material needs a valid type and HTTP or HTTPS URL/);
+  assert.match(genericLinksMigration, /The optional source must be a valid HTTP or HTTPS URL/);
+  assert.match(genericLinksMigration, /from public, anon, authenticated/);
+  assert.match(genericLinksMigration, /to service_role/);
+  assert.doesNotMatch(genericLinksMigration, /Telegram raw-material links|valid type and Telegram URL/);
   assert.match(quickForm, /كل المطلوب والروابط/);
   assert.match(quickForm, /raw_materials/);
   assert.match(quickForm, /الخطوة \{step \+ 1\} من \{wizardSteps\.length\}/);
-  assert.match(quickForm, /فين المادة الخام على Telegram/);
+  assert.match(quickForm, /فين رابط المادة الخام/);
+  assert.match(quickForm, /function isWebUrl/);
+  assert.doesNotMatch(quickForm, /function isTelegramUrl|يبدأ بـ https:\/\/t\.me/);
   assert.match(quickForm, /event\.preventDefault\(\); goNext\(\)/);
   assert.match(quickForm, /key="quick-intake-submit"/);
   assert.doesNotMatch(quickForm, /raw_material_sent/);
@@ -824,11 +835,18 @@ test("content intake keeps one canonical request while legacy Telegram timelines
   assert.match(taskDetail, /intake_request/);
   assert.match(taskDetail, /كل المطلوب والروابط/);
   assert.match(taskDetail, /submit_step_delivery/);
-  assert.match(taskDetail, /رابط رسالة المادة الخام على Telegram/);
+  assert.match(taskDetail, /رابط المادة الخام/);
+  assert.doesNotMatch(taskDetail, /رابط رسالة المادة الخام على Telegram/);
   assert.doesNotMatch(taskDetail, /confirmTelegramRawHandoff/);
   assert.match(createCommand, /create_direct_reel_workflow_v2/);
   assert.match(createCommand, /directRawMaterials/);
+  assert.match(createCommand, /function isWebUrl/);
+  assert.match(createCommand, /!isWebUrl\(url\)/);
+  assert.match(createCommand, /!isTelegramUrl\(telegramSource\)/);
   assert.match(createCommand, /create_reel_from_intake/);
+  assert.match(workspace, /رابط المصدر الأصلي/);
+  assert.match(contentCommands, /body\.request_source_url \?\? body\.telegram_source_url/);
+  assert.doesNotMatch(contentCommands, /telegram\.me/);
   assert.match(contentCommands, /change_timeline_cue/);
   assert.match(roadmap, /private Supabase Storage buckets/);
   assert.match(roadmap, /does not download, copy, or re-upload Telegram files/);

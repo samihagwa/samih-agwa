@@ -438,7 +438,7 @@ export function ContentWorkspace() {
       content_item_id: item.id,
       expected_content_version: item.version,
       content_request_text: formText(form, "request_text"),
-      telegram_source_url: formText(form, "telegram_source_url"),
+      request_source_url: formText(form, "request_source_url"),
     }, "تم تحديث نص «كل المطلوب» مع الحفاظ على نفس الروابط ومكانها.");
     if (updated) setEditingBriefId(null);
   }
@@ -600,10 +600,10 @@ export function ContentWorkspace() {
             <div className="production-header"><div><MessageSquareText size={17} /><div><p className="overline">المرجع الأساسي</p><h4>كل المطلوب والروابط</h4></div></div>{canEditBrief ? <button className="text-button" type="button" onClick={() => setEditingBriefId(editingBriefId === item.id ? null : item.id)}><Pencil size={13} /> تعديل الطلب</button> : null}</div>
             {editingBriefId === item.id && canEditBrief ? <form className="inline-production-form" onSubmit={(event) => void updateContentRequest(event, item)}>
               <label><span>كل المطلوب والروابط</span><textarea name="request_text" minLength={10} maxLength={30000} rows={18} required defaultValue={canonicalRequest} /></label>
-              <label><span>رابط رسالة Telegram الأصلية — اختياري</span><input name="telegram_source_url" type="url" dir="ltr" defaultValue={item.intake_source_url ?? ""} placeholder="https://t.me/c/..." /></label>
+              <label><span>رابط المصدر الأصلي — اختياري</span><input name="request_source_url" type="url" inputMode="url" dir="ltr" maxLength={2000} defaultValue={item.intake_source_url ?? ""} placeholder="https://drive.google.com/..." /><small>يمكن أن يكون Drive أو Dropbox أو Telegram أو أي رابط ويب صالح.</small></label>
               <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={15} /> : <CheckCircle2 size={15} />} حفظ النص كما هو</Button><button className="text-button" type="button" onClick={() => setEditingBriefId(null)}>إلغاء</button></div>
             </form> : <div className="content-canonical-request-body"><LinkifiedText text={canonicalRequest} /></div>}
-            {item.intake_source_url && editingBriefId !== item.id ? <a className="content-request-source-link" href={item.intake_source_url} target="_blank" rel="noreferrer">فتح رسالة Telegram الأصلية <ExternalLink size={12} /></a> : null}
+            {item.intake_source_url && editingBriefId !== item.id ? <a className="content-request-source-link" href={item.intake_source_url} target="_blank" rel="noreferrer">فتح المصدر الأصلي <ExternalLink size={12} /></a> : null}
           </section>
 
           <section className="content-brand-references"><div><BookOpenCheck size={16} /><div><p className="overline">اختياري</p><h4>مراجع البراند</h4></div></div>{itemBrandArticles.length ? <div>{itemBrandArticles.map((article) => <a href={`/brand#article-${article.id}`} key={article.id}><strong>{article.title}</strong><small>{brandCategoryConfig[article.category].label} · v{article.version}{article.status === "archived" ? " · نسخة محفوظة" : ""}</small></a>)}</div> : <p>لا توجد مراجع إضافية مرتبطة بهذا الطلب.</p>}</section>

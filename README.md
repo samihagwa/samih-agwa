@@ -82,11 +82,11 @@ Only an active organization owner can list or mutate provider settings. Team mem
 
 1. Sign in and create the owner workspace from `/tasks`.
 2. Open **Content management** and switch to **Execution**. Paste the complete request and every link into the single **Everything required and links** field; the stored request remains unchanged and links stay clickable.
-3. Set the publish deadline. If the raw material was already sent on Telegram, mark that one checkbox. Assignment and brand-reference controls remain under the optional advanced section and reuse the most recent owners by default.
-4. Select **Create and assign request** once. The editor and thumbnail designer receive independent tasks immediately when raw material is ready; otherwise only the recording/raw-material step blocks editing. Caption remains part of the content record instead of becoming another counted team task.
+3. Set the publish deadline, then attach at least one raw-material web link. Google Drive, Dropbox, Telegram, and other HTTP/HTTPS links are accepted. Assignment and brand-reference controls reuse the most recent owners by default.
+4. Select **Create and assign request** once. The editor and thumbnail designer receive independent tasks immediately because the raw material is already linked. Caption remains part of the content record instead of becoming another counted team task.
 5. Each member opens `/tasks` to see only the steps requiring their action. The final publishing step remains a manual confirmation until a verified Meta/platform integration is added.
 
-Telegram remains the raw-material inbox for now: paste the direct message/file link with the request. Direct uploads are deliberately deferred to the private Storage phase documented in `docs/roadmap.md`.
+Raw material can remain in Telegram, Drive, Dropbox, or another trusted web location: paste its direct link with the request. Direct uploads are deliberately deferred to the private Storage phase documented in `docs/roadmap.md`.
 
 ## Personal quarterly-planning test
 
