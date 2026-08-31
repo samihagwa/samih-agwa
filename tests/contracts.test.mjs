@@ -735,9 +735,10 @@ test("content plans support a real archive and owner-safe permanent deletion", a
 });
 
 test("content intake keeps one canonical request while legacy Telegram timelines stay readable", async () => {
-  const [migration, simpleMigration, parser, quickForm, workspace, taskDetail, createCommand, contentCommands, roadmap] = await Promise.all([
+  const [migration, simpleMigration, rawGateMigration, parser, quickForm, workspace, taskDetail, createCommand, contentCommands, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817025228_telegram_smart_content_intake.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260830070000_simplified_content_request_workflow.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260831015354_enforce_direct_reel_raw_material_gate.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/content-intake.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/content/QuickIntakeForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
@@ -798,8 +799,20 @@ test("content intake keeps one canonical request while legacy Telegram timelines
   }
   assert.match(simpleMigration, /enforce_task_assignee_reachability/);
   assert.match(simpleMigration, /'tasks' = any\(membership\.allowed_sections\)/);
+  assert.match(rawGateMigration, /create_direct_reel_workflow_v2/);
+  assert.match(rawGateMigration, /content_has_real_raw_material/);
+  assert.match(rawGateMigration, /guard_reel_task_prerequisites/);
+  assert.match(rawGateMigration, /jsonb_array_length\(raw_materials\) not between 1 and 10/);
+  assert.match(rawGateMigration, /publishing_task_id, editing_task_id/);
+  assert.match(rawGateMigration, /publishing_task_id, thumbnail_task_id/);
+  assert.match(rawGateMigration, /Recording, editing, thumbnail, design, and publishing steps require a result URL/);
+  assert.match(rawGateMigration, /to service_role/);
+  assert.match(rawGateMigration, /from public, anon, authenticated/);
   assert.match(quickForm, /كل المطلوب والروابط/);
-  assert.match(quickForm, /raw_material_sent/);
+  assert.match(quickForm, /raw_materials/);
+  assert.match(quickForm, /الخطوة \{step \+ 1\} من \{wizardSteps\.length\}/);
+  assert.match(quickForm, /فين المادة الخام على Telegram/);
+  assert.doesNotMatch(quickForm, /raw_material_sent/);
   assert.match(quickForm, /crypto\.randomUUID/);
   assert.doesNotMatch(quickForm, /content_goal|content_hook|content_cta|content_editing_brief/);
   assert.match(workspace, /طلب ريلز كامل/);
@@ -809,8 +822,10 @@ test("content intake keeps one canonical request while legacy Telegram timelines
   assert.match(taskDetail, /intake_request/);
   assert.match(taskDetail, /كل المطلوب والروابط/);
   assert.match(taskDetail, /submit_step_delivery/);
-  assert.match(taskDetail, /أرسلت المادة الخام على Telegram/);
-  assert.match(createCommand, /create_simplified_content_workflow_v1/);
+  assert.match(taskDetail, /رابط رسالة المادة الخام على Telegram/);
+  assert.doesNotMatch(taskDetail, /confirmTelegramRawHandoff/);
+  assert.match(createCommand, /create_direct_reel_workflow_v2/);
+  assert.match(createCommand, /directRawMaterials/);
   assert.match(createCommand, /create_reel_from_intake/);
   assert.match(contentCommands, /change_timeline_cue/);
   assert.match(roadmap, /private Supabase Storage buckets/);
@@ -877,10 +892,10 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(securityMigration, /from public, anon, authenticated/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
-  assert.match(edgeFunction, /create_simplified_content_workflow_v1/);
+  assert.match(edgeFunction, /create_direct_reel_workflow_v2/);
   assert.match(edgeFunction, /create_reel_production_workflow_v3/);
   assert.match(workspace, /functions\.invoke\("create-content-workflow"/);
-  assert.match(workspace, /payload\.raw_material_sent/);
+  assert.match(workspace, /payload\.raw_materials\.length/);
   assert.match(workspace, /كل المطلوب والروابط/);
   assert.match(workspace, /الكابشن النهائي/);
   assert.match(workspace, /const activeTasks = workTasks\.filter/);
@@ -915,6 +930,10 @@ test("task board filters remain deterministic and completion-first", async () =>
   assert.match(taskWorkspace, /type="date"/);
   assert.match(taskWorkspace, /filter === "all" && !advancedFiltersActive/);
   assert.match(taskWorkspace, /لا توجد مهام مطابقة/);
+  assert.match(taskWorkspace, /type TaskCreateStep = 1 \| 2 \| 3/);
+  assert.match(taskWorkspace, /اكتب المطلوب مرة واحدة/);
+  assert.match(taskWorkspace, /لن تُحفظ أي بيانات قبل ضغط زر الإسناد النهائي/);
+  assert.match(taskWorkspace, /deriveTaskTitle/);
 });
 
 test("content production briefs, assets, and revision rounds share one secured workflow", async () => {

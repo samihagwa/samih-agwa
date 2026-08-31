@@ -5,7 +5,7 @@ const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const contentSteps = new Set(["brief", "recording", "editing", "thumbnail", "caption", "design", "approval", "scheduling", "publishing"]);
 const revisionSteps = new Set(["recording", "editing", "thumbnail", "caption", "design"]);
 const resultSteps = new Set(["recording", "editing", "thumbnail", "caption", "design", "scheduling", "publishing"]);
-const resultUrlSteps = new Set(["editing", "thumbnail", "design", "publishing"]);
+const resultUrlSteps = new Set(["recording", "editing", "thumbnail", "design", "publishing"]);
 const assetKinds = new Set([
   "raw_video", "source", "b_roll", "image", "audio", "reference",
   "draft_video", "thumbnail", "caption", "final_export",
@@ -32,7 +32,7 @@ function isHttpUrl(value: string) {
 
 function commandError(error: { message: string } | null, fallback: string) {
   if (!error) return null;
-  const userError = /Only |active organization|not found|invalid|cannot|must |required|allowed|unknown|workflow|reviewer|leadership|creator|owner|membership/i.test(error.message);
+  const userError = /Only |active organization|not found|invalid|cannot|must |required|allowed|unknown|workflow|reviewer|leadership|creator|owner|membership|prerequisite|raw material|attach/i.test(error.message);
   return jsonResponse({ message: userError ? error.message : fallback }, userError ? 400 : 500);
 }
 
@@ -110,7 +110,7 @@ async function submitStepDelivery(body: Record<string, unknown>, context: Contex
   if (!taskId || !resultSteps.has(step) || (!note && !url)
     || note.length > 10000 || url.length > 2000 || (url && !isHttpUrl(url))
     || (resultUrlSteps.has(step) && !url)) {
-    return jsonResponse({ message: "أضف نتيجة المرحلة بشكل صحيح؛ المونتاج والغلاف والتصميم والنشر تحتاج رابطًا، أما إرسال المادة الخام على Telegram فيكفي تأكيده." }, 400);
+    return jsonResponse({ message: "أضف نتيجة المرحلة بشكل صحيح؛ المادة الخام والمونتاج والغلاف والتصميم والنشر تحتاج رابط تسليم فعليًا." }, 400);
   }
   const { data, error } = await context!.supabaseAdmin.rpc("submit_content_step_delivery", {
     target_user_id: context!.userClaims!.id,

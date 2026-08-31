@@ -125,7 +125,7 @@ const assetInputsByStep: Partial<Record<ContentStep, ContentStep[]>> = {
   publishing: ["brief", "recording", "editing", "thumbnail", "caption", "design", "scheduling", "publishing"],
 };
 
-const contentStepsRequiringResultUrl = new Set<ContentStep>(["editing", "thumbnail", "design", "publishing"]);
+const contentStepsRequiringResultUrl = new Set<ContentStep>(["recording", "editing", "thumbnail", "design", "publishing"]);
 
 function taskEventTitle(event: TaskEvent) {
   if (event.event_type === "created") return "تم إنشاء المهمة";
@@ -446,7 +446,11 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
 
     if (workspace.task.content_item_id && workspace.task.content_step) {
       if (contentStepsRequiringResultUrl.has(workspace.task.content_step) && !resultUrl) {
-        setError(workspace.task.content_step === "publishing" ? "أضف رابط المنشور الحقيقي قبل تأكيد النشر." : "أضف رابط ملف التسليم قبل إغلاق المهمة.");
+        setError(workspace.task.content_step === "publishing"
+          ? "أضف رابط المنشور الحقيقي قبل تأكيد النشر."
+          : workspace.task.content_step === "recording"
+            ? "أضف رابط رسالة المادة الخام على Telegram قبل فتح المونتاج والغلاف."
+            : "أضف رابط ملف التسليم قبل إغلاق المهمة.");
         return;
       }
       if (workspace.task.content_step === "publishing" && !resultNote && !workspace.contentRequest?.caption_brief.trim()) {
@@ -509,14 +513,6 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       await loadTaskData(session, false);
     }
     setWorking(false);
-  }
-
-  async function confirmTelegramRawHandoff() {
-    await submitContentDelivery(
-      "تم إرسال المادة الخام على Telegram.",
-      "",
-      "تم تأكيد إرسال المادة الخام على Telegram وفتح المونتاج تلقائيًا.",
-    );
   }
 
   if (loading) return <section className="panel empty-state"><LoaderCircle className="spin" size={20} /><div><h2>جارٍ فتح ملف المهمة</h2><p>نحمّل التفاصيل وطلبات التعديل وسجل الحالة.</p></div></section>;
@@ -646,10 +642,9 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
             {task.content_item_id || standaloneTask ? <div id="delivery" ref={deliverySection} className={`task-current-delivery${currentDelivery ? " has-delivery" : ""}`} tabIndex={-1}>
               <header><div><PackageCheck size={16} /><div><strong>تسليم هذه المهمة</strong><small>{currentDelivery ? `إصدار ${currentDelivery.version} · ${formatDate(currentDelivery.submitted_at)}` : "النتيجة النهائية التي سلّمها منفّذ هذه الخطوة"}</small></div></div>{currentDelivery ? <StatusBadge tone="success">تم التسليم</StatusBadge> : <StatusBadge tone="neutral">في الانتظار</StatusBadge>}</header>
               {currentDelivery ? <div className="task-current-delivery-body"><div>{currentDelivery.result_note ? <p>{currentDelivery.result_note}</p> : <p>تم التسليم بدون ملاحظة مكتوبة.</p>}<small>بواسطة {peopleById.get(currentDelivery.submitted_by)?.name ?? "عضو فريق"}</small></div>{currentDelivery.result_url ? <a href={currentDelivery.result_url} target="_blank" rel="noreferrer"><span>{task.content_step === "publishing" ? "فتح المنشور" : "فتح ملف التسليم"}<small dir="ltr">{resourceHost(currentDelivery.result_url)}</small></span><ExternalLink size={15} /></a> : null}</div> : <p className="task-resource-empty"><PackageCheck size={14} /> {isAssignee ? task.status === "ready" ? "ابدأ المهمة أولًا، وبعدها يظهر لك زر «تم تنفيذ المهمة»." : task.status === "in_progress" ? "اضغط «تم تنفيذ المهمة» من مربع الإجراء الحالي لفتح خانة التسليم." : task.status === "review" ? "التسليم بانتظار مراجعة طالب المهمة." : "لم تسلّم نتيجة هذه المهمة بعد." : "لم يرفع المنفّذ تسليم هذه المهمة حتى الآن."}</p>}
-              {showDeliveryForm && task.content_step === "recording" && !currentDelivery ? <div className="task-telegram-handoff"><Button type="button" disabled={working || deliveryDraftStale} onClick={() => void confirmTelegramRawHandoff()}>{working ? <LoaderCircle className="spin" size={14} /> : <Send size={14} />} أرسلت المادة الخام على Telegram</Button><small>ضغطة واحدة تكفي؛ رابط رسالة Telegram اختياري.</small></div> : null}
               {showDeliveryForm ? <form className="task-delivery-compose" key={`delivery-${deliverySnapshot?.taskVersion ?? 0}-${deliverySnapshot?.deliveryVersion ?? 0}`} onSubmit={saveTaskDelivery}>
                 {deliveryDraftStale ? <p className="form-notice error" role="alert">وصل تعديل جديد أثناء الكتابة. اقفل النموذج وراجع أحدث تعليمات أو تسليم قبل الحفظ.</p> : null}
-                <label><span>{task.content_step === "publishing" ? "رابط المنشور" : task.content_step === "recording" ? "رابط رسالة أو ملف المادة الخام — اختياري" : "رابط ملف التسليم"}</span><input name="result_url" type="url" inputMode="url" dir="ltr" maxLength={2000} required={Boolean(task.content_step && contentStepsRequiringResultUrl.has(task.content_step))} defaultValue={currentDelivery?.result_url ?? ""} placeholder={task.content_step === "publishing" ? "https://instagram.com/p/..." : task.content_step === "recording" ? "https://t.me/c/..." : "https://drive.google.com/..."} disabled={working || deliveryDraftStale} /></label>
+                <label><span>{task.content_step === "publishing" ? "رابط المنشور" : task.content_step === "recording" ? "رابط رسالة المادة الخام على Telegram" : "رابط ملف التسليم"}</span><input name="result_url" type="url" inputMode="url" dir="ltr" maxLength={2000} required={Boolean(task.content_step && contentStepsRequiringResultUrl.has(task.content_step))} defaultValue={currentDelivery?.result_url ?? ""} placeholder={task.content_step === "publishing" ? "https://instagram.com/p/..." : task.content_step === "recording" ? "https://t.me/c/..." : "https://drive.google.com/..."} disabled={working || deliveryDraftStale} /></label>
                 <label><span>{task.content_step === "publishing" ? "الكابشن النهائي والهاشتاجات" : task.content_step === "recording" ? "الكابشن النهائي — اختياري الآن" : "ملاحظة التسليم — اختيارية عند وجود رابط"}</span><textarea name="result_note" rows={task.content_step === "publishing" || task.content_step === "recording" ? 6 : 3} minLength={3} maxLength={10000} required={task.content_step === "publishing"} defaultValue={currentDelivery?.result_note === "تم إرسال المادة الخام على Telegram." ? "" : currentDelivery?.result_note ?? (task.content_step === "publishing" ? workspace.contentRequest?.caption_brief : "") ?? ""} placeholder={task.content_step === "publishing" ? "اكتب النص الذي سيُنشر كما هو مع الهاشتاجات." : task.content_step === "recording" ? "لو الكابشن جاهز اكتبه هنا؛ وإن لم يكن جاهزًا سيكمله مسؤول النشر داخل مهمته." : "اكتب مكان النسخة النهائية أو أي ملاحظة مهمة لطالب المهمة."} disabled={working || deliveryDraftStale} />{task.content_step === "recording" ? <small>لن تُنشأ مهمة كابشن منفصلة. النص الذي تحفظه هنا يظهر تلقائيًا لمسؤول النشر.</small> : null}</label>
                 <div className="form-actions"><Button type="submit" disabled={working || deliveryDraftStale}>{working ? <LoaderCircle className="spin" size={14} /> : <PackageCheck size={14} />} {currentDelivery && task.status === "done" ? "تحديث التسليم" : task.content_step === "publishing" ? "تأكيد تم النشر" : task.requires_review ? "حفظ وإرسال للمراجعة" : "تسليم وإغلاق المهمة"}</Button><button className="text-button" type="button" disabled={working} onClick={closeDeliveryForm}>{deliveryDraftStale ? "إغلاق ومراجعة التحديث" : "إلغاء"}</button><small>{task.status === "done" ? "يمكنك تصحيح الرابط أو الملاحظة بدون إعادة فتح المهمة." : task.requires_review ? "الحفظ يرسل النتيجة للمراجعة في نفس العملية." : "الحفظ يغلق المهمة في نفس العملية، والخانة تفضل موجودة حتى بعد اكتمال المهمة."}</small></div>
               </form> : null}

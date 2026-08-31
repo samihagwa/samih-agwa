@@ -6,12 +6,26 @@ const responseHeaders = {
   "Content-Type": "application/json",
 };
 
-const ownerFields = [
+const legacyOwnerFields = [
   "content_creator_id",
   "editing_owner_id",
   "thumbnail_owner_id",
   "publishing_owner_id",
 ] as const;
+
+const directOwnerFields = [
+  "editing_owner_id",
+  "thumbnail_owner_id",
+  "publishing_owner_id",
+] as const;
+
+const directRawMaterialTypes = new Set(["raw_video", "audio", "source"]);
+
+type DirectRawMaterial = {
+  kind: "raw_video" | "audio" | "source";
+  url: string;
+  title?: string;
+};
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -43,10 +57,42 @@ function isOptionalHttpUrl(value: unknown) {
 function isTelegramUrl(value: string) {
   try {
     const parsed = new URL(value);
-    return parsed.protocol === "https:" && ["t.me", "telegram.me"].includes(parsed.hostname.toLowerCase());
+    return parsed.protocol === "https:"
+      && ["t.me", "telegram.me"].includes(parsed.hostname.toLowerCase())
+      && !parsed.username
+      && !parsed.password
+      && !parsed.port
+      && parsed.pathname !== "/";
   } catch {
     return false;
   }
+}
+
+function directRawMaterials(value: unknown): DirectRawMaterial[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 10) return null;
+
+  const materials: DirectRawMaterial[] = [];
+  const urls = new Set<string>();
+  for (const rawValue of value) {
+    if (typeof rawValue !== "object" || !rawValue || Array.isArray(rawValue)) return null;
+    const raw = rawValue as Record<string, unknown>;
+    if (Object.keys(raw).some((key) => !["kind", "url", "title"].includes(key))) return null;
+
+    const kind = typeof raw.kind === "string" ? raw.kind.trim().toLowerCase() : "";
+    const url = typeof raw.url === "string" ? raw.url.trim() : "";
+    const title = typeof raw.title === "string" ? raw.title.trim() : "";
+    if (!directRawMaterialTypes.has(kind) || url.length > 2000 || !isTelegramUrl(url)) return null;
+    if (raw.title !== undefined && raw.title !== null && (title.length < 2 || title.length > 160)) return null;
+    const duplicateKey = url.toLowerCase();
+    if (urls.has(duplicateKey)) return null;
+    urls.add(duplicateKey);
+    materials.push({
+      kind: kind as DirectRawMaterial["kind"],
+      url,
+      ...(title ? { title } : {}),
+    });
+  }
+  return materials;
 }
 
 function isTimelineCue(value: unknown) {
@@ -104,16 +150,16 @@ export default {
       ? body.content_request_text.trim()
       : "";
 
-    // This is the default human workflow: one unchanged request, one deadline,
-    // and the four accountable owners. Legacy structured callers remain
-    // supported below so old links and saved drafts do not break.
+    // This is the default human workflow: one unchanged request, durable raw
+    // material, one deadline, and three downstream owners. Legacy structured
+    // callers remain supported below so old links and saved drafts do not break.
     if (canonicalRequest) {
       const simpleRequiredFields = [
         "target_organization_id",
         "request_id",
         "content_title",
         "target_publish_at",
-        ...ownerFields,
+        ...directOwnerFields,
       ];
       if (simpleRequiredFields.some((field) => !isNonEmptyString(body[field]))) {
         return jsonResponse({ message: "أكمل عنوان الطلب وموعده والمسؤولين قبل الحفظ." }, 400);
@@ -124,15 +170,11 @@ export default {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(body.request_id))) {
         return jsonResponse({ message: "معرّف الطلب غير صالح. حدّث الصفحة ثم حاول مرة أخرى." }, 400);
       }
-      if (typeof body.raw_material_sent !== "boolean") {
-        return jsonResponse({ message: "حدد هل تم إرسال المادة الخام أم لا." }, 400);
-      }
-
-      const sourceUrl = typeof body.telegram_source_url === "string"
-        ? body.telegram_source_url.trim()
-        : "";
-      if (sourceUrl && !isTelegramUrl(sourceUrl)) {
-        return jsonResponse({ message: "رابط رسالة Telegram الاختياري غير صالح." }, 400);
+      const materials = directRawMaterials(body.raw_materials);
+      if (!materials) {
+        return jsonResponse({
+          message: "أضف من رابط إلى 10 روابط للمادة الخام من Telegram، وحدد نوع كل رابط بدون تكرار.",
+        }, 400);
       }
 
       const simpleBrandArticleIds = approvedBrandArticleIds(body.brand_article_ids);
@@ -141,7 +183,7 @@ export default {
       }
 
       const { data: contentId, error } = await context.supabaseAdmin.rpc(
-        "create_simplified_content_workflow_v1",
+        "create_direct_reel_workflow_v2",
         {
           target_user_id: context.userClaims.id,
           target_organization_id: body.target_organization_id,
@@ -149,9 +191,7 @@ export default {
           content_title: body.content_title,
           content_request_text: canonicalRequest,
           target_publish_at: body.target_publish_at,
-          raw_material_sent: body.raw_material_sent,
-          request_source_url: sourceUrl,
-          content_creator_id: body.content_creator_id,
+          raw_materials: materials,
           editing_owner_id: body.editing_owner_id,
           thumbnail_owner_id: body.thumbnail_owner_id,
           publishing_owner_id: body.publishing_owner_id,
@@ -160,7 +200,7 @@ export default {
       );
 
       if (error) {
-        const userError = /Only organization leadership|active organization member|Publish time|title|full request|Telegram|brand reference|approved brand/i.test(error.message);
+        const userError = /Only organization leadership|active organization member|Publish time|title|full request|raw material|Telegram|brand reference|approved brand|stable request/i.test(error.message);
         return jsonResponse(
           { message: userError ? error.message : "تعذّر إنشاء طلب المحتوى. لم يتم حفظ أي جزء من العملية." },
           userError ? 400 : 500,
@@ -180,7 +220,7 @@ export default {
       "content_editing_brief",
       "content_thumbnail_brief",
       "target_publish_at",
-      ...ownerFields,
+      ...legacyOwnerFields,
     ];
 
     if (requiredTextFields.some((field) => !isNonEmptyString(body[field]))) {

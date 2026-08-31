@@ -146,7 +146,7 @@ export function ContentWorkspace() {
   const [captionChoices, setCaptionChoices] = useState<Record<string, AiChoiceSet<CaptionOption>>>({});
   const [thumbnailChoices, setThumbnailChoices] = useState<Record<string, AiChoiceSet<ThumbnailOption>>>({});
   const [aiWorking, setAiWorking] = useState<string | null>(null);
-  const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(() => new Set());
+  const [expandedContentId, setExpandedContentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
   const openedContentHash = useRef<string | null>(null);
@@ -168,7 +168,7 @@ export function ContentWorkspace() {
     setCaptionChoices({});
     setThumbnailChoices({});
     setAiWorking(null);
-    setExpandedContentIds(new Set());
+    setExpandedContentId(null);
   }, []);
 
   const clearWorkspace = useCallback(() => {
@@ -333,7 +333,7 @@ export function ContentWorkspace() {
 
   useEffect(() => {
     if (!linkedContentId || openedContentHash.current === `${linkedContentId}:${linkedRevisionId ?? ""}` || !items.some((item) => item.id === linkedContentId)) return;
-    setExpandedContentIds((current) => new Set(current).add(linkedContentId));
+    setExpandedContentId(linkedContentId);
     const frame = window.requestAnimationFrame(() => {
       const targetId = linkedRevisionId && revisions.some((revision) => revision.id === linkedRevisionId)
         ? `revision-${linkedRevisionId}`
@@ -425,9 +425,7 @@ export function ContentWorkspace() {
       return false;
     }
     setShowQuickIntake(false);
-    setNotice(payload.raw_material_sent
-      ? "تم إنشاء الطلب كما كتبته وإسناد المونتاج والغلاف والنشر. لن تُنشأ مهمة إضافية للمادة الخام."
-      : "تم إنشاء الطلب كما كتبته وإسناد المادة الخام والمونتاج والغلاف والنشر.");
+    setNotice(`تم إنشاء طلب الريلز وحفظ ${payload.raw_materials.length} رابط خام، ثم إسناد المونتاج والغلاف والنشر بنجاح.`);
     await refreshContent(workspace.organization.id);
     return true;
   }
@@ -577,7 +575,7 @@ export function ContentWorkspace() {
           && resultSteps.includes(task.content_step)
           && (isSocialPost || task.content_step !== "caption"));
         const platformLabel = item.platforms.map((platform) => platform.charAt(0).toUpperCase() + platform.slice(1)).join(" + ");
-        const expanded = expandedContentIds.has(item.id);
+        const expanded = expandedContentId === item.id;
         const canUseCaptionAi = Boolean(!isSocialPost && publishingTask
           && !["done", "cancelled"].includes(publishingTask.status)
           && !readOnly
@@ -589,10 +587,10 @@ export function ContentWorkspace() {
         const itemCaptionChoices = captionChoices[item.id];
         const itemThumbnailChoices = thumbnailChoices[item.id];
 
-        return <article className="panel content-card workflow-entity-card" data-card-state={item.status} data-direct-target={linkedContentId === item.id && !linkedRevisionId || undefined} tabIndex={linkedContentId === item.id && !linkedRevisionId ? -1 : undefined} id={`content-${item.id}`} key={item.id}>
+        return <article className="panel content-card workflow-entity-card" data-card-state={item.status} data-expanded={expanded || undefined} data-direct-target={linkedContentId === item.id && !linkedRevisionId || undefined} tabIndex={linkedContentId === item.id && !linkedRevisionId ? -1 : undefined} id={`content-${item.id}`} key={item.id}>
           <header>
             <div className="content-card-title"><span className="icon-tile"><Film size={17} /></span><div><p className="overline">{isSocialPost ? "Social Post" : "Reel"} · {platformLabel} · v{item.version}</p><h3 className="workflow-card-heading">{item.title}</h3></div></div>
-            <div className="content-card-actions"><div className="content-card-badges"><StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>{openRevisions.length ? <StatusBadge tone="warning">{openRevisions.length} تعديل مفتوح</StatusBadge> : null}{openCueCount ? <StatusBadge tone="info">{openCueCount} تعليمة تنفيذ</StatusBadge> : null}</div><button className="content-expand-button" type="button" aria-expanded={expanded} onClick={() => setExpandedContentIds((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}>{expanded ? "إخفاء التفاصيل" : "فتح التفاصيل"}<ChevronDown className={expanded ? "expanded" : ""} size={14} /></button></div>
+            <div className="content-card-actions"><div className="content-card-badges"><StatusBadge tone={contentStatusConfig[item.status].tone}>{contentStatusConfig[item.status].label}</StatusBadge>{openRevisions.length ? <StatusBadge tone="warning">{openRevisions.length} تعديل مفتوح</StatusBadge> : null}{openCueCount ? <StatusBadge tone="info">{openCueCount} تعليمة تنفيذ</StatusBadge> : null}</div><button className="content-expand-button" type="button" aria-expanded={expanded} onClick={() => setExpandedContentId((current) => current === item.id ? null : item.id)}>{expanded ? "إخفاء التفاصيل" : "فتح التفاصيل"}<ChevronDown className={expanded ? "expanded" : ""} size={14} /></button></div>
           </header>
 
           {!expanded ? <p className="content-request-preview"><LinkifiedText text={canonicalRequest} /></p> : null}
