@@ -2,7 +2,11 @@ import { createSupabaseContext } from "npm:@supabase/server@1.4.1";
 import { corsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
 
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
-const sources = new Set(["manual", "whales_zone", "samihagwa_site", "telegram", "meta", "market_whales_app", "exness", "tickmill", "referral", "other"]);
+const sources = new Set([
+  "manual", "whales_zone", "samihagwa_site", "market_whales_dashboard",
+  "harmonic_book", "telegram", "meta", "facebook", "whatsapp", "email",
+  "market_whales_app", "exness", "tickmill", "referral", "other",
+]);
 const interests = new Set(["indicator", "signals_gold", "signals_fx", "course", "brokerage", "book", "service", "other"]);
 const identityKinds = new Set(["phone", "email", "telegram", "tradingview"]);
 const conversationChannels = new Set(["telegram", "whatsapp", "instagram", "facebook", "messenger", "other"]);
@@ -425,6 +429,37 @@ async function saveIndicatorRouting(body: Record<string, unknown>, context: Cont
   return commandError(error, "تعذّر حفظ مسار عميل المؤشر.") ?? jsonResponse({ saved: data === true });
 }
 
+async function saveSalesSetup(body: Record<string, unknown>, context: Context) {
+  const organizationId = text(body.organization_id);
+  const userIds = Array.isArray(body.user_ids) ? body.user_ids.map(text).filter(Boolean) : [];
+  const activationOwnerId = text(body.activation_owner_id);
+  const salesOwnerId = text(body.sales_owner_id);
+  const delayHours = Number(body.sales_follow_up_delay_hours);
+  if (
+    !organizationId
+    || !userIds.length
+    || userIds.length > 20
+    || userIds.some((id) => !/^[0-9a-f-]{36}$/i.test(id))
+    || new Set(userIds).size !== userIds.length
+    || !/^[0-9a-f-]{36}$/i.test(activationOwnerId)
+    || !/^[0-9a-f-]{36}$/i.test(salesOwnerId)
+    || !Number.isInteger(delayHours)
+    || delayHours < 1
+    || delayHours > 168
+  ) {
+    return jsonResponse({ message: "اختر فريق السيلز ومسؤول التفعيل وموعد المتابعة بشكل صحيح." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("save_crm_sales_setup", {
+    target_user_id: context!.userClaims!.id,
+    target_organization_id: organizationId,
+    route_user_ids: userIds,
+    target_activation_owner_id: activationOwnerId,
+    target_sales_owner_id: salesOwnerId,
+    target_sales_follow_up_delay_hours: delayHours,
+  });
+  return commandError(error, "تعذّر حفظ فريق السيلز ومسار المؤشر.") ?? jsonResponse({ saved: data === true });
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -440,6 +475,31 @@ export default {
       return jsonResponse({ message: "بيانات الطلب غير صالحة." }, 400);
     }
 
+    let organizationId = text(body.organization_id);
+    let membershipQuery = context.supabaseAdmin
+      .from("memberships")
+      .select("organization_id, role, allowed_sections, status")
+      .eq("user_id", context.userClaims.id)
+      .eq("status", "active");
+    if (organizationId) membershipQuery = membershipQuery.eq("organization_id", organizationId);
+    const { data: memberships, error: membershipError } = await membershipQuery.limit(2);
+    if (!organizationId && memberships?.length === 1) {
+      organizationId = text(memberships[0].organization_id);
+      body = { ...body, organization_id: organizationId };
+    }
+    const membership = memberships?.length === 1 ? memberships[0] : null;
+    const sections = Array.isArray(membership?.allowed_sections) ? membership.allowed_sections : [];
+    if (
+      !organizationId
+      || membershipError
+      || !membership
+      || membership.status !== "active"
+      || membership.role === "viewer"
+      || (membership.role !== "owner" && !sections.includes("crm"))
+    ) {
+      return jsonResponse({ message: "حسابك لا يملك صلاحية قسم CRM." }, 403);
+    }
+
     if (body.action === "create_lead") return createLead(body, context);
     if (body.action === "add_identity") return addIdentity(body, context);
     if (body.action === "record_activity") return recordActivity(body, context);
@@ -452,6 +512,7 @@ export default {
     if (body.action === "save_lead_routing") return saveLeadRouting(body, context);
     if (body.action === "get_indicator_routing") return getIndicatorRouting(body, context);
     if (body.action === "save_indicator_routing") return saveIndicatorRouting(body, context);
+    if (body.action === "save_sales_setup") return saveSalesSetup(body, context);
     return jsonResponse({ message: "أمر CRM غير معروف." }, 400);
   },
 };

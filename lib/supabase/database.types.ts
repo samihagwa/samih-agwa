@@ -5300,6 +5300,10 @@ export type Database = {
           title: string
         }[]
       }
+      get_operational_analytics: {
+        Args: { target_organization_id: string; target_range_days: number }
+        Returns: Json
+      }
       get_crm_owner_performance: {
         Args: { target_organization_id: string; target_range_days: number }
         Returns: {
@@ -5315,6 +5319,16 @@ export type Database = {
           total_contacts: number
           won_contacts: number
           won_in_period: number
+        }[]
+      }
+      get_crm_summary: {
+        Args: { target_organization_id: string }
+        Returns: {
+          active_contacts: number
+          new_contacts: number
+          overdue_contacts: number
+          total_contacts: number
+          won_contacts: number
         }[]
       }
       get_whales_zone_intake_health: {
@@ -5488,6 +5502,26 @@ export type Database = {
       materialize_recurring_tasks: {
         Args: { target_organization_id: string }
         Returns: number
+      }
+      get_recurring_task_schedule: {
+        Args: {
+          range_ends_on: string
+          range_starts_on: string
+          target_organization_id: string
+          target_owner_id: string
+        }
+        Returns: {
+          description: string
+          materialized: boolean
+          owner_id: string
+          priority: Database["public"]["Enums"]["task_priority"]
+          requires_review: boolean
+          scheduled_at: string
+          status: Database["public"]["Enums"]["task_status"]
+          task_id: string | null
+          template_id: string
+          title: string
+        }[]
       }
       mark_all_notifications_read: {
         Args: { target_organization_id: string }
@@ -5681,6 +5715,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      save_crm_sales_setup: {
+        Args: {
+          route_user_ids: string[]
+          target_activation_owner_id: string
+          target_organization_id: string
+          target_sales_follow_up_delay_hours: number
+          target_sales_owner_id: string
+          target_user_id: string
+        }
+        Returns: boolean
+      }
       save_launch_gate_document: {
         Args: {
           document_gate: Database["public"]["Enums"]["launch_gate"]
@@ -5772,6 +5817,24 @@ export type Database = {
           result_limit: number
           result_offset: number
           search_query: string
+          target_organization_id: string
+          target_owner_id: string
+          target_scope: string
+          target_source: Database["public"]["Enums"]["crm_source"]
+          target_stage: Database["public"]["Enums"]["crm_lead_stage"]
+          target_view: string
+        }
+        Returns: {
+          contact_id: string
+          total_count: number
+        }[]
+      }
+      search_crm_contacts_v4: {
+        Args: {
+          result_limit: number
+          result_offset: number
+          search_query: string
+          target_interest: Database["public"]["Enums"]["crm_interest"]
           target_organization_id: string
           target_owner_id: string
           target_scope: string

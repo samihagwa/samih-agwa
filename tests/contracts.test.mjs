@@ -1631,7 +1631,50 @@ test("weekly task templates are secured and materialize idempotently as ordinary
   assert.match(workspace, /داخل «مهامي»/);
   assert.match(workspace, /\.eq\("version", template\.version\)[\s\S]*\.select\("id"\)[\s\S]*\.maybeSingle\(\)/);
   assert.match(workspace, /setTaskCreateMode\("weekly"\); setCapacityWarning\(null\)/);
-  assert.match(workspace, /setCapacityWarning\(null\); setShowCreate\(\(value\) => !value\)/);
+  assert.match(workspace, /resetTaskCreateDraft\(\); setTaskCreateMode\("weekly"\); setShowCreate\(true\)/);
+  assert.match(workspace, /resetTaskCreateDraft\(\); setTaskCreateMode\("once"\); setShowCreate\(true\)/);
+});
+
+test("My Work monthly schedule projects weekly routines without creating or hiding concrete tasks", async () => {
+  const [workspace, schedule, types, css] = await Promise.all([
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TaskScheduleCalendar.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(workspace, /type TaskView = "board" \| "schedule"/);
+  assert.match(workspace, /<TaskScheduleCalendar organizationId=/);
+  assert.match(schedule, /rpc\("get_recurring_task_schedule"/);
+  assert.match(schedule, /timeZone: "Africa\/Cairo"/);
+  assert.match(schedule, /projected: !routine\.materialized/);
+  assert.match(schedule, /manager \? !ownerId \|\| task\.owner_id === ownerId : task\.owner_id === currentUserId/);
+  assert.match(schedule, /entry\.taskId \? <a href=\{taskDeepLink\(entry\.taskId\)\}/);
+  assert.doesNotMatch(schedule, /\.(?:insert|update|delete)\(/);
+  assert.match(types, /get_recurring_task_schedule:/);
+  assert.match(css, /\.task-month-weekdays, \.task-month-grid \{[^}]*repeat\(7, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.task-month-grid \{ display: grid; grid-template-columns: 1fr;/);
+  assert.match(css, /\.task-month-grid > article:not\(\.has-work\) \{ display: none;/);
+});
+
+test("results workspace reports only evidence-backed internal metrics and labels external data as unconnected", async () => {
+  const [page, analytics, types, css] = await Promise.all([
+    readFile(new URL("../app/analytics/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/analytics/AnalyticsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /<AnalyticsWorkspace \/>/);
+  assert.match(analytics, /rpc\("get_operational_analytics"/);
+  assert.match(analytics, /\[7, 30, 90\]\.map/);
+  assert.match(analytics, /normalizeSnapshot/);
+  assert.match(analytics, /Instagram \/ Meta/);
+  assert.match(analytics, /غير مربوط/);
+  assert.doesNotMatch(analytics, /Math\.random|fetch\(\s*["'`]https?:\/\//);
+  assert.match(types, /get_operational_analytics:/);
+  assert.match(css, /\.analytics-kpi-grid \{[^}]*repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.analytics-kpi-grid, \.analytics-source-status > div:last-child \{ grid-template-columns: 1fr;/);
 });
 
 test("task cards remain visually separated without changing the design system", async () => {
@@ -1890,8 +1933,9 @@ test("CRM customer files save communication results atomically and create the ne
 });
 
 test("CRM customer directory keeps every source filter permission-scoped and links exact records", async () => {
-  const [migration, directory, page, nav, crmContract, types, css] = await Promise.all([
+  const [migration, directoryMigration, directory, page, nav, crmContract, types, css] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260823014440_crm_customer_directory_sources.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260831134800_crm_sales_directory_and_schedule.sql", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmCustomerDirectory.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/crm/customers/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmSectionNav.tsx", import.meta.url), "utf8"),
@@ -1912,11 +1956,37 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.match(migration, /target_source is null or contact\.source = target_source/);
   assert.match(migration, /target_view = 'all'/);
   assert.match(migration, /grant execute on function public\.search_crm_contacts_v3[\s\S]*to authenticated/);
-  assert.match(directory, /rpc\("search_crm_contacts_v3"/);
+  assert.match(directoryMigration, /function public\.search_crm_contacts_v4/);
+  assert.match(directoryMigration, /target_interest is null or contact\.interest = target_interest/);
+  assert.match(directoryMigration, /result_limit is null or result_offset is null/);
+  assert.match(directoryMigration, /grant execute on function public\.search_crm_contacts_v4[\s\S]*to authenticated/);
+  assert.match(directory, /rpc\("search_crm_contacts_v4"/);
+  assert.match(directory, /const PAGE_SIZE = 25/);
   assert.match(directory, /crmContactDeepLink\(contact\.id\)/);
   assert.match(directory, /taskDeepLink\(openTask\.id\)/);
   assert.match(directory, /crmSourceConfig\[contact\.source\]\.label/);
   assert.match(page, /دليل موحّد لكل العملاء/);
   assert.match(nav, /href: "\/crm\/customers"/);
   assert.match(css, /\.crm-directory-table-wrap \{[^}]+overflow: auto/);
+});
+
+test("production reset starts clean while preserving scripts, customers, publishing, and team access", async () => {
+  const [reset, crmMigration, edge] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260831134801_production_operational_reset.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260831134800_crm_sales_directory_and_schedule.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(reset, /reset_cutoff constant timestamptz/);
+  assert.match(reset, /task_count_before <> 64/);
+  assert.match(reset, /historical_reclassified <> 115/);
+  assert.match(reset, /A protected data set changed during the reset/);
+  assert.match(reset, /system\.production_operational_reset/);
+  assert.match(reset, /linked_script_content_archived/);
+  assert.match(crmMigration, /from public\.crm_lead_routing_members route/);
+  assert.match(crmMigration, /activity\.actor_id as owner_id/);
+  assert.match(crmMigration, /task\.crm_work_kind = 'follow_up'/);
+  assert.match(crmMigration, /save_crm_sales_setup/);
+  assert.match(edge, /action === "save_sales_setup"/);
+  assert.match(edge, /membership\.role !== "owner" && !sections\.includes\("crm"\)/);
 });

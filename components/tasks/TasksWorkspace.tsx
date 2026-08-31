@@ -41,6 +41,7 @@ import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
 import { CollapsibleText } from "../ui/CollapsibleText";
 import { StatusBadge } from "../ui/StatusBadge";
+import { TaskScheduleCalendar } from "./TaskScheduleCalendar";
 
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
@@ -65,6 +66,7 @@ type BoardEntry = { id: string; contentItemId: string | null; tasks: Task[]; lan
 type TaskDateRange = { from: string; to: string };
 type TaskCreateMode = "once" | "weekly";
 type TaskCreateStep = 1 | 2 | 3;
+type TaskView = "board" | "schedule";
 type TaskSubmission = {
   organization_id: string;
   title: string;
@@ -298,6 +300,7 @@ export function TasksWorkspace() {
   const [newTaskRequiresReview, setNewTaskRequiresReview] = useState(false);
   const [capacityWarning, setCapacityWarning] = useState<{ submission: TaskSubmission; snapshot: CapacitySnapshot } | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("mine");
+  const [taskView, setTaskView] = useState<TaskView>("board");
   const [requesterFilter, setRequesterFilter] = useState("all");
   const [dateRange, setDateRange] = useState<TaskDateRange>({ from: "", to: "" });
   const [linkedTaskId] = useState(() => currentUuidDeepLink("task", "task"));
@@ -320,6 +323,7 @@ export function TasksWorkspace() {
     setNewTaskDueAt(defaultTaskDue());
     setNewTaskOwnerId("");
     setNewTaskRequiresReview(false);
+    setTaskView("board");
   }, []);
 
   const clearTransientState = useCallback(() => setNotice(null), []);
@@ -889,11 +893,11 @@ export function TasksWorkspace() {
       <div className="workspace-toolbar">
         <div><p className="overline">{workspace.organization.name}</p><h2>{manager ? "مهامي والفريق" : "مهامي"}</h2><p>{manager ? `عندك ${myOpenTaskCount.toLocaleString("ar-EG")} مهمة تحتاج إجراء منك. افتح عرض الفريق فقط عند المتابعة.` : myOpenTaskCount ? `عندك ${myOpenTaskCount.toLocaleString("ar-EG")} مهمة مطلوبة منك الآن. افتح المهمة ونفّذ الإجراء التالي فقط.` : "لا يوجد شيء مطلوب منك الآن."}</p></div>
         <div className="toolbar-actions">
-          <div className="segmented-control" aria-label="تصفية المهام">
+          {taskView === "board" ? <div className="segmented-control" aria-label="تصفية المهام">
             {quickFilters.map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "mine" ? "المطلوب مني" : value === "active" ? "شغل الفريق" : value === "overdue" ? manager ? "متأخر عند الفريق" : "المتأخر عندي" : value === "completed" ? manager ? "مكتمل الفريق" : "اللي خلصته" : "كل الفريق"}</button>)}
-          </div>
+          </div> : null}
           <button className="icon-button" type="button" aria-label="تحديث المهام" onClick={() => void refreshTasks(workspace.organization.id)}><RefreshCw size={17} /></button>
-          {manager ? <Button type="button" onClick={() => { setCapacityWarning(null); setShowCreate((value) => !value); resetTaskCreateDraft(); }}><Plus size={16} /> مهمة جديدة</Button> : null}
+          {manager && taskView === "board" ? <><Button type="button" variant="secondary" onClick={() => { resetTaskCreateDraft(); setTaskCreateMode("weekly"); setShowCreate(true); }}><Repeat2 size={16} /> مهمة أسبوعية</Button><Button type="button" onClick={() => { resetTaskCreateDraft(); setTaskCreateMode("once"); setShowCreate(true); }}><Plus size={16} /> مهمة مرة واحدة</Button></> : null}
         </div>
       </div>
 
@@ -901,7 +905,12 @@ export function TasksWorkspace() {
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
       {linkedTask ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح المهمة المطلوبة مباشرة: <strong>{taskReference(linkedTask.id)}</strong> — الكارت المحدد ظاهر بإطار واضح.</p> : linkedTaskId ? <p className="form-notice error" role="alert">المهمة المطلوبة غير موجودة أو ليست ضمن صلاحيات حسابك.</p> : null}
 
-      {manager && !personalView ? <div className="panel task-filter-panel" aria-label="فلترة بورد المهام">
+      <div className="workspace-view-switch task-primary-view">
+        <div><p className="overline">عرض العمل</p><strong>{taskView === "board" ? "نفّذ المطلوب الآن بدون زحمة المواعيد القادمة." : "شاهد الشهر بالكامل والمهام الأسبوعية قبل إنشائها على البورد."}</strong></div>
+        <div className="segmented-control" aria-label="اختيار عرض المهام"><button type="button" className={taskView === "board" ? "active" : ""} onClick={() => setTaskView("board")}>المطلوب الآن</button><button type="button" className={taskView === "schedule" ? "active" : ""} onClick={() => setTaskView("schedule")}><CalendarClock size={13} /> الجدول الشهري</button></div>
+      </div>
+
+      {taskView === "board" && manager && !personalView ? <div className="panel task-filter-panel" aria-label="فلترة بورد المهام">
         <div className="task-filter-heading">
           <CalendarClock size={19} aria-hidden="true" />
           <div><strong>فلترة أدق</strong><small role="status">ظاهر الآن {filteredTaskCount.toLocaleString("ar-EG")} مهمة</small></div>
@@ -925,7 +934,7 @@ export function TasksWorkspace() {
         <small className="task-filter-note">الفترة تعتمد على موعد التسليم، وعند اختيار «المكتمل» تعتمد على تاريخ إكمال المهمة.</small>
       </div> : null}
 
-      {showCreate && manager ? (
+      {taskView === "board" && showCreate && manager ? (
         <form ref={taskCreateForm} className="panel task-create-form" onSubmit={createTask} onChange={() => setCapacityWarning(null)}>
           <div className="section-heading"><div><p className="overline">3 خطوات خفيفة</p><h2>إسناد مهمة</h2></div><div className="toolbar-actions"><Button type="button" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent("workspace-ai:ask", { detail: { question: "راجع تقويم الفريق والمهام المفتوحة، وساعدني أختار مسؤولًا وموعدًا واقعيين للمهمة الجديدة. وضّح أي حمل زائد، ولا تغيّر أي بيانات من نفسك." } }))}><Bot size={14} /> اسأل AI قبل الإسناد</Button><button className="text-button" type="button" onClick={closeTaskCreate}>إغلاق</button></div></div>
 
@@ -995,7 +1004,7 @@ export function TasksWorkspace() {
         </form>
       ) : null}
 
-      {manager && recurringTemplates.length ? <details className="panel recurring-task-rules">
+      {taskView === "board" && manager ? <details className="panel recurring-task-rules" open>
         <summary><span><Repeat2 size={16} /><strong>المهام الأسبوعية الثابتة</strong><small>{recurringTemplates.length.toLocaleString("ar-EG")} قاعدة تعمل من داخل «مهامي»</small></span><span>إدارة</span></summary>
         <div className="recurring-task-rule-list">
           {recurringTemplates.map((template) => {
@@ -1007,10 +1016,11 @@ export function TasksWorkspace() {
               {template.last_error ? <small className="recurring-task-error">تحتاج مراجعة: {template.last_error}</small> : null}
             </article>;
           })}
+          {!recurringTemplates.length ? <div className="task-filter-empty"><Repeat2 size={22} /><div><strong>لا توجد مهام أسبوعية بعد</strong><p>مثل: لايف أيمن كل أربعاء، أو تسليم ريل ثابت كل سبت. أنشئها مرة واحدة وستظهر تلقائيًا في موعدها.</p></div><button className="text-button" type="button" onClick={() => { resetTaskCreateDraft(); setTaskCreateMode("weekly"); setShowCreate(true); }}>إنشاء أول مهمة أسبوعية</button></div> : null}
         </div>
       </details> : null}
 
-      {visibleLanes.length ? <div className="kanban-board" aria-label={personalView ? "مهامي" : "بورد مهام الفريق"}>
+      {taskView === "schedule" ? <TaskScheduleCalendar organizationId={workspace.organization.id} currentUserId={session.user.id} manager={manager} people={assignablePeople.map((person) => ({ id: person.id, name: person.name }))} tasks={tasks} /> : visibleLanes.length ? <div className="kanban-board" aria-label={personalView ? "مهامي" : "بورد مهام الفريق"}>
         {visibleLanes.map((lane) => {
           const laneEntries = boardEntries.filter((entry) => entry.laneId === lane.id);
           const laneTone = lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info";

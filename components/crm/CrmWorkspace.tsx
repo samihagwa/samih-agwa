@@ -67,6 +67,7 @@ type Organization = Tables<"organizations">;
 type ImportBatch = Tables<"crm_import_batches">;
 type ImportRow = Tables<"crm_import_rows">;
 type OwnerPerformance = Database["public"]["Functions"]["get_crm_owner_performance"]["Returns"][number];
+type CrmSummary = Database["public"]["Functions"]["get_crm_summary"]["Returns"][number];
 type BrokerLookupResult = Database["public"]["Functions"]["lookup_exness_account"]["Returns"][number];
 type TeamPerson = { id: string; name: string; role: Membership["role"] };
 type Workspace = { organization: Organization; membership: Membership; people: TeamPerson[] };
@@ -83,8 +84,17 @@ type IndicatorRoutingMember = {
   is_sales_owner: boolean;
   sales_follow_up_delay_hours: number;
 };
+type LeadRoutingMember = {
+  user_id: string;
+  full_name: string;
+  email: string;
+  role: Membership["role"];
+  selected: boolean;
+  route_position: number | null;
+  assigned_live_leads: number;
+};
 
-const PAGE_SIZE = 60;
+const PAGE_SIZE = 24;
 
 const importSignalConfig: Record<TelegramImportSignal, { label: string; tone: "neutral" | "info" | "success" | "warning" }> = {
   pending: { label: "بانتظار المتابعة", tone: "neutral" },
@@ -133,12 +143,14 @@ export function CrmWorkspace() {
   const [conversationLinks, setConversationLinks] = useState<ConversationLink[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [ownerPerformance, setOwnerPerformance] = useState<OwnerPerformance[]>([]);
+  const [crmSummary, setCrmSummary] = useState<CrmSummary | null>(null);
   const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [intakeHealth, setIntakeHealth] = useState<IntakeHealth | null>(null);
   const [indicatorRoutingMembers, setIndicatorRoutingMembers] = useState<IndicatorRoutingMember[]>([]);
+  const [leadRoutingMembers, setLeadRoutingMembers] = useState<LeadRoutingMember[]>([]);
+  const [selectedSalesIds, setSelectedSalesIds] = useState<string[]>([]);
   const [activationOwnerId, setActivationOwnerId] = useState("");
-  const [salesOwnerId, setSalesOwnerId] = useState("");
   const [salesFollowUpDelayHours, setSalesFollowUpDelayHours] = useState(24);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(configured);
@@ -165,6 +177,8 @@ export function CrmWorkspace() {
   const [filter, setFilter] = useState<Filter>("all");
   const [ownerFilter, setOwnerFilter] = useState("");
   const [stageFilter, setStageFilter] = useState<CrmLeadStage | "">("");
+  const [sourceFilter, setSourceFilter] = useState<CrmSource | "">("");
+  const [interestFilter, setInterestFilter] = useState<CrmInterest | "">("");
   const [boardView, setBoardView] = useState<BoardView>("current");
   const [linkedContactId] = useState(() => currentUuidDeepLink("contact", "crm"));
   const [searchInput, setSearchInput] = useState("");
@@ -187,12 +201,14 @@ export function CrmWorkspace() {
     setConversationLinks([]);
     setTasks([]);
     setOwnerPerformance([]);
+    setCrmSummary(null);
     setImportBatches([]);
     setImportRows([]);
     setIntakeHealth(null);
     setIndicatorRoutingMembers([]);
+    setLeadRoutingMembers([]);
+    setSelectedSalesIds([]);
     setActivationOwnerId("");
-    setSalesOwnerId("");
     setSalesFollowUpDelayHours(24);
     setTotalCount(0);
     setActivityFormId(null);
@@ -210,12 +226,14 @@ export function CrmWorkspace() {
     const supabase = getSupabaseBrowserClient();
     setCrmLoading(true);
     try {
-      const [searchResult, performanceResult, batchesResult, intakeHealthResult, routingResult] = await Promise.all([
-        supabase.rpc("search_crm_contacts_v2", {
+      const [searchResult, performanceResult, summaryResult, batchesResult, intakeHealthResult, routingResult, leadRoutingResult] = await Promise.all([
+        supabase.rpc("search_crm_contacts_v4", {
           target_organization_id: organizationId,
           search_query: searchQuery,
           target_owner_id: (ownerFilter || null) as unknown as string,
           target_stage: (stageFilter || null) as unknown as CrmLeadStage,
+          target_source: (sourceFilter || null) as unknown as CrmSource,
+          target_interest: (interestFilter || null) as unknown as CrmInterest,
           target_scope: filter,
           target_view: boardView,
           result_limit: PAGE_SIZE,
@@ -224,6 +242,7 @@ export function CrmWorkspace() {
         manager
           ? supabase.rpc("get_crm_owner_performance", { target_organization_id: organizationId, target_range_days: performanceRange })
           : Promise.resolve({ data: [] as OwnerPerformance[], error: null }),
+        supabase.rpc("get_crm_summary", { target_organization_id: organizationId }),
         platformAdmin
           ? supabase.from("crm_import_batches").select("*").eq("organization_id", organizationId).order("created_at", { ascending: false }).limit(12)
           : Promise.resolve({ data: [] as ImportBatch[], error: null }),
@@ -233,12 +252,17 @@ export function CrmWorkspace() {
         platformAdmin
           ? supabase.functions.invoke("crm-commands", { body: { action: "get_indicator_routing", organization_id: organizationId } })
           : Promise.resolve({ data: { members: [] as IndicatorRoutingMember[] }, error: null }),
+        platformAdmin
+          ? supabase.functions.invoke("crm-commands", { body: { action: "get_lead_routing", organization_id: organizationId } })
+          : Promise.resolve({ data: { members: [] as LeadRoutingMember[] }, error: null }),
       ]);
       if (searchResult.error) throw searchResult.error;
       if (performanceResult.error) throw performanceResult.error;
+      if (summaryResult.error) throw summaryResult.error;
       if (batchesResult.error) throw batchesResult.error;
       if (intakeHealthResult.error) throw intakeHealthResult.error;
       if (routingResult.error) throw routingResult.error;
+      if (leadRoutingResult.error) throw leadRoutingResult.error;
 
       const matches = searchResult.data ?? [];
       let contactIds = matches.map((match) => match.contact_id);
@@ -250,14 +274,27 @@ export function CrmWorkspace() {
         matchedCount = contactIds.length;
       }
       setTotalCount(matchedCount);
-      setOwnerPerformance(performanceResult.data ?? []);
+      const performanceMembers = performanceResult.data ?? [];
+      setOwnerPerformance(performanceMembers);
+      setCrmSummary(summaryResult.data?.[0] ?? null);
       setIntakeHealth(intakeHealthResult.data?.[0] ?? null);
       const routingMembers = ((routingResult.data as { members?: IndicatorRoutingMember[] } | null)?.members ?? [])
         .map((member) => ({ ...member, sales_follow_up_delay_hours: Number(member.sales_follow_up_delay_hours) }));
       setIndicatorRoutingMembers(routingMembers);
       setActivationOwnerId(routingMembers.find((member) => member.is_activation_owner)?.user_id ?? "");
-      setSalesOwnerId(routingMembers.find((member) => member.is_sales_owner)?.user_id ?? "");
       setSalesFollowUpDelayHours(routingMembers[0]?.sales_follow_up_delay_hours ?? 24);
+      const salesMembers = ((leadRoutingResult.data as { members?: LeadRoutingMember[] } | null)?.members ?? [])
+        .map((member) => ({ ...member, assigned_live_leads: Number(member.assigned_live_leads) }));
+      const selectedMemberIds = salesMembers.filter((member) => member.selected).map((member) => member.user_id);
+      const visibleSalesOwnerIds = platformAdmin
+        ? selectedMemberIds
+        : performanceMembers.map((member) => member.owner_id);
+      setLeadRoutingMembers(salesMembers);
+      setSelectedSalesIds(selectedMemberIds);
+      setOwnerFilter((current) => current && !visibleSalesOwnerIds.includes(current) ? "" : current);
+      setImportDefaultOwner((current) => current && visibleSalesOwnerIds.includes(current)
+        ? current
+        : visibleSalesOwnerIds[0] ?? "");
       const batches = batchesResult.data ?? [];
       setImportBatches(batches);
       if (platformAdmin && batches.length) {
@@ -293,7 +330,7 @@ export function CrmWorkspace() {
     } finally {
       setCrmLoading(false);
     }
-  }, [boardView, filter, linkedContactId, manager, ownerFilter, page, performanceRange, platformAdmin, searchQuery, stageFilter]);
+  }, [boardView, filter, interestFilter, linkedContactId, manager, ownerFilter, page, performanceRange, platformAdmin, searchQuery, sourceFilter, stageFilter]);
 
   const refreshSafely = useCallback(async (organizationId: string) => {
     try {
@@ -431,7 +468,9 @@ export function CrmWorkspace() {
     setWorking(true);
     setError(null);
     setNotice(null);
-    const { error: commandError } = await getSupabaseBrowserClient().functions.invoke("crm-commands", { body });
+    const { error: commandError } = await getSupabaseBrowserClient().functions.invoke("crm-commands", {
+      body: { ...body, organization_id: workspace.organization.id },
+    });
     setWorking(false);
     if (commandError) {
       setError(await getSupabaseFunctionErrorMessage(commandError, "تعذّر تنفيذ أمر CRM. لم يتم حفظ أي جزء من العملية."));
@@ -444,15 +483,20 @@ export function CrmWorkspace() {
 
   async function saveIndicatorRouting() {
     if (!workspace) return;
+    if (!activationOwnerId || !selectedSalesIds.length) {
+      setError("اختر مسؤول تفعيل المؤشر وعضوًا واحدًا على الأقل في فريق السيلز.");
+      return;
+    }
     setWorking(true);
     setError(null);
     setNotice(null);
     const { error: routingError } = await getSupabaseBrowserClient().functions.invoke("crm-commands", {
       body: {
-        action: "save_indicator_routing",
+        action: "save_sales_setup",
         organization_id: workspace.organization.id,
+        user_ids: selectedSalesIds,
         activation_owner_id: activationOwnerId,
-        sales_owner_id: salesOwnerId,
+        sales_owner_id: selectedSalesIds[0],
         sales_follow_up_delay_hours: salesFollowUpDelayHours,
       },
     });
@@ -461,7 +505,7 @@ export function CrmWorkspace() {
       setError(await getSupabaseFunctionErrorMessage(routingError, "تعذّر حفظ مسار تفعيل المؤشر والسيلز."));
       return;
     }
-    setNotice("تم حفظ المسار: مهمة تفعيل فورية لمسؤول التفعيل، ومهمة متابعة مستقلة لمسؤول السيلز في موعدها.");
+    setNotice(`تم حفظ المسار وفريق السيلز (${selectedSalesIds.length}). التسجيلات الجديدة ستتوزع بينهم فقط.`);
     await refreshSafely(workspace.organization.id);
   }
 
@@ -470,6 +514,10 @@ export function CrmWorkspace() {
     if (!workspace || !session) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const requestedOwnerId = formText(form, "owner_id");
+    if (manager && !salesPeople.some((person) => person.id === requestedOwnerId)) {
+      return setError("اختر مسؤولًا من فريق السيلز المحدد قبل إنشاء العميل.");
+    }
     const followUpAt = futureDateIso(formText(form, "follow_up_at"));
     if (!followUpAt) return setError("حدد موعد متابعة صحيحًا في المستقبل.");
     const identities = crmIdentityKinds
@@ -487,7 +535,7 @@ export function CrmWorkspace() {
       source_detail: formText(form, "source_detail"),
       interest: formText(form, "interest"),
       interest_detail: formText(form, "interest_detail"),
-      owner_id: formText(form, "owner_id") || session.user.id,
+      owner_id: requestedOwnerId || session.user.id,
       consent_status: formText(form, "consent_status"),
       identities,
       primary_identity_kind: primaryIdentityKind,
@@ -616,8 +664,8 @@ export function CrmWorkspace() {
       setError("أصلح الصفوف المعلّمة أولًا. الدفعة لن تُحفظ جزئيًا من شاشة المعاينة.");
       return;
     }
-    if (!importDefaultOwner) {
-      setError("اختر مسؤول المتابعة الافتراضي للعملاء الجدد.");
+    if (!importDefaultOwner || !salesPeople.some((person) => person.id === importDefaultOwner)) {
+      setError("اختر مسؤول المتابعة الافتراضي من فريق السيلز المحدد.");
       return;
     }
     if (!importReviewed) {
@@ -674,14 +722,22 @@ export function CrmWorkspace() {
 
   const canCreate = workspace.membership.role !== "viewer";
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
-  const totals = ownerPerformance.reduce((sum, metric) => ({
-    all: sum.all + Number(metric.total_contacts),
-    overdue: sum.overdue + Number(metric.overdue_contacts),
-    fresh: sum.fresh + Number(metric.new_contacts),
-    won: sum.won + Number(metric.won_contacts),
-  }), { all: 0, overdue: 0, fresh: 0, won: 0 });
+  const selectedSalesMembers = leadRoutingMembers.filter((member) => selectedSalesIds.includes(member.user_id));
+  const performanceSalesPeople = ownerPerformance.flatMap((metric) => {
+    const person = peopleById.get(metric.owner_id);
+    return person ? [{ id: person.id, name: person.name }] : [];
+  });
+  const salesPeople = platformAdmin
+    ? selectedSalesMembers.map((member) => ({ id: member.user_id, name: member.full_name }))
+    : performanceSalesPeople;
+  const totals = {
+    all: Number(crmSummary?.total_contacts ?? totalCount),
+    overdue: Number(crmSummary?.overdue_contacts ?? 0),
+    fresh: Number(crmSummary?.new_contacts ?? 0),
+    won: Number(crmSummary?.won_contacts ?? 0),
+  };
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const hasFilters = Boolean(searchQuery || ownerFilter || stageFilter || filter !== "all");
+  const hasFilters = Boolean(searchQuery || ownerFilter || stageFilter || sourceFilter || interestFilter || filter !== "all" || boardView !== "current");
   const linkedContact = linkedContactId ? contacts.find((contact) => contact.id === linkedContactId) ?? null : null;
   const visibleStages = linkedContact
     ? [linkedContact.stage]
@@ -693,7 +749,7 @@ export function CrmWorkspace() {
       <div className="toolbar-actions">
         <button className="icon-button" type="button" aria-label="تحديث CRM" disabled={crmLoading} onClick={() => void refreshSafely(workspace.organization.id)}><RefreshCw className={crmLoading ? "spin" : ""} size={17} /></button>
         <Button href="/tasks" variant="secondary"><Route size={16} /> مهام المتابعة</Button>
-        {platformAdmin ? <Button type="button" variant="secondary" onClick={() => { setImportDefaultOwner(importDefaultOwner || session.user.id); setShowImport(true); }}><Upload size={16} /> استيراد ومزامنة العملاء</Button> : null}
+        {platformAdmin ? <Button type="button" variant="secondary" onClick={() => { setImportDefaultOwner(salesPeople.some((person) => person.id === importDefaultOwner) ? importDefaultOwner : salesPeople[0]?.id ?? ""); setShowImport(true); }}><Upload size={16} /> استيراد ومزامنة العملاء</Button> : null}
         {canCreate ? <Button type="button" aria-expanded={showCreate} aria-controls="crm-create-dialog" onClick={() => setShowCreate(true)}><Plus size={16} /> عميل محتمل جديد</Button> : null}
       </div>
     </div>
@@ -709,13 +765,13 @@ export function CrmWorkspace() {
     </section> : null}
 
     {platformAdmin && indicatorRoutingMembers.length ? <section className="panel crm-lead-routing" aria-label="مسار تسجيلات Whales Zone الجديدة">
-      <div className="section-heading"><div><p className="overline">Whales Zone · تسجيلات جديدة فقط</p><h2>التفعيل منفصل عن متابعة السيلز</h2><p>كل تسجيل جديد ينشئ فورًا مهمتين مستقلتين وإشعارين بروابط مباشرة. إن أعيد إرسال نفس التسجيل، لن تتكرر أي مهمة.</p></div><StatusBadge tone={activationOwnerId && salesOwnerId ? "success" : "warning"}>{activationOwnerId && salesOwnerId ? "المسار جاهز" : "اختر المسؤولين"}</StatusBadge></div>
+      <div className="section-heading"><div><p className="overline">Whales Zone · تسجيلات جديدة فقط</p><h2>التفعيل منفصل عن فريق السيلز</h2><p>لا يتحول أي عضو إلى Sales تلقائيًا. أنت تختار الحسابات، والتسجيلات الجديدة تتوزع عليهم فقط.</p></div><StatusBadge tone={activationOwnerId && selectedSalesIds.length ? "success" : "warning"}>{activationOwnerId && selectedSalesIds.length ? `${selectedSalesIds.length} في السيلز` : "الإعداد ناقص"}</StatusBadge></div>
       <div className="form-grid">
         <label><span>مسؤول تفعيل المؤشر</span><select value={activationOwnerId} onChange={(event) => setActivationOwnerId(event.target.value)}><option value="">اختر المسؤول</option>{indicatorRoutingMembers.map((member) => <option value={member.user_id} key={member.user_id}>{member.full_name} — {member.email}</option>)}</select><small>تصل له فورًا مهمة «عملية تفعيل المؤشر» بموعد خلال ساعة.</small></label>
-        <label><span>مسؤول متابعة السيلز</span><select value={salesOwnerId} onChange={(event) => setSalesOwnerId(event.target.value)}><option value="">اختر المسؤول</option>{indicatorRoutingMembers.map((member) => <option value={member.user_id} key={member.user_id}>{member.full_name} — {member.email}</option>)}</select><small>له ملف العميل ومهمة متابعة منفصلة عن التفعيل.</small></label>
         <label><span>المتابعة بعد التسجيل</span><select value={salesFollowUpDelayHours} onChange={(event) => setSalesFollowUpDelayHours(Number(event.target.value))}><option value={1}>بعد ساعة</option><option value={2}>بعد ساعتين</option><option value={4}>بعد 4 ساعات</option><option value={8}>بعد 8 ساعات</option><option value={24}>بعد يوم</option><option value={48}>بعد يومين</option><option value={72}>بعد 3 أيام</option></select><small>المهمة تُنشأ فورًا، وهذا هو موعد تنفيذها.</small></label>
+        <fieldset className="crm-sales-roster full-field"><legend>فريق السيلز — اختيار صريح من المالك</legend><div>{leadRoutingMembers.map((member) => <label key={member.user_id}><input type="checkbox" aria-label={`اختيار ${member.full_name} ضمن فريق السيلز`} checked={selectedSalesIds.includes(member.user_id)} onChange={(event) => setSelectedSalesIds((current) => event.target.checked ? [...current, member.user_id] : current.filter((id) => id !== member.user_id))} /><span><strong>{member.full_name}</strong><small>{member.email}{member.assigned_live_leads ? ` · ${member.assigned_live_leads} تسجيل مباشر` : ""}</small></span></label>)}</div>{!selectedSalesIds.length ? <p className="empty-proof"><AlertTriangle size={15} /> اختر حسابات السيلز بعد إضافتها؛ أعضاء الفريق الآخرون لن يظهروا في الأداء أو قوائم الإسناد.</p> : null}</fieldset>
       </div>
-      <div className="form-actions"><Button type="button" disabled={working || !activationOwnerId || !salesOwnerId} onClick={() => void saveIndicatorRouting()}>{working ? <LoaderCircle className="spin" size={15} /> : <UserRoundCheck size={15} />} حفظ مسار عميل المؤشر</Button><small>العملاء التاريخيون المستوردون لا ينشئون مهام جديدة.</small></div>
+      <div className="form-actions"><Button type="button" disabled={working || !activationOwnerId || !selectedSalesIds.length} onClick={() => void saveIndicatorRouting()}>{working ? <LoaderCircle className="spin" size={15} /> : <UserRoundCheck size={15} />} حفظ فريق السيلز ومسار المؤشر</Button><small>العملاء التاريخيون محفوظون كـ«تم التواصل» ولا ينشئون مهام جديدة.</small></div>
     </section> : null}
 
     <div className="workspace-view-switch">
@@ -724,16 +780,18 @@ export function CrmWorkspace() {
     </div>
 
     <div className="crm-kpi-strip" aria-label="ملخص CRM الحقيقي">
-      <div><ContactRound size={17} /><span>إجمالي المتاح</span><strong>{manager ? totals.all : totalCount}</strong></div>
-      <div className={totals.overdue ? "attention" : ""}><AlertTriangle size={17} /><span>متابعات متأخرة</span><strong>{manager ? totals.overdue : contacts.filter((contact) => contact.next_follow_up_at && new Date(contact.next_follow_up_at).getTime() < renderNow).length}</strong></div>
-      <div><FileClock size={17} /><span>عملاء جدد</span><strong>{manager ? totals.fresh : contacts.filter((contact) => contact.stage === "new").length}</strong></div>
-      <div><CheckCircle2 size={17} /><span>صفقات ناجحة</span><strong>{manager ? totals.won : contacts.filter((contact) => contact.stage === "won").length}</strong></div>
+      <div><ContactRound size={17} /><span>إجمالي المتاح</span><strong>{totals.all}</strong></div>
+      <div className={totals.overdue ? "attention" : ""}><AlertTriangle size={17} /><span>متابعات متأخرة</span><strong>{totals.overdue}</strong></div>
+      <div><FileClock size={17} /><span>عملاء جدد</span><strong>{totals.fresh}</strong></div>
+      <div><CheckCircle2 size={17} /><span>صفقات ناجحة</span><strong>{totals.won}</strong></div>
     </div>
 
     <section className="crm-search-panel" aria-label="البحث وفلترة العملاء">
       <label className="crm-search-field"><Search size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="ابحث بالاسم، الهاتف، البريد، TradingView، Telegram، المصدر، لينك الشات أو نتيجة متابعة…" aria-label="البحث في كل بيانات العملاء" />{searchInput ? <button type="button" onClick={() => setSearchInput("")}>مسح</button> : null}</label>
-      {manager ? <label><span>المسؤول</span><select value={ownerFilter} onChange={(event) => { setOwnerFilter(event.target.value); setPage(0); }}><option value="">كل المسؤولين</option>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : null}
+      {manager ? <label><span>مسؤول السيلز</span><select value={ownerFilter} onChange={(event) => { setOwnerFilter(event.target.value); setPage(0); }}><option value="">كل العملاء</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : null}
       <label><span>المرحلة</span><select value={stageFilter} onChange={(event) => { setStageFilter(event.target.value as CrmLeadStage | ""); setPage(0); }}><option value="">كل المراحل</option>{visibleStages.map((stage) => <option value={stage} key={stage}>{crmLeadStageConfig[stage].label}</option>)}</select></label>
+      <label><span>المصدر</span><select value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value as CrmSource | ""); setPage(0); }}><option value="">كل المصادر</option>{(Object.keys(crmSourceConfig) as CrmSource[]).map((option) => <option value={option} key={option}>{crmSourceConfig[option].label}</option>)}</select></label>
+      <label><span>الاهتمام</span><select value={interestFilter} onChange={(event) => { setInterestFilter(event.target.value as CrmInterest | ""); setPage(0); }}><option value="">كل الاهتمامات</option>{(Object.keys(crmInterestConfig) as CrmInterest[]).map((option) => <option value={option} key={option}>{crmInterestConfig[option].label}</option>)}</select></label>
       <div className="crm-filter-row" role="group" aria-label="نطاق العملاء">{(["all", "mine", ...(boardView === "current" ? ["overdue"] : [])] as Filter[]).map((value) => <button className={filter === value ? "active" : ""} type="button" key={value} onClick={() => { setFilter(value); setPage(0); }}>{value === "all" ? "كل المتاح" : value === "mine" ? "مسؤوليتي" : "متابعة متأخرة"}</button>)}</div>
       <p>{searchInput.trim().length === 1 ? "اكتب حرفين على الأقل لبدء البحث." : `يعرض ${contacts.length} من ${totalCount} نتيجة مطابقة.`}</p>
     </section>
@@ -742,7 +800,7 @@ export function CrmWorkspace() {
 
     {manager ? <section className="panel crm-performance-panel">
       <div className="section-heading"><div><p className="overline">أرقام قابلة للمراجعة</p><h2>أداء مسؤولي العملاء</h2><p>لا يوجد تقييم شخصي؛ الأرقام مبنية على الصفقات والأنشطة والمواعيد المسجلة.</p></div><label><span>الفترة</span><select value={performanceRange} onChange={(event) => setPerformanceRange(Number(event.target.value))}><option value={7}>7 أيام</option><option value={30}>30 يومًا</option><option value={90}>90 يومًا</option></select></label></div>
-      <div className="crm-owner-grid">{ownerPerformance.map((metric) => {
+      {ownerPerformance.length ? <div className="crm-owner-grid">{ownerPerformance.map((metric) => {
         const person = peopleById.get(metric.owner_id);
         const completed = Number(metric.completed_follow_ups);
         const onTime = Number(metric.on_time_follow_ups);
@@ -753,7 +811,7 @@ export function CrmWorkspace() {
           <dl><div><dt>ملفات نشطة</dt><dd>{metric.active_contacts}</dd></div><div><dt>صفقات خلال الفترة</dt><dd>{metric.won_in_period}</dd></div><div><dt>أنشطة مسجلة</dt><dd>{metric.activities_in_period}</dd></div><div><dt>متابعات مكتملة</dt><dd>{completed}</dd></div><div><dt>في الموعد</dt><dd>{onTimeRate === null ? "—" : `${onTimeRate}%`}</dd></div><div><dt>متأخر الآن</dt><dd>{metric.overdue_contacts}</dd></div></dl>
           <footer><span>{metric.last_activity_at ? `آخر نشاط ${formatDate(metric.last_activity_at)}` : "لا يوجد نشاط متابعة مسجل"}</span><button type="button" onClick={() => { setOwnerFilter(metric.owner_id); setPage(0); }}>عرض عملائه</button></footer>
         </article>;
-      })}</div>
+      })}</div> : <div className="crm-performance-empty"><UserRoundCheck size={22} /><div><strong>لم يتم اختيار فريق السيلز بعد</strong><p>أضف حسابات السيلز من الإعداد أعلاه. لن يظهر أي عضو هنا لمجرد أنه سجل الدخول.</p></div></div>}
     </section> : null}
 
     {showCreate && canCreate ? <div className="crm-create-dialog-backdrop">
@@ -771,11 +829,11 @@ export function CrmWorkspace() {
         <fieldset className="crm-identities-fieldset full-field"><legend>وسائل التواصل والحسابات — املأ واحدة أو أكثر</legend><div>{crmIdentityKinds.map((kind) => <label key={kind}><span>{crmIdentityKindConfig[kind].label}</span><input name={`identity_${kind}`} type={crmIdentityKindConfig[kind].inputType} dir="ltr" minLength={3} maxLength={kind === "tradingview" ? 100 : 320} placeholder={crmIdentityKindConfig[kind].placeholder} /></label>)}</div><label className="crm-primary-select"><span>وسيلة التواصل الأساسية</span><select value={primaryIdentityKind} onChange={(event) => setPrimaryIdentityKind(event.target.value as CrmIdentityKind)}>{crmIdentityKinds.map((kind) => <option value={kind} key={kind}>{crmIdentityKindConfig[kind].label}</option>)}</select></label><small>الأساسية تظهر أولًا، وجميع القيم—including TradingView—تدخل في البحث ومنع التكرار.</small></fieldset>
         <label><span>منصة المحادثة المباشرة — اختياري</span><select name="conversation_channel" value={conversationChannel} onChange={(event) => setConversationChannel(event.target.value as CrmConversationChannel | "")}><option value="">بدون لينك حاليًا</option>{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select></label>
         {conversationChannel ? <label><span>لينك شات {crmConversationChannelConfig[conversationChannel].label}</span><input name="conversation_url" type="url" dir="ltr" maxLength={2000} required placeholder={crmConversationChannelConfig[conversationChannel].placeholder} /><small>الصق لينكًا كاملًا يبدأ بـ https://</small></label> : null}
-        {manager ? <label><span>مسؤول المتابعة</span><select name="owner_id" defaultValue={session.user.id}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : <input name="owner_id" type="hidden" value={session.user.id} />}
+        {manager ? <label><span>مسؤول متابعة السيلز</span><select name="owner_id" defaultValue={salesPeople[0]?.id ?? ""} required><option value="" disabled>{salesPeople.length ? "اختر مسؤول السيلز" : "أضف فريق السيلز أولًا"}</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select><small>{salesPeople.length ? "القائمة تعرض فريق السيلز المختار فقط." : "لن يُسند العميل تلقائيًا لأي عضو خارج فريق السيلز."}</small></label> : <input name="owner_id" type="hidden" value={session.user.id} />}
         <label><span>موعد أول متابعة</span><input name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /></label>
         <label className="full-field"><span>سياق مهم قبل التواصل — اختياري</span><textarea name="notes" maxLength={5000} rows={3} placeholder="ماذا طلب؟ ما الذي سجّل فيه؟ وما الذي يجب أن يعرفه المسؤول؟" /></label>
       </div>
-      <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <UserRoundCheck size={16} />} حفظ وإنشاء مهمة المتابعة</Button><small>إذا كانت أي وسيلة مسجلة من قبل، سيرفض النظام الملف المكرر كله.</small></div>
+      <div className="form-actions"><Button type="submit" disabled={working || (manager && !salesPeople.length)}>{working ? <LoaderCircle className="spin" size={16} /> : <UserRoundCheck size={16} />} حفظ وإنشاء مهمة المتابعة</Button><small>إذا كانت أي وسيلة مسجلة من قبل، سيرفض النظام الملف المكرر كله.</small></div>
       </form>
     </div> : null}
 
@@ -796,7 +854,7 @@ export function CrmWorkspace() {
           <div className="crm-import-summary"><div><strong>{importPreview.rows.length}</strong><span>إجمالي الصفوف</span></div><div><strong>{importPreview.valid_rows.length}</strong><span>صالحة</span></div><div className={importPreview.invalid_count ? "attention" : ""}><strong>{importPreview.invalid_count}</strong><span>تحتاج تصحيحًا</span></div><div><strong>{importPreview.duplicate_count}</strong><span>{importMode === "whales_zone_sheet" ? "سيتم دمجها" : "مكررة داخل الملف"}</span></div></div>
           {importMode === "telegram" ? <div className="crm-import-signals">{(Object.keys(importSignalConfig) as TelegramImportSignal[]).map((signal) => <span key={signal}><StatusBadge tone={importSignalConfig[signal].tone}>{importSignalConfig[signal].label}</StatusBadge><strong>{importPreview.signal_counts[signal]}</strong></span>)}</div> : <p className="empty-proof"><ShieldCheck size={15} /> إعادة رفع نفس الشيت آمنة: الصف الموجود يُسجّل كمكرر ولا يُنشئ عميلاً ثانيًا.</p>}
           <div className="crm-import-table-wrap"><table><thead><tr><th>#</th><th>العميل</th><th>الهاتف والبريد</th><th>TradingView</th>{importMode === "telegram" ? <th>حالة Telegram</th> : null}<th>الفحص</th></tr></thead><tbody>{importPreview.rows.slice(0, 500).map((row) => <tr className={row.errors.length ? "invalid" : "valid"} key={`${row.message_id}-${row.row_number}`}><td>{row.row_number}</td><td><strong>{row.full_name || "—"}</strong><small>{importMode === "whales_zone_sheet" ? `صف ${row.row_number}` : `رسالة ${row.message_id || "—"}`}</small></td><td dir="ltr"><span>{row.phone || "—"}</span><small>{row.email || "—"}</small></td><td dir="ltr">{row.tradingview || "—"}</td>{importMode === "telegram" ? <td><StatusBadge tone={importSignalConfig[row.signal].tone}>{importSignalConfig[row.signal].label}</StatusBadge></td> : null}<td>{row.errors.length ? <ul>{row.errors.map((rowError) => <li key={rowError}>{rowError}</li>)}</ul> : <span className="crm-import-valid"><CheckCircle2 size={14} /> صالح</span>}</td></tr>)}</tbody></table></div>
-          <div className="crm-import-approval"><label><span>{importMode === "whales_zone_sheet" ? "مالك الملفات التاريخية" : "مسؤول المتابعة الافتراضي"}</span><select value={importDefaultOwner} onChange={(event) => setImportDefaultOwner(event.target.value)}>{workspace.people.filter((person) => person.role !== "viewer").map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label className="crm-checkbox"><input type="checkbox" checked={importReviewed} onChange={(event) => setImportReviewed(event.target.checked)} /><span>{importMode === "whales_zone_sheet" ? "راجعت الصفوف، وأفهم أن العملية تحفظ العملاء القدامى في CRM بدون إنشاء مهام أو إرسال رسائل." : "راجعت الصفوف، وأفهم أن العملية تحفظ الملفات وفق الحالة ولا ترسل رسالة."}</span></label><Button type="button" disabled={working || Boolean(importPreview.invalid_count) || !importPreview.valid_rows.length || !importReviewed} onClick={() => void importCustomers()}>{working ? <LoaderCircle className="spin" size={15} /> : <DatabaseIcon size={15} />} اعتماد {importPreview.valid_rows.length} صفًا</Button></div>
+          <div className="crm-import-approval"><label><span>{importMode === "whales_zone_sheet" ? "مالك الملفات التاريخية" : "مسؤول المتابعة الافتراضي"}</span><select value={importDefaultOwner} onChange={(event) => setImportDefaultOwner(event.target.value)} required><option value="" disabled>{salesPeople.length ? "اختر مسؤول السيلز" : "أضف فريق السيلز أولًا"}</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label><label className="crm-checkbox"><input type="checkbox" checked={importReviewed} onChange={(event) => setImportReviewed(event.target.checked)} /><span>{importMode === "whales_zone_sheet" ? "راجعت الصفوف، وأفهم أن العملية تحفظ العملاء القدامى في CRM بدون إنشاء مهام أو إرسال رسائل." : "راجعت الصفوف، وأفهم أن العملية تحفظ الملفات وفق الحالة ولا ترسل رسالة."}</span></label><Button type="button" disabled={working || !importDefaultOwner || Boolean(importPreview.invalid_count) || !importPreview.valid_rows.length || !importReviewed} onClick={() => void importCustomers()}>{working ? <LoaderCircle className="spin" size={15} /> : <DatabaseIcon size={15} />} اعتماد {importPreview.valid_rows.length} صفًا</Button></div>
         </section> : null}
 
         <section className="crm-import-history"><div className="section-heading"><div><p className="overline">سجل تدقيق لا يُمحى</p><h3>آخر دفعات الاستيراد</h3></div><StatusBadge tone="neutral">{importBatches.length} دفعة</StatusBadge></div>{importBatches.length ? <div>{importBatches.map((batch) => {
@@ -814,7 +872,7 @@ export function CrmWorkspace() {
         const contactIdentities = identitiesByContact.get(contact.id) ?? [];
         const contactActivities = activitiesByContact.get(contact.id) ?? [];
         const contactConversationLinks = conversationLinksByContact.get(contact.id) ?? [];
-        const openTask = (tasksByContact.get(contact.id) ?? []).find((task) => task.status !== "done");
+        const openTask = (tasksByContact.get(contact.id) ?? []).find((task) => !["done", "cancelled"].includes(task.status));
         const overdue = Boolean(contact.next_follow_up_at && new Date(contact.next_follow_up_at).getTime() < renderNow && crmLeadStageConfig[contact.stage].active);
         const canAct = manager || contact.owner_id === session.user.id;
         const nextOptions = [contact.stage, ...allowedCrmTransitions[contact.stage].filter((stage) => stage !== contact.stage)];
