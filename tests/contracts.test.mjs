@@ -812,6 +812,8 @@ test("content intake keeps one canonical request while legacy Telegram timelines
   assert.match(quickForm, /raw_materials/);
   assert.match(quickForm, /الخطوة \{step \+ 1\} من \{wizardSteps\.length\}/);
   assert.match(quickForm, /فين المادة الخام على Telegram/);
+  assert.match(quickForm, /event\.preventDefault\(\); goNext\(\)/);
+  assert.match(quickForm, /key="quick-intake-submit"/);
   assert.doesNotMatch(quickForm, /raw_material_sent/);
   assert.match(quickForm, /crypto\.randomUUID/);
   assert.doesNotMatch(quickForm, /content_goal|content_hook|content_cta|content_editing_brief/);

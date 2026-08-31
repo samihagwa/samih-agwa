@@ -318,8 +318,8 @@ export function QuickIntakeForm({
       <div className="form-actions quick-intake-navigation">
         {step > 0 ? <Button type="button" variant="secondary" disabled={working} onClick={() => goToStep(step - 1)}><ArrowRight size={15} /> رجوع</Button> : null}
         {step < wizardSteps.length - 1
-          ? <Button type="button" disabled={working} onClick={goNext}>التالي</Button>
-          : <Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} إنشاء الطلب وإسناده</Button>}
+          ? <Button key="quick-intake-next" type="button" disabled={working} onClick={(event) => { event.preventDefault(); goNext(); }}>التالي</Button>
+          : <Button key="quick-intake-submit" type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />} إنشاء الطلب وإسناده</Button>}
         <small>{step < wizardSteps.length - 1 ? "لن يتم حفظ أو إرسال أي شيء الآن." : "الحفظ يتم مرة واحدة: الطلب والخامات والمهام معًا."}</small>
       </div>
     </form>
