@@ -3263,6 +3263,100 @@ export type Database = {
           },
         ]
       }
+      recurring_task_templates: {
+        Row: {
+          acceptance_criteria: string
+          archived_at: string | null
+          created_at: string
+          created_by: string
+          description: string
+          ends_on: string | null
+          estimated_minutes: number
+          id: string
+          last_error: string | null
+          last_materialized_at: string | null
+          organization_id: string
+          owner_id: string
+          paused: boolean
+          priority: Database["public"]["Enums"]["task_priority"]
+          requires_review: boolean
+          starts_on: string
+          time_local: string
+          title: string
+          updated_at: string
+          version: number
+          weekday: number
+        }
+        Insert: {
+          acceptance_criteria?: string
+          archived_at?: string | null
+          created_at?: string
+          created_by: string
+          description: string
+          ends_on?: string | null
+          estimated_minutes?: number
+          id?: string
+          last_error?: string | null
+          last_materialized_at?: string | null
+          organization_id: string
+          owner_id: string
+          paused?: boolean
+          priority?: Database["public"]["Enums"]["task_priority"]
+          requires_review?: boolean
+          starts_on: string
+          time_local: string
+          title: string
+          updated_at?: string
+          version?: number
+          weekday: number
+        }
+        Update: {
+          acceptance_criteria?: string
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string
+          ends_on?: string | null
+          estimated_minutes?: number
+          id?: string
+          last_error?: string | null
+          last_materialized_at?: string | null
+          organization_id?: string
+          owner_id?: string
+          paused?: boolean
+          priority?: Database["public"]["Enums"]["task_priority"]
+          requires_review?: boolean
+          starts_on?: string
+          time_local?: string
+          title?: string
+          updated_at?: string
+          version?: number
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_task_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_task_templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_task_templates_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       script_research_items: {
         Row: {
           assigned_to: string
@@ -3930,6 +4024,8 @@ export type Database = {
           organization_id: string
           owner_id: string
           priority: Database["public"]["Enums"]["task_priority"]
+          recurrence_slot_at: string | null
+          recurring_template_id: string | null
           requires_review: boolean
           source_plan_item_id: string | null
           started_at: string | null
@@ -3958,6 +4054,8 @@ export type Database = {
           organization_id: string
           owner_id: string
           priority?: Database["public"]["Enums"]["task_priority"]
+          recurrence_slot_at?: string | null
+          recurring_template_id?: string | null
           requires_review?: boolean
           source_plan_item_id?: string | null
           started_at?: string | null
@@ -3986,6 +4084,8 @@ export type Database = {
           organization_id?: string
           owner_id?: string
           priority?: Database["public"]["Enums"]["task_priority"]
+          recurrence_slot_at?: string | null
+          recurring_template_id?: string | null
           requires_review?: boolean
           source_plan_item_id?: string | null
           started_at?: string | null
@@ -4043,6 +4143,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_recurring_template_org_fkey"
+            columns: ["recurring_template_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_task_templates"
+            referencedColumns: ["id", "organization_id"]
           },
           {
             foreignKeyName: "tasks_source_plan_item_org_fkey"
@@ -5378,6 +5485,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      materialize_recurring_tasks: {
+        Args: { target_organization_id: string }
+        Returns: number
+      }
       mark_all_notifications_read: {
         Args: { target_organization_id: string }
         Returns: number
@@ -5723,6 +5834,8 @@ export type Database = {
         Args: {
           delivery_result_note: string
           delivery_result_url: string
+          expected_delivery_version: number | null
+          expected_task_version: number
           target_task_id: string
         }
         Returns: string

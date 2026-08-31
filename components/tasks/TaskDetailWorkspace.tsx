@@ -31,7 +31,6 @@ import {
   taskPriorityConfig,
   taskStatusConfig,
   taskStatusLabel,
-  taskTransitionLabel,
   type TaskStatus,
 } from "../../lib/tasks";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
@@ -82,6 +81,13 @@ function friendlyError(error: unknown) {
   if (/discussion messages must contain/i.test(message)) return "اكتب سؤالًا أو توضيحًا من حرفين على الأقل.";
   if (/Platform leadership cannot execute/i.test(message)) return "تنفيذ المهمة وتغيير حالتها متاحان للمسؤول المسند إليه فقط.";
   if (/Only the assigned task owner can submit/i.test(message)) return "إضافة أو تعديل التسليم متاح للمسؤول عن المهمة فقط.";
+  if (/Start the task before submitting/i.test(message)) return "اضغط «استلمت وبدأت» أولًا، وبعدها سلّم النتيجة.";
+  if (/Resume the task before submitting/i.test(message)) return "استأنف المهمة أولًا قبل تسليم النتيجة.";
+  if (/awaiting review and cannot be changed|delivery cannot be changed in the current task state/i.test(message)) return "التسليم بانتظار المراجعة ولا يمكن تعديله الآن. اطلب إرجاع المهمة للتنفيذ لو محتاج تغييره.";
+  if (/Task changed since this page was opened/i.test(message)) return "تم تحديث المهمة بعد فتح الصفحة. حمّلنا أحدث نسخة؛ راجع التعديل ثم سلّم من جديد.";
+  if (/Delivery changed since this page was opened/i.test(message)) return "تم تحديث رابط أو ملاحظة التسليم من جلسة أخرى. حمّلنا أحدث نسخة قبل أي تعديل جديد.";
+  if (/approved delivery can only change through a new revision request/i.test(message)) return "هذا التسليم تم اعتماده. أي تعديل جديد لازم يبدأ بطلب تعديل من طالب المهمة.";
+  if (/Submit the task result before completion/i.test(message)) return "احفظ رابط أو ملاحظة التسليم من خانة «تم تنفيذ المهمة» قبل الإغلاق.";
   if (/Add a delivery note or URL/i.test(message)) return "أضف رابط التسليم أو اكتب ملاحظة التسليم.";
   if (/Delivery URL must be/i.test(message)) return "اكتب رابط تسليم صحيح يبدأ بـ http:// أو https://.";
   if (/Delivery note must contain/i.test(message)) return "ملاحظة التسليم لازم تكون 3 حروف على الأقل.";
@@ -138,13 +144,21 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [deliveryFormOpen, setDeliveryFormOpen] = useState(() => typeof window !== "undefined" && window.location.hash === "#delivery");
+  const [deliverySnapshot, setDeliverySnapshot] = useState<{ taskVersion: number; deliveryVersion: number | null } | null>(null);
   const [discussionDraft, setDiscussionDraft] = useState("");
   const [error, setError] = useState<string | null>(configured ? null : "اتصال تسجيل الدخول غير متاح مؤقتًا.");
   const [notice, setNotice] = useState<string | null>(null);
   const focusedDiscussion = useRef<string | null>(null);
+  const deliverySection = useRef<HTMLDivElement | null>(null);
+  const deliveryFocusPending = useRef(typeof window !== "undefined" && (window.location.hash === "#delivery" || new URL(window.location.href).searchParams.get("action") === "deliver"));
   const [linkedDiscussionId] = useState(() => typeof window === "undefined" ? null : new URL(window.location.href).searchParams.get("message"));
 
-  const clearWorkspace = useCallback(() => setWorkspace(null), []);
+  const clearWorkspace = useCallback(() => {
+    setWorkspace(null);
+    setDeliveryFormOpen(false);
+    setDeliverySnapshot(null);
+  }, []);
   const clearTransientState = useCallback(() => { setError(null); setNotice(null); }, []);
 
   const loadTaskData = useCallback(async (activeSession: Session, showLoading = true) => {
@@ -257,6 +271,25 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
 
   const loadWorkspace = useCallback(async (activeSession: Session) => loadTaskData(activeSession, true), [loadTaskData]);
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading, clearTransientState });
+  const deliveryFocusTaskStatus = workspace?.task.status;
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.hash !== "#delivery" && url.searchParams.get("action") !== "deliver") return;
+    const frame = window.requestAnimationFrame(() => setDeliveryFormOpen(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!deliveryFormOpen || deliverySnapshot || !workspace || !["in_progress", "done"].includes(workspace.task.status)) return;
+    const current = workspace.task.content_item_id
+      ? workspace.deliveries.find((delivery) => delivery.task_id === workspace.task.id) ?? null
+      : workspace.taskDeliveries.find((delivery) => delivery.task_id === workspace.task.id) ?? null;
+    const frame = window.requestAnimationFrame(() => {
+      setDeliverySnapshot({ taskVersion: workspace.task.version, deliveryVersion: current?.version ?? null });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [deliveryFormOpen, deliverySnapshot, workspace]);
 
   useEffect(() => {
     if (!workspace || !session) return;
@@ -291,6 +324,42 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [linkedDiscussionId, workspace?.discussion]);
+
+  useEffect(() => {
+    if (!deliveryFocusPending.current || !deliveryFormOpen || !deliveryFocusTaskStatus || !["in_progress", "done"].includes(deliveryFocusTaskStatus)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = deliverySection.current;
+      if (!target) return;
+      deliveryFocusPending.current = false;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.querySelector<HTMLInputElement | HTMLTextAreaElement>("input:not(:disabled), textarea:not(:disabled)")?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [deliveryFormOpen, deliveryFocusTaskStatus]);
+
+  function openDeliveryForm() {
+    if (!workspace) return;
+    setError(null);
+    setNotice(null);
+    deliveryFocusPending.current = true;
+    const current = workspace.task.content_item_id
+      ? workspace.deliveries.find((delivery) => delivery.task_id === workspace.task.id) ?? null
+      : workspace.taskDeliveries.find((delivery) => delivery.task_id === workspace.task.id) ?? null;
+    setDeliverySnapshot({ taskVersion: workspace.task.version, deliveryVersion: current?.version ?? null });
+    setDeliveryFormOpen(true);
+    const url = new URL(window.location.href);
+    url.hash = "delivery";
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function closeDeliveryForm() {
+    setDeliveryFormOpen(false);
+    setDeliverySnapshot(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("action");
+    url.hash = "";
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+  }
 
   async function changeStatus(nextStatus: TaskStatus) {
     if (!workspace || nextStatus === workspace.task.status) return;
@@ -355,6 +424,19 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   async function saveTaskDelivery(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspace || !session) return;
+    const latestDelivery = workspace.task.content_item_id
+      ? workspace.deliveries.find((delivery) => delivery.task_id === workspace.task.id) ?? null
+      : workspace.taskDeliveries.find((delivery) => delivery.task_id === workspace.task.id) ?? null;
+    if (!deliverySnapshot
+      || deliverySnapshot.taskVersion !== workspace.task.version
+      || deliverySnapshot.deliveryVersion !== (latestDelivery?.version ?? null)) {
+      setError("وصل تحديث جديد للمهمة أو التسليم أثناء الكتابة. اقفل النموذج، راجع التحديث، وبعدها افتحه من جديد.");
+      return;
+    }
+    if (workspace.task.status === "ready") { setError("اضغط «استلمت وبدأت» أولًا، وبعدها سلّم النتيجة."); return; }
+    if (workspace.task.status === "blocked") { setError("استأنف المهمة أولًا قبل تسليم النتيجة."); return; }
+    if (workspace.task.status === "review") { setError("التسليم بانتظار المراجعة ولا يمكن تعديله الآن."); return; }
+    if (!["in_progress", "done"].includes(workspace.task.status)) { setError("لا يمكن تسليم هذه المهمة في حالتها الحالية."); return; }
     const form = new FormData(event.currentTarget);
     const resultNote = String(form.get("result_note") ?? "").trim();
     const resultUrl = String(form.get("result_url") ?? "").trim();
@@ -384,10 +466,24 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       target_task_id: workspace.task.id,
       delivery_result_note: resultNote,
       delivery_result_url: resultUrl,
+      expected_task_version: deliverySnapshot.taskVersion,
+      expected_delivery_version: deliverySnapshot.deliveryVersion,
     });
-    if (submissionError) setError(friendlyError(submissionError));
+    if (submissionError) {
+      const submissionMessage = friendlyError(submissionError);
+      if (/Task changed since this page was opened|Delivery changed since this page was opened/i.test(submissionError.message)) {
+        closeDeliveryForm();
+        await loadTaskData(session, false);
+      }
+      setError(submissionMessage);
+    }
     else {
-      setNotice(workspace.taskDeliveries.length ? "تم تحديث رابط وملاحظة التسليم." : "تم حفظ رابط وملاحظة التسليم داخل المهمة.");
+      setNotice(workspace.task.status === "done"
+        ? "تم تحديث رابط وملاحظة التسليم بدون إعادة فتح المهمة."
+          : workspace.task.requires_review
+          ? "تم حفظ التسليم وإرساله إلى طالب المهمة للمراجعة."
+          : "تم حفظ التسليم وإغلاق المهمة بنجاح.");
+      closeDeliveryForm();
       await loadTaskData(session, false);
     }
     setWorking(false);
@@ -409,6 +505,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       setError(await getSupabaseFunctionErrorMessage(submissionError, "تعذّر حفظ تسليم المهمة."));
     } else {
       setNotice(successMessage);
+      closeDeliveryForm();
       await loadTaskData(session, false);
     }
     setWorking(false);
@@ -439,9 +536,6 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     isRequester,
     role: workspace.membership.role,
   });
-  const transitions = linkedWorkflow
-    ? task.content_item_id ? actorTransitions.filter((status) => ["in_progress", "blocked"].includes(status)) : []
-    : actorTransitions;
   const canRequestRevision = !linkedWorkflow && !isAssignee && task.status !== "cancelled" && task.status !== "backlog" && (isRequester || platformAdmin);
   const canDiscuss = !readOnly && (isAssignee || isRequester || platformAdmin);
   const owner = peopleById.get(task.owner_id);
@@ -449,6 +543,10 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const currentDelivery = task.content_item_id
     ? workspace.deliveries.find((delivery) => delivery.task_id === task.id) ?? null
     : workspace.taskDeliveries.find((delivery) => delivery.task_id === task.id) ?? null;
+  const deliveryDraftStale = Boolean(deliverySnapshot && (
+    deliverySnapshot.taskVersion !== task.version
+    || deliverySnapshot.deliveryVersion !== (currentDelivery?.version ?? null)
+  ));
   const inputDeliverySteps = task.content_step ? deliveryInputsByStep[task.content_step] ?? [] : [];
   const inputDeliveries = workspace.deliveries.filter((delivery) => delivery.task_id !== task.id && inputDeliverySteps.includes(delivery.step));
   const inputAssetSteps = task.content_step ? assetInputsByStep[task.content_step] ?? [task.content_step] : [];
@@ -459,8 +557,16 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const hasExecutionResources = taskAssets.length > 0 || inputDeliveries.length > 0;
   const standaloneTask = !linkedWorkflow;
   const contentTask = Boolean(task.content_item_id && task.content_step);
-  const canSubmitDelivery = !readOnly && isAssignee && !["backlog", "blocked", "cancelled"].includes(task.status)
+  const canSubmitDelivery = !readOnly && isAssignee
+    && (task.status === "in_progress" || (task.status === "done" && !task.requires_review))
     && (standaloneTask || contentTask);
+  const canChangeStatusHere = !linkedWorkflow || contentTask;
+  const canStartTask = canChangeStatusHere && task.status === "ready" && actorTransitions.includes("in_progress");
+  const canResumeTask = canChangeStatusHere && task.status === "blocked" && actorTransitions.includes("in_progress");
+  const canBlockTask = canChangeStatusHere && task.status === "in_progress" && actorTransitions.includes("blocked");
+  const canOpenDelivery = canSubmitDelivery && ["in_progress", "done"].includes(task.status) && !deliveryFormOpen;
+  const canApproveTask = !linkedWorkflow && task.status === "review" && actorTransitions.includes("done");
+  const showDeliveryForm = canSubmitDelivery && deliveryFormOpen && Boolean(deliverySnapshot);
   const canOpenContentWorkspace = workspace.membership.role === "owner" || workspace.membership.allowed_sections.includes("content");
   const linkedHref = task.content_item_id ? canOpenContentWorkspace ? `/content?content=${task.content_item_id}#content-${task.content_item_id}` : null
     : task.launch_deliverable_id ? `/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`
@@ -493,11 +599,15 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         <aside className="panel task-detail-action">
           <div className="section-heading compact"><div><p className="overline">الإجراء الحالي</p><h2>{isAssignee ? "تنفيذ مهمتك" : isRequester ? "متابعة ما طلبته" : "متابعة المهمة"}</h2></div><ShieldCheck size={19} /></div>
           {isAssignee ? <p className="task-role-proof"><CircleUserRound size={14} /> أنت المسؤول عن التنفيذ.</p> : <p className="task-role-proof"><CircleUserRound size={14} /> التنفيذ يخص {owner?.name ?? "المسؤول"} فقط.</p>}
-          {transitions.length ? <label className="task-detail-status"><span>الإجراء التالي</span><select value={task.status} disabled={working} onChange={(event) => void changeStatus(event.target.value as TaskStatus)}><option value={task.status}>{taskStatusLabel(task.status, task.content_step)} — الحالية</option>{transitions.map((status) => <option value={status} key={status}>{taskTransitionLabel(task.status, status)}</option>)}</select></label> : null}
+          {canStartTask ? <Button type="button" disabled={working} onClick={() => void changeStatus("in_progress")}><CheckCircle2 size={15} /> استلمت وبدأت</Button> : null}
+          {canOpenDelivery ? <Button type="button" disabled={working} onClick={openDeliveryForm}><PackageCheck size={15} /> {task.status === "done" ? "تعديل رابط أو ملاحظة التسليم" : "تم تنفيذ المهمة"}</Button> : null}
+          {canBlockTask ? <Button type="button" variant="secondary" disabled={working} onClick={() => void changeStatus("blocked")}><AlertTriangle size={15} /> عندي عائق</Button> : null}
+          {canResumeTask ? <Button type="button" disabled={working} onClick={() => void changeStatus("in_progress")}><CheckCircle2 size={15} /> تم حل العائق — أكمل</Button> : null}
+          {canApproveTask ? <Button type="button" disabled={working} onClick={() => void changeStatus("done")}><CheckCircle2 size={15} /> اعتماد وإغلاق المهمة</Button> : null}
           {task.status === "review" && isAssignee ? <p className="task-review-waiting">أرسلت المهمة للمراجعة. الاعتماد أو طلب التعديل عند طالب المهمة.</p> : null}
           {canRequestRevision ? <Button type="button" variant="secondary" onClick={() => setShowRevisionForm((value) => !value)}><MessageSquareText size={15} /> طلب تعديل</Button> : null}
           {linkedHref && linkedLabel ? <Button href={linkedHref} variant="secondary"><Route size={15} /> {linkedLabel}</Button> : null}
-          {!transitions.length && !canRequestRevision && !linkedHref ? <p className="task-action-note">لا يوجد إجراء مطلوب من حسابك في الحالة الحالية.</p> : null}
+          {!canStartTask && !canOpenDelivery && !canBlockTask && !canResumeTask && !canApproveTask && !canRequestRevision && !linkedHref ? <p className="task-action-note">لا يوجد إجراء مطلوب من حسابك في الحالة الحالية.</p> : null}
         </aside>
 
         <div className="task-detail-main">
@@ -533,14 +643,15 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
               </ul> : <p className="task-resource-empty"><Paperclip size={14} /> لم يرفق طالب المهمة ملفات أو روابط لهذه الخطوة حتى الآن.</p>}
             </div> : null}
 
-            {task.content_item_id || standaloneTask ? <div className={`task-current-delivery${currentDelivery ? " has-delivery" : ""}`}>
+            {task.content_item_id || standaloneTask ? <div id="delivery" ref={deliverySection} className={`task-current-delivery${currentDelivery ? " has-delivery" : ""}`} tabIndex={-1}>
               <header><div><PackageCheck size={16} /><div><strong>تسليم هذه المهمة</strong><small>{currentDelivery ? `إصدار ${currentDelivery.version} · ${formatDate(currentDelivery.submitted_at)}` : "النتيجة النهائية التي سلّمها منفّذ هذه الخطوة"}</small></div></div>{currentDelivery ? <StatusBadge tone="success">تم التسليم</StatusBadge> : <StatusBadge tone="neutral">في الانتظار</StatusBadge>}</header>
-              {currentDelivery ? <div className="task-current-delivery-body"><div>{currentDelivery.result_note ? <p>{currentDelivery.result_note}</p> : <p>تم التسليم بدون ملاحظة مكتوبة.</p>}<small>بواسطة {peopleById.get(currentDelivery.submitted_by)?.name ?? "عضو فريق"}</small></div>{currentDelivery.result_url ? <a href={currentDelivery.result_url} target="_blank" rel="noreferrer"><span>{task.content_step === "publishing" ? "فتح المنشور" : "فتح ملف التسليم"}<small dir="ltr">{resourceHost(currentDelivery.result_url)}</small></span><ExternalLink size={15} /></a> : null}</div> : <p className="task-resource-empty"><PackageCheck size={14} /> {isAssignee ? "لم تسلّم نتيجة هذه المهمة بعد. يمكنك التسليم من هنا مباشرة." : "لم يرفع المنفّذ تسليم هذه المهمة حتى الآن."}</p>}
-              {canSubmitDelivery && task.content_step === "recording" && !currentDelivery ? <div className="task-telegram-handoff"><Button type="button" disabled={working} onClick={() => void confirmTelegramRawHandoff()}>{working ? <LoaderCircle className="spin" size={14} /> : <Send size={14} />} أرسلت المادة الخام على Telegram</Button><small>ضغطة واحدة تكفي؛ رابط رسالة Telegram اختياري.</small></div> : null}
-              {canSubmitDelivery ? <form className="task-delivery-compose" key={`delivery-${currentDelivery?.version ?? 0}`} onSubmit={saveTaskDelivery}>
-                <label><span>{task.content_step === "publishing" ? "رابط المنشور" : task.content_step === "recording" ? "رابط رسالة أو ملف المادة الخام — اختياري" : "رابط ملف التسليم"}</span><input name="result_url" type="url" inputMode="url" dir="ltr" maxLength={2000} required={Boolean(task.content_step && contentStepsRequiringResultUrl.has(task.content_step))} defaultValue={currentDelivery?.result_url ?? ""} placeholder={task.content_step === "publishing" ? "https://instagram.com/p/..." : task.content_step === "recording" ? "https://t.me/c/..." : "https://drive.google.com/..."} disabled={working} /></label>
-                <label><span>{task.content_step === "publishing" ? "الكابشن النهائي والهاشتاجات" : task.content_step === "recording" ? "الكابشن النهائي — اختياري الآن" : "ملاحظة التسليم — اختيارية عند وجود رابط"}</span><textarea name="result_note" rows={task.content_step === "publishing" || task.content_step === "recording" ? 6 : 3} minLength={3} maxLength={10000} required={task.content_step === "publishing"} defaultValue={currentDelivery?.result_note === "تم إرسال المادة الخام على Telegram." ? "" : currentDelivery?.result_note ?? (task.content_step === "publishing" ? workspace.contentRequest?.caption_brief : "") ?? ""} placeholder={task.content_step === "publishing" ? "اكتب النص الذي سيُنشر كما هو مع الهاشتاجات." : task.content_step === "recording" ? "لو الكابشن جاهز اكتبه هنا؛ وإن لم يكن جاهزًا سيكمله مسؤول النشر داخل مهمته." : "اكتب مكان النسخة النهائية أو أي ملاحظة مهمة لطالب المهمة."} disabled={working} />{task.content_step === "recording" ? <small>لن تُنشأ مهمة كابشن منفصلة. النص الذي تحفظه هنا يظهر تلقائيًا لمسؤول النشر.</small> : null}</label>
-                <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <PackageCheck size={14} />} {currentDelivery ? "تحديث التسليم" : task.content_step === "publishing" ? "تأكيد تم النشر" : "تسليم وإغلاق المهمة"}</Button><small>الخانة تفضل موجودة حتى بعد اكتمال المهمة.</small></div>
+              {currentDelivery ? <div className="task-current-delivery-body"><div>{currentDelivery.result_note ? <p>{currentDelivery.result_note}</p> : <p>تم التسليم بدون ملاحظة مكتوبة.</p>}<small>بواسطة {peopleById.get(currentDelivery.submitted_by)?.name ?? "عضو فريق"}</small></div>{currentDelivery.result_url ? <a href={currentDelivery.result_url} target="_blank" rel="noreferrer"><span>{task.content_step === "publishing" ? "فتح المنشور" : "فتح ملف التسليم"}<small dir="ltr">{resourceHost(currentDelivery.result_url)}</small></span><ExternalLink size={15} /></a> : null}</div> : <p className="task-resource-empty"><PackageCheck size={14} /> {isAssignee ? task.status === "ready" ? "ابدأ المهمة أولًا، وبعدها يظهر لك زر «تم تنفيذ المهمة»." : task.status === "in_progress" ? "اضغط «تم تنفيذ المهمة» من مربع الإجراء الحالي لفتح خانة التسليم." : task.status === "review" ? "التسليم بانتظار مراجعة طالب المهمة." : "لم تسلّم نتيجة هذه المهمة بعد." : "لم يرفع المنفّذ تسليم هذه المهمة حتى الآن."}</p>}
+              {showDeliveryForm && task.content_step === "recording" && !currentDelivery ? <div className="task-telegram-handoff"><Button type="button" disabled={working || deliveryDraftStale} onClick={() => void confirmTelegramRawHandoff()}>{working ? <LoaderCircle className="spin" size={14} /> : <Send size={14} />} أرسلت المادة الخام على Telegram</Button><small>ضغطة واحدة تكفي؛ رابط رسالة Telegram اختياري.</small></div> : null}
+              {showDeliveryForm ? <form className="task-delivery-compose" key={`delivery-${deliverySnapshot?.taskVersion ?? 0}-${deliverySnapshot?.deliveryVersion ?? 0}`} onSubmit={saveTaskDelivery}>
+                {deliveryDraftStale ? <p className="form-notice error" role="alert">وصل تعديل جديد أثناء الكتابة. اقفل النموذج وراجع أحدث تعليمات أو تسليم قبل الحفظ.</p> : null}
+                <label><span>{task.content_step === "publishing" ? "رابط المنشور" : task.content_step === "recording" ? "رابط رسالة أو ملف المادة الخام — اختياري" : "رابط ملف التسليم"}</span><input name="result_url" type="url" inputMode="url" dir="ltr" maxLength={2000} required={Boolean(task.content_step && contentStepsRequiringResultUrl.has(task.content_step))} defaultValue={currentDelivery?.result_url ?? ""} placeholder={task.content_step === "publishing" ? "https://instagram.com/p/..." : task.content_step === "recording" ? "https://t.me/c/..." : "https://drive.google.com/..."} disabled={working || deliveryDraftStale} /></label>
+                <label><span>{task.content_step === "publishing" ? "الكابشن النهائي والهاشتاجات" : task.content_step === "recording" ? "الكابشن النهائي — اختياري الآن" : "ملاحظة التسليم — اختيارية عند وجود رابط"}</span><textarea name="result_note" rows={task.content_step === "publishing" || task.content_step === "recording" ? 6 : 3} minLength={3} maxLength={10000} required={task.content_step === "publishing"} defaultValue={currentDelivery?.result_note === "تم إرسال المادة الخام على Telegram." ? "" : currentDelivery?.result_note ?? (task.content_step === "publishing" ? workspace.contentRequest?.caption_brief : "") ?? ""} placeholder={task.content_step === "publishing" ? "اكتب النص الذي سيُنشر كما هو مع الهاشتاجات." : task.content_step === "recording" ? "لو الكابشن جاهز اكتبه هنا؛ وإن لم يكن جاهزًا سيكمله مسؤول النشر داخل مهمته." : "اكتب مكان النسخة النهائية أو أي ملاحظة مهمة لطالب المهمة."} disabled={working || deliveryDraftStale} />{task.content_step === "recording" ? <small>لن تُنشأ مهمة كابشن منفصلة. النص الذي تحفظه هنا يظهر تلقائيًا لمسؤول النشر.</small> : null}</label>
+                <div className="form-actions"><Button type="submit" disabled={working || deliveryDraftStale}>{working ? <LoaderCircle className="spin" size={14} /> : <PackageCheck size={14} />} {currentDelivery && task.status === "done" ? "تحديث التسليم" : task.content_step === "publishing" ? "تأكيد تم النشر" : task.requires_review ? "حفظ وإرسال للمراجعة" : "تسليم وإغلاق المهمة"}</Button><button className="text-button" type="button" disabled={working} onClick={closeDeliveryForm}>{deliveryDraftStale ? "إغلاق ومراجعة التحديث" : "إلغاء"}</button><small>{task.status === "done" ? "يمكنك تصحيح الرابط أو الملاحظة بدون إعادة فتح المهمة." : task.requires_review ? "الحفظ يرسل النتيجة للمراجعة في نفس العملية." : "الحفظ يغلق المهمة في نفس العملية، والخانة تفضل موجودة حتى بعد اكتمال المهمة."}</small></div>
               </form> : null}
             </div> : null}
 

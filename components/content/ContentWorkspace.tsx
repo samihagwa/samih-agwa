@@ -21,7 +21,6 @@ import {
   Sparkles,
   TimerReset,
   Trash2,
-  Upload,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -38,7 +37,7 @@ import {
 } from "../../lib/content";
 import { formatTimelineSeconds } from "../../lib/content-intake";
 import { brandCategoryConfig } from "../../lib/brand";
-import { currentUuidDeepLink } from "../../lib/deep-links";
+import { currentUuidDeepLink, taskDeepLink, taskDeliveryDeepLink } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -141,7 +140,6 @@ export function ContentWorkspace() {
   const [assetFormId, setAssetFormId] = useState<string | null>(null);
   const [revisionFormId, setRevisionFormId] = useState<string | null>(null);
   const [reviewFormTaskId, setReviewFormTaskId] = useState<string | null>(null);
-  const [deliveryFormTaskId, setDeliveryFormTaskId] = useState<string | null>(null);
   const [contentFilter, setContentFilter] = useState<ContentFilter>("active");
   const [linkedContentId] = useState(() => currentUuidDeepLink("content", "content"));
   const [linkedRevisionId] = useState(() => currentUuidDeepLink("revision", "revision"));
@@ -167,7 +165,6 @@ export function ContentWorkspace() {
     setAssetFormId(null);
     setRevisionFormId(null);
     setReviewFormTaskId(null);
-    setDeliveryFormTaskId(null);
     setCaptionChoices({});
     setThumbnailChoices({});
     setAiWorking(null);
@@ -448,24 +445,6 @@ export function ContentWorkspace() {
     if (updated) setEditingBriefId(null);
   }
 
-  async function submitStepDelivery(event: FormEvent<HTMLFormElement>, task: Task) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const submitted = await runCommand({
-      action: "submit_step_delivery",
-      task_id: task.id,
-      step: task.content_step,
-      result_note: formText(form, "result_note"),
-      result_url: formText(form, "result_url"),
-    }, task.content_step === "caption" && !task.is_work_item
-      ? "تم حفظ الكابشن داخل الريلز وإغلاق خطوة الكتابة وفتح ما يليها تلقائيًا."
-      : task.content_step === "publishing"
-        ? "تم تأكيد النشر وحفظ الرابط الحقيقي ونقل المحتوى إلى «منشور»."
-        : "تم حفظ التسليم وإغلاق المهمة وفتح الخطوة التالية تلقائيًا.");
-    if (submitted) setDeliveryFormTaskId(null);
-  }
-
   async function requestTaskRevision(event: FormEvent<HTMLFormElement>, task: Task) {
     event.preventDefault();
     if (!task.content_item_id || !task.content_step) return;
@@ -695,26 +674,34 @@ export function ContentWorkspace() {
           </div>
 
           {deliveryTasks.length ? <section className="content-delivery-section">
-            <div className="production-tool-heading"><div><CheckCircle2 size={16} /><div><p className="overline">تسليم واحد</p><h4>النتيجة تغلق المهمة وتفتح التالية تلقائيًا</h4></div></div></div>
+            <div className="production-tool-heading"><div><CheckCircle2 size={16} /><div><p className="overline">متابعة التسليم</p><h4>التنفيذ والتسليم من صفحة المهمة داخل «مهامي»</h4></div></div></div>
             <div className="content-delivery-grid">{deliveryTasks.map((task) => {
               const delivery = deliveriesByTask.get(task.id);
-              const canSubmitResult = !readOnly && (platformAdmin || task.owner_id === session.user.id);
+              const isTaskOwner = task.owner_id === session.user.id;
               const isPublishing = task.content_step === "publishing";
-              const canEditResult = canSubmitResult && (["ready", "in_progress", "review", "done"].includes(task.status));
-              const needsUrl = Boolean(task.content_step && ["editing", "thumbnail", "design", "publishing"].includes(task.content_step));
               const canReviseTask = Boolean(task.content_step && revisionOptions.includes(task.content_step));
-              const resultUrlLabel = isPublishing ? "رابط المنشور" : "رابط التسليم";
+              const taskActionHref = isTaskOwner && ["in_progress", "done"].includes(task.status)
+                ? taskDeliveryDeepLink(task.id)
+                : taskDeepLink(task.id);
+              const taskActionLabel = isTaskOwner
+                ? task.status === "ready"
+                  ? "فتح المهمة والبدء"
+                  : task.status === "in_progress"
+                    ? isPublishing ? "تم النشر — أضف الرابط" : "تم التنفيذ — أضف التسليم"
+                    : task.status === "blocked"
+                      ? "فتح المهمة واستئنافها"
+                      : task.status === "review"
+                        ? "التسليم بانتظار المراجعة"
+                        : "فتح التسليم"
+                : task.status === "review" && (platformAdmin || contentCoordinator)
+                  ? "فتح للمراجعة"
+                  : "فتح صفحة المهمة";
               return <article key={task.id} className={`${delivery ? "has-delivery" : ""} ${task.status === "done" ? "approved-delivery" : ""} ${isPublishing ? "publishing-delivery" : ""}`}>
                 <header><div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{peopleById.get(task.owner_id)?.name ?? "عضو فريق"}</small></div><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge></header>
                 {delivery ? <div className="saved-step-result"><span>{isPublishing && task.status === "done" ? "تم النشر" : `إصدار ${delivery.version}`} · {formatDate(delivery.submitted_at)}</span>{delivery.result_note ? <p>{delivery.result_note}</p> : null}{delivery.result_url ? <a href={delivery.result_url} target="_blank" rel="noreferrer">{isPublishing ? "فتح المنشور" : "فتح التسليم"} <ExternalLink size={11} /></a> : null}</div> : <p>{isPublishing ? "لم يتم تأكيد النشر بعد. أضف رابط المنشور الحقيقي عند النشر." : task.status === "backlog" ? "تنتظر هذه المهمة اكتمال الخطوة السابقة." : "لم يسلّم صاحب المهمة النتيجة بعد."}</p>}
-                {canEditResult ? <button className="text-button delivery-primary-action" type="button" onClick={() => setDeliveryFormTaskId(deliveryFormTaskId === task.id ? null : task.id)}><Upload size={12} /> {isPublishing ? delivery ? "تحديث بيانات النشر" : "تأكيد تم النشر" : delivery ? "تحديث التسليم" : "تسليم وإغلاق المهمة"}</button> : null}
+                {task.status !== "backlog" && task.status !== "cancelled" ? <Button href={taskActionHref} variant={isTaskOwner && ["ready", "in_progress", "blocked"].includes(task.status) ? "primary" : "secondary"}><Link2 size={13} /> {taskActionLabel}</Button> : null}
                 {!readOnly && (platformAdmin || contentCoordinator) && delivery && canReviseTask && task.status === "done" ? <div className="delivery-review-actions"><button className="text-button" type="button" onClick={() => setReviewFormTaskId(reviewFormTaskId === task.id ? null : task.id)}>طلب تعديل وإعادة فتح المهمة</button></div> : null}
                 {reviewFormTaskId === task.id && !readOnly && (platformAdmin || contentCoordinator) && canReviseTask ? <form className="compact-command-form" onSubmit={(event) => void requestTaskRevision(event, task)}><label><span>التعديل المطلوب</span><textarea name="revision_instructions" minLength={5} maxLength={5000} rows={3} required placeholder="اكتب المشكلة والنتيجة المطلوبة بوضوح." /></label><div className="form-actions"><Button type="submit" disabled={working}>إرسال التعديل لصاحب المهمة</Button><button className="text-button" type="button" onClick={() => setReviewFormTaskId(null)}>إلغاء</button></div></form> : null}
-                {deliveryFormTaskId === task.id && canEditResult ? <form className="compact-command-form" onSubmit={(event) => void submitStepDelivery(event, task)}>
-                  <label><span>{task.content_step === "caption" ? "الكابشن النهائي" : isPublishing ? "الكابشن النهائي والهاشتاجات — مطلوب" : "ملاحظة التسليم"}</span><textarea name="result_note" minLength={3} maxLength={10000} rows={isPublishing ? 6 : 4} required={isPublishing || task.content_step === "caption"} defaultValue={delivery?.result_note ?? (isPublishing ? item.caption_brief : "")} placeholder={task.content_step === "scheduling" ? "المنصات وموعد الجدولة والتأكيد" : isPublishing ? "اكتب النص الذي سيُنشر كما هو مع الهاشتاجات." : "اكتب ما تم تسليمه وما يحتاجه المراجع"} /></label>
-                  <label><span>{resultUrlLabel}{needsUrl ? " — مطلوب" : " — اختياري"}</span><input name="result_url" type="url" dir="ltr" required={needsUrl} defaultValue={delivery?.result_url ?? ""} placeholder={isPublishing ? "https://instagram.com/p/..." : task.content_step === "recording" ? "رابط رسالة Telegram — اختياري" : "https://drive.google.com/..."} /></label>
-                  <div className="form-actions"><Button type="submit" disabled={working}>{isPublishing ? "تأكيد أنه تم النشر" : "حفظ التسليم وإغلاق المهمة"}</Button><button className="text-button" type="button" onClick={() => setDeliveryFormTaskId(null)}>إلغاء</button>{!isPublishing ? <small>بعد الحفظ يفتح النظام الخطوة التالية تلقائيًا ويبلغ الإدارة بالإنجاز.</small> : null}</div>
-                </form> : null}
               </article>;
             })}</div>
           </section> : null}

@@ -43,14 +43,19 @@ Existing Market Whales application
 ## Task workflow contract
 
 - `tasks` is the operational source of truth; Telegram messages are never treated as task records.
+- “مهامي” is the daily execution surface: members see the ordinary tasks they must act on, without having to navigate the planning or launch workspaces.
 - A task cannot be created without one active organization owner and a future deadline. Acceptance criteria are optional.
 - Review is explicit per task: without review the assignee completes directly; with review the assignee submits and the requester (or platform leadership) alone can approve or return it. Self-review is rejected in the database.
+- The normal assignee path has two explicit actions: accept and start, then complete. Completing opens the delivery fields; one atomic command stores the delivery and moves the task to review when required or closes it directly otherwise.
+- The delivery form freezes both task and delivery versions when it opens. Realtime changes invalidate the draft instead of allowing stale instructions or links to overwrite newer work; an approved delivery can change only through a written revision request.
 - Leadership can define and reassign work. An assigned member can move only their own task and cannot rewrite its scope, owner, priority, or deadline.
 - Status transitions are validated by `private.enforce_task_rules`, not by the browser. The UI mirrors the same transition map for guidance only.
 - Every task change creates an immutable `task_events` record and a leadership-visible `audit_events` record.
 - The first organization is created atomically by an authenticated Edge Function. Its database command is `SECURITY INVOKER` and executable by `service_role` only.
 - The browser groups backlog, ready, and in-progress work into one human-facing lane named “شغل مطلوب تنفيذه”. Once work starts it never offers a backwards move to ready; a reviewer returns requested changes directly to in-progress. The database keeps the exact states because dependency unlocking, timestamps, optional reviews, and audits still require them.
 - Current work is the default view. Completed and cancelled tasks are retained as history behind explicit filters instead of crowding the operational board.
+- Weekly recurring work is defined as reusable templates. Each due occurrence materializes an ordinary `tasks` row with the same ownership, notification, delivery, review, and audit rules; it appears in “مهامي” and does not introduce a separate weekly-tasks section or workflow.
+- Recurring-rule edits and automatic materialization have explicit audit events, so system-generated work is distinguishable from a person manually creating a task.
 
 ## Team operations contract
 
@@ -68,6 +73,7 @@ Existing Market Whales application
 
 ## Quarterly content-planning contract
 
+- “إدارة المحتوى” is the management workspace for the plan and calendar, direct execution requests, and advanced campaigns and launches. These are coordinated views over the shared content and task sources of truth, not three competing execution systems.
 - `content_plans` owns the period, commercial objective, audience, offer, and primary metric. Only one plan can be active for an organization at a time.
 - `content_plan_pillars` expresses the few recurring content themes and target quantities; it is planning input, not evidence of production.
 - `content_plan_items` is the dated calendar. Every item has a title, format, publish time, and one canonical request containing the instructions and inline links; assignment metadata remains optional.

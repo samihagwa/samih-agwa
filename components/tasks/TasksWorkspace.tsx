@@ -6,6 +6,7 @@ import {
   Bot,
   CalendarClock,
   CheckCircle2,
+  CirclePause,
   CircleUserRound,
   ContactRound,
   FileText,
@@ -13,13 +14,14 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
+  Repeat2,
   Route,
   ShieldCheck,
   UserRoundCheck,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { contentStepConfig } from "../../lib/content";
-import { currentUuidDeepLink, taskDeepLink, taskDomId, taskReference } from "../../lib/deep-links";
+import { currentUuidDeepLink, taskDeepLink, taskDeliveryDeepLink, taskDomId, taskReference } from "../../lib/deep-links";
 import { launchGateConfig } from "../../lib/launches";
 import {
   allowedTaskTransitionsForActor,
@@ -43,6 +45,7 @@ import { StatusBadge } from "../ui/StatusBadge";
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
+type RecurringTaskTemplate = Tables<"recurring_task_templates">;
 
 type TeamPerson = {
   id: string;
@@ -60,6 +63,7 @@ type Workspace = {
 type TaskFilter = "active" | "mine" | "overdue" | "completed" | "all";
 type BoardEntry = { id: string; contentItemId: string | null; tasks: Task[]; laneId: string };
 type TaskDateRange = { from: string; to: string };
+type TaskCreateMode = "once" | "weekly";
 type TaskSubmission = {
   organization_id: string;
   title: string;
@@ -126,6 +130,28 @@ function dateBoundary(value: string, endOfDay = false) {
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0).getTime();
+}
+
+const weekdayLabels: Record<number, string> = {
+  1: "الاثنين",
+  2: "الثلاثاء",
+  3: "الأربعاء",
+  4: "الخميس",
+  5: "الجمعة",
+  6: "السبت",
+  7: "الأحد",
+};
+
+function isoWeekday(value: Date) {
+  return value.getDay() === 0 ? 7 : value.getDay();
+}
+
+function localDatePart(value: string) {
+  return value.slice(0, 10);
+}
+
+function localTimePart(value: string) {
+  return `${value.slice(11, 16)}:00`;
 }
 
 function taskFilterTimestamp(task: Task, filter: TaskFilter) {
@@ -244,11 +270,13 @@ export function TasksWorkspace() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [contentRequests, setContentRequests] = useState<Record<string, string | null>>({});
+  const [recurringTemplates, setRecurringTemplates] = useState<RecurringTaskTemplate[]>([]);
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [taskCreateMode, setTaskCreateMode] = useState<TaskCreateMode>("once");
   const [newTaskOwnerId, setNewTaskOwnerId] = useState("");
   const [newTaskRequiresReview, setNewTaskRequiresReview] = useState(false);
   const [capacityWarning, setCapacityWarning] = useState<{ submission: TaskSubmission; snapshot: CapacitySnapshot } | null>(null);
@@ -265,6 +293,9 @@ export function TasksWorkspace() {
     setWorkspace(null);
     setTasks([]);
     setContentRequests({});
+    setRecurringTemplates([]);
+    setCapacityWarning(null);
+    setShowCreate(false);
   }, []);
 
   const clearTransientState = useCallback(() => setNotice(null), []);
@@ -281,6 +312,22 @@ export function TasksWorkspace() {
 
     if (tasksError) throw tasksError;
     setTasks(data ?? []);
+  }, []);
+
+  const refreshRecurringTemplates = useCallback(async (organizationId: string, canManage: boolean) => {
+    if (!canManage) {
+      setRecurringTemplates([]);
+      return;
+    }
+    const { data, error: routinesError } = await getSupabaseBrowserClient()
+      .from("recurring_task_templates")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .is("archived_at", null)
+      .order("weekday", { ascending: true })
+      .order("time_local", { ascending: true });
+    if (routinesError) throw routinesError;
+    setRecurringTemplates(data ?? []);
   }, []);
 
   const fetchContentRequests = useCallback(async (organizationId: string, contentItemIds: string[]) => {
@@ -315,6 +362,7 @@ export function TasksWorkspace() {
         setWorkspace(null);
         setTasks([]);
         setContentRequests({});
+        setRecurringTemplates([]);
         return;
       }
 
@@ -348,13 +396,16 @@ export function TasksWorkspace() {
       }));
 
       setWorkspace({ organization, membership, people });
-      await refreshTasks(membership.organization_id);
+      await Promise.all([
+        refreshTasks(membership.organization_id),
+        refreshRecurringTemplates(membership.organization_id, canManageTasks(membership.role)),
+      ]);
     } catch (loadError) {
       setError(getErrorMessage(loadError));
     } finally {
       setLoading(false);
     }
-  }, [refreshTasks]);
+  }, [refreshRecurringTemplates, refreshTasks]);
 
   const session = useWorkspaceAuth({
     configured,
@@ -532,6 +583,56 @@ export function TasksWorkspace() {
     setWorking(false);
   }
 
+  async function persistWeeklyTask(form: FormData, dueValue: string, dueDate: Date, ownerId: string) {
+    if (!workspace || !session) return;
+    const startsOn = localDatePart(dueValue);
+    const endsOn = String(form.get("routine_ends_on") ?? "").trim();
+    if (endsOn && endsOn < startsOn) {
+      setError("تاريخ نهاية المهمة الأسبوعية لازم يكون بعد أول موعد.");
+      return;
+    }
+    setWorking(true); setError(null); setNotice(null);
+    const { error: insertError } = await getSupabaseBrowserClient().from("recurring_task_templates").insert({
+      organization_id: workspace.organization.id,
+      title: String(form.get("title") ?? "").trim(),
+      description: String(form.get("description") ?? "").trim(),
+      acceptance_criteria: String(form.get("acceptance_criteria") ?? "").trim(),
+      owner_id: ownerId,
+      created_by: session.user.id,
+      priority: String(form.get("priority") ?? "normal") as TaskPriority,
+      requires_review: newTaskRequiresReview,
+      estimated_minutes: Number(form.get("estimated_minutes") ?? 60),
+      weekday: isoWeekday(dueDate),
+      time_local: localTimePart(dueValue),
+      starts_on: startsOn,
+      ends_on: endsOn || null,
+    });
+    if (insertError) {
+      setWorking(false);
+      setError(insertError.message);
+      return;
+    }
+
+    const { data: materializedCount, error: materializeError } = await getSupabaseBrowserClient().rpc("materialize_recurring_tasks", {
+      target_organization_id: workspace.organization.id,
+    });
+    setNewTaskOwnerId("");
+    setNewTaskRequiresReview(false);
+    setCapacityWarning(null);
+    setTaskCreateMode("once");
+    setShowCreate(false);
+    await Promise.all([
+      refreshTasks(workspace.organization.id),
+      refreshRecurringTemplates(workspace.organization.id, true),
+    ]);
+    setNotice(materializeError
+      ? "تم حفظ المهمة الأسبوعية. سيُنشئ النظام موعدها القادم تلقائيًا خلال ساعة."
+      : materializedCount && materializedCount > 0
+        ? "تم حفظ المهمة الأسبوعية وإنشاء موعدها القادم داخل «مهامي» بدون تكرار."
+        : "تم حفظ المهمة الأسبوعية، وستظهر أول نسخة داخل «مهامي» تلقائيًا خلال الأسبوع السابق لموعدها.");
+    setWorking(false);
+  }
+
   async function createTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspace) return;
@@ -550,6 +651,11 @@ export function TasksWorkspace() {
       return;
     }
 
+    if (taskCreateMode === "weekly") {
+      await persistWeeklyTask(form, dueValue, dueDate, ownerId);
+      return;
+    }
+
     const submission: TaskSubmission = {
       organization_id: workspace.organization.id,
       title: String(form.get("title") ?? "").trim(),
@@ -564,6 +670,58 @@ export function TasksWorkspace() {
     };
     setCapacityWarning(null);
     await persistTask(submission);
+  }
+
+  async function toggleRecurringTemplate(template: RecurringTaskTemplate) {
+    if (!workspace) return;
+    setWorking(true); setError(null); setNotice(null);
+    try {
+      const { data: updatedTemplate, error: updateError } = await getSupabaseBrowserClient()
+        .from("recurring_task_templates")
+        .update({ paused: !template.paused })
+        .eq("id", template.id)
+        .eq("version", template.version)
+        .select("id")
+        .maybeSingle();
+      if (updateError) setError(updateError.message);
+      else if (!updatedTemplate) {
+        setError("تم تعديل المهمة الأسبوعية من جلسة أخرى. حمّلنا أحدث نسخة؛ راجعها وحاول مرة ثانية.");
+        await refreshRecurringTemplates(workspace.organization.id, true);
+      } else {
+        setNotice(template.paused ? "تم تشغيل المهمة الأسبوعية من الموعد القادم." : "تم إيقاف المهمة الأسبوعية؛ المهام المنشأة سابقًا لم تتغير.");
+        await refreshRecurringTemplates(workspace.organization.id, true);
+      }
+    } catch (refreshError) {
+      setError(getErrorMessage(refreshError));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function archiveRecurringTemplate(template: RecurringTaskTemplate) {
+    if (!workspace || !window.confirm(`أرشفة المهمة الأسبوعية «${template.title}»؟ المهام السابقة ستظل محفوظة.`)) return;
+    setWorking(true); setError(null); setNotice(null);
+    try {
+      const { data: archivedTemplate, error: updateError } = await getSupabaseBrowserClient()
+        .from("recurring_task_templates")
+        .update({ archived_at: new Date().toISOString(), paused: true })
+        .eq("id", template.id)
+        .eq("version", template.version)
+        .select("id")
+        .maybeSingle();
+      if (updateError) setError(updateError.message);
+      else if (!archivedTemplate) {
+        setError("تم تعديل المهمة الأسبوعية من جلسة أخرى، لذلك لم نؤرشف نسخة قديمة. حمّلنا أحدث البيانات.");
+        await refreshRecurringTemplates(workspace.organization.id, true);
+      } else {
+        setNotice("تمت أرشفة المهمة الأسبوعية، ولن تُنشأ منها مواعيد جديدة.");
+        await refreshRecurringTemplates(workspace.organization.id, true);
+      }
+    } catch (refreshError) {
+      setError(getErrorMessage(refreshError));
+    } finally {
+      setWorking(false);
+    }
   }
 
   async function changeStatus(task: Task, nextStatus: TaskStatus) {
@@ -650,7 +808,7 @@ export function TasksWorkspace() {
             {quickFilters.map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "mine" ? "المطلوب مني" : value === "active" ? "شغل الفريق" : value === "overdue" ? manager ? "متأخر عند الفريق" : "المتأخر عندي" : value === "completed" ? manager ? "مكتمل الفريق" : "اللي خلصته" : "كل الفريق"}</button>)}
           </div>
           <button className="icon-button" type="button" aria-label="تحديث المهام" onClick={() => void refreshTasks(workspace.organization.id)}><RefreshCw size={17} /></button>
-          {manager ? <Button type="button" onClick={() => setShowCreate((value) => !value)}><Plus size={16} /> مهمة جديدة</Button> : null}
+          {manager ? <Button type="button" onClick={() => { setCapacityWarning(null); setShowCreate((value) => !value); }}><Plus size={16} /> مهمة جديدة</Button> : null}
         </div>
       </div>
 
@@ -684,17 +842,25 @@ export function TasksWorkspace() {
 
       {showCreate && manager ? (
         <form className="panel task-create-form" onSubmit={createTask} onChange={() => setCapacityWarning(null)}>
-          <div className="section-heading"><div><p className="overline">طلب مباشر</p><h2>إسناد مهمة</h2></div><div className="toolbar-actions"><Button type="button" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent("workspace-ai:ask", { detail: { question: "راجع تقويم الفريق والمهام المفتوحة، وساعدني أختار مسؤولًا وموعدًا واقعيين للمهمة الجديدة. وضّح أي حمل زائد، ولا تغيّر أي بيانات من نفسك." } }))}><Bot size={14} /> اسأل AI قبل الإسناد</Button><button className="text-button" type="button" onClick={() => setShowCreate(false)}>إغلاق</button></div></div>
+          <div className="section-heading"><div><p className="overline">طلب مباشر</p><h2>إسناد مهمة</h2></div><div className="toolbar-actions"><Button type="button" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent("workspace-ai:ask", { detail: { question: "راجع تقويم الفريق والمهام المفتوحة، وساعدني أختار مسؤولًا وموعدًا واقعيين للمهمة الجديدة. وضّح أي حمل زائد، ولا تغيّر أي بيانات من نفسك." } }))}><Bot size={14} /> اسأل AI قبل الإسناد</Button><button className="text-button" type="button" onClick={() => { setCapacityWarning(null); setShowCreate(false); }}>إغلاق</button></div></div>
+          <div className="task-create-mode" aria-label="نوع المهمة">
+            <div className="segmented-control">
+              <button type="button" className={taskCreateMode === "once" ? "active" : ""} aria-pressed={taskCreateMode === "once"} onClick={() => { setTaskCreateMode("once"); setCapacityWarning(null); }}>مرة واحدة</button>
+              <button type="button" className={taskCreateMode === "weekly" ? "active" : ""} aria-pressed={taskCreateMode === "weekly"} onClick={() => { setTaskCreateMode("weekly"); setCapacityWarning(null); }}><Repeat2 size={13} /> أسبوعية ثابتة</button>
+            </div>
+            <small>{taskCreateMode === "weekly" ? "اختر أول موعد فقط؛ بعدها ينشئ النظام نسخة واحدة كل أسبوع تلقائيًا." : "مهمة بموعد واحد وتنتهي بعد التسليم."}</small>
+          </div>
           <div className="form-grid">
             <label><span>عنوان المهمة</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: مونتاج ريلز خطة التداول" /></label>
             <label><span>المسؤول المباشر</span><select name="owner_id" value={newTaskOwnerId || session.user.id} required onChange={(event) => { setNewTaskOwnerId(event.target.value); if (event.target.value === session.user.id) setNewTaskRequiresReview(false); }}>{assignablePeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
-            <label><span>الموعد النهائي</span><input name="due_at" type="datetime-local" defaultValue={defaultDue} required /></label>
+            <label><span>{taskCreateMode === "weekly" ? "أول موعد أسبوعي" : "الموعد النهائي"}</span><input name="due_at" type="datetime-local" defaultValue={defaultDue} required /></label>
             <label className="full-field"><span>كل المطلوب والروابط</span><textarea name="description" required minLength={5} maxLength={5000} rows={7} placeholder="اكتب الطلب كما سترسله في الجروب: الشرح، الملفات، الروابط، وأي ملاحظات في نفس الخانة" /><small>سيظهر النص نفسه للمنفذ داخل صفحة المهمة، وتبقى الروابط في موضعها وقابلة للفتح.</small></label>
             <details className="content-request-advanced full-field">
               <summary>الأولوية والوقت والمراجعة — اختياري</summary>
               <div className="content-request-advanced-body form-grid">
                 <label><span>الأولوية</span><select name="priority" defaultValue="normal">{(Object.keys(taskPriorityConfig) as TaskPriority[]).map((priority) => <option value={priority} key={priority}>{taskPriorityConfig[priority].label}</option>)}</select></label>
                 <label><span>الوقت المتوقع</span><select name="estimated_minutes" defaultValue="60"><option value="30">30 دقيقة</option><option value="60">ساعة</option><option value="90">ساعة ونصف</option><option value="120">ساعتان</option><option value="180">3 ساعات</option><option value="240">4 ساعات</option><option value="360">6 ساعات</option></select></label>
+                {taskCreateMode === "weekly" ? <label><span>تاريخ النهاية — اختياري</span><input name="routine_ends_on" type="date" min={localDatePart(defaultDue)} /></label> : null}
                 <label className="full-field"><span>معيار القبول — اختياري</span><textarea name="acceptance_criteria" maxLength={4000} rows={3} placeholder="اكتبه فقط لو النتيجة المطلوبة تحتاج شروطًا واضحة، مثل المقاس أو صيغة التسليم" /></label>
                 <fieldset className="full-field task-review-choice">
                   <legend>هل المهمة تحتاج مراجعة؟</legend>
@@ -708,9 +874,24 @@ export function TasksWorkspace() {
             </details>
           </div>
           {capacityWarning ? <div className="capacity-decision" role="alert"><AlertTriangle size={18} /><div><strong>المسؤول عليه حمل زائد في هذا اليوم</strong><p>بعد الإسناد سيصبح الحمل {capacityWarning.snapshot.projected_minutes.toLocaleString("ar-EG")} من {capacityWarning.snapshot.daily_capacity_minutes.toLocaleString("ar-EG")} دقيقة، وعدد البنود {capacityWarning.snapshot.projected_count.toLocaleString("ar-EG")} من {capacityWarning.snapshot.max_parallel_tasks.toLocaleString("ar-EG")}.</p><small>غيّر الموعد أو المسؤول من الأعلى، أو أكمل عن قصد.</small></div><div><button className="text-button" type="button" onClick={() => setCapacityWarning(null)}>تعديل الإسناد</button><Button type="button" variant="secondary" disabled={working} onClick={() => void persistTask(capacityWarning.submission, true)}>إسناد رغم الضغط</Button></div></div> : null}
-          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <CheckCircle2 size={16} />} إسناد المهمة</Button><small>ستظهر فورًا للمسؤول داخل «مهامي»، وكل تغيير بعدها محفوظ في السجل.</small></div>
+          <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : taskCreateMode === "weekly" ? <Repeat2 size={16} /> : <CheckCircle2 size={16} />} {taskCreateMode === "weekly" ? "حفظ المهمة الأسبوعية" : "إسناد المهمة"}</Button><small>{taskCreateMode === "weekly" ? "سيظهر للعضو موعد حقيقي واحد فقط، وليس قالبًا دائمًا يزحم البورد." : "ستظهر فورًا للمسؤول داخل «مهامي»، وكل تغيير بعدها محفوظ في السجل."}</small></div>
         </form>
       ) : null}
+
+      {manager && recurringTemplates.length ? <details className="panel recurring-task-rules">
+        <summary><span><Repeat2 size={16} /><strong>المهام الأسبوعية الثابتة</strong><small>{recurringTemplates.length.toLocaleString("ar-EG")} قاعدة تعمل من داخل «مهامي»</small></span><span>إدارة</span></summary>
+        <div className="recurring-task-rule-list">
+          {recurringTemplates.map((template) => {
+            const owner = peopleById.get(template.owner_id);
+            return <article key={template.id} data-paused={template.paused || undefined}>
+              <div><strong>{template.title}</strong><small>{owner?.name ?? "عضو فريق"} · كل {weekdayLabels[template.weekday]} الساعة {template.time_local.slice(0, 5)}{template.ends_on ? ` · حتى ${template.ends_on}` : ""}</small></div>
+              <StatusBadge tone={template.paused ? "neutral" : "success"}>{template.paused ? "متوقفة" : "تعمل"}</StatusBadge>
+              <div className="recurring-task-rule-actions"><button className="text-button" type="button" disabled={working} onClick={() => void toggleRecurringTemplate(template)}>{template.paused ? <Repeat2 size={12} /> : <CirclePause size={12} />} {template.paused ? "تشغيل" : "إيقاف"}</button><button className="text-button danger-text" type="button" disabled={working} onClick={() => void archiveRecurringTemplate(template)}>أرشفة</button></div>
+              {template.last_error ? <small className="recurring-task-error">تحتاج مراجعة: {template.last_error}</small> : null}
+            </article>;
+          })}
+        </div>
+      </details> : null}
 
       {visibleLanes.length ? <div className="kanban-board" aria-label={personalView ? "مهامي" : "بورد مهام الفريق"}>
         {visibleLanes.map((lane) => {
@@ -753,6 +934,9 @@ export function TasksWorkspace() {
                           : task.content_step === "publishing"
                             ? "فتح وتأكيد النشر"
                             : "فتح وتسليم المهمة";
+                        const actionHref = isMine && task.status === "in_progress"
+                          ? taskDeliveryDeepLink(task.id)
+                          : taskDeepLink(task.id);
                         const className = [isOverdue(task, renderNow) ? "overdue" : "", task.status === "blocked" ? "blocked" : "", completed ? "completed" : "", isMine ? "mine" : ""].filter(Boolean).join(" ");
                         const directTarget = linkedTaskId === task.id;
                         return <section className={className} data-direct-target={directTarget || undefined} id={taskDomId(task.id)} tabIndex={directTarget ? -1 : undefined} key={task.id}>
@@ -763,7 +947,7 @@ export function TasksWorkspace() {
                           <div className="content-subtask-action">
                             <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
                             {!completed && task.status !== "backlog" && canOpenAction
-                              ? <a href={taskDeepLink(task.id)}><FileText size={12} /> {actionLabel}</a>
+                              ? <a href={actionHref}><FileText size={12} /> {actionLabel}</a>
                               : !completed ? <small>{task.status === "backlog" ? "تفتح تلقائيًا بعد الخطوة السابقة" : actionLabel}</small> : null}
                           </div>
                         </section>;
@@ -788,7 +972,16 @@ export function TasksWorkspace() {
                       && (!task.content_step || !["caption", "design", "scheduling", "publishing"].includes(task.content_step)
                         || option !== "review" || task.status === "review")
                     );
-                  const canMove = !task.crm_contact_id && options.length > 0;
+                  const directOptions = options.filter((option) => !["review", "done"].includes(option));
+                  const approvalOptions = task.status === "review"
+                    ? options.filter((option) => option === "done")
+                    : [];
+                  const canMove = !task.crm_contact_id && (directOptions.length > 0 || approvalOptions.length > 0);
+                  const canDeliverFromTask = isAssignee
+                    && task.status === "in_progress"
+                    && !task.crm_contact_id
+                    && !task.launch_id
+                    && !task.launch_deliverable_id;
                   const requester = peopleById.get(task.created_by);
                   const taskDescription = task.content_item_id
                     ? contentRequests[task.content_item_id]?.trim() || task.description?.trim() || ""
@@ -800,6 +993,7 @@ export function TasksWorkspace() {
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
                       {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
                       {task.launch_deliverable_id ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · بند تنفيذي</span> : null}
+                      {task.recurring_template_id ? <span className="workflow-task-label recurring-task-label"><Repeat2 size={12} /> أسبوعية ثابتة</span> : null}
                       {task.launch_deliverable_id ? <a className="task-production-link" href={`/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`}><FileText size={12} /> فتح التفاصيل وتسليم النتيجة</a> : null}
                       {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> CRM · متابعة عميل</span> : null}
                       {task.crm_contact_id ? <a className="task-production-link" href={`/crm/${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
@@ -812,7 +1006,18 @@ export function TasksWorkspace() {
                       {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة منذ {formatOverdueDuration(task, renderNow)}</span> : null}
                       {task.crm_contact_id
                         ? <p className="crm-task-guard"><ShieldCheck size={13} /> سجّل نتيجة التواصل من ملف العميل، والمهمة ستتحدث تلقائيًا.</p>
-                        : <>{canMove ? personalView ? <div className="form-actions" aria-label="الإجراء التالي">{options.map((option) => <Button type="button" variant={option === "blocked" ? "secondary" : "primary"} disabled={working} onClick={() => void changeStatus(task, option)} key={option}>{personalActionLabel(task, option)}</Button>)}</div> : <label className="status-select"><span>الإجراء التالي</span><select value={task.status} disabled={working} onChange={(event) => void changeStatus(task, event.target.value as TaskStatus)}><option value={task.status}>{taskStatusLabel(task.status, task.content_step)} — الحالة الحالية</option>{options.map((option) => <option key={option} value={option}>{taskTransitionLabel(task.status, option)}</option>)}</select></label> : null}{task.requires_review && task.status === "review" && isAssignee ? <small className="task-review-waiting">تم التسليم. لا يوجد إجراء آخر عليك الآن، ولا يمكنك اعتمادها بنفسك.</small> : task.requires_review && task.status === "review" && canMove ? <small className="task-review-waiting reviewer">النتيجة جاهزة لك: اعتمدها من الزر، أو افتح صفحة المهمة واكتب التعديل المطلوب.</small> : !isAssignee && !canMove && !taskIsClosed(task) ? <small className="task-review-waiting">هذه المهمة ليست مسندة إليك. يمكنك متابعتها أو طلب تعديل من صفحتها.</small> : null}</>}
+                        : <>
+                          {canDeliverFromTask ? <div className="form-actions task-completion-actions" aria-label="إنهاء المهمة">
+                            <Button href={taskDeliveryDeepLink(task.id)}>
+                              <CheckCircle2 size={16} /> {task.content_step === "publishing" ? "تم النشر — أضف الرابط" : "تم تنفيذ المهمة — أضف التسليم"}
+                            </Button>
+                            {directOptions.map((option) => <Button type="button" variant="secondary" disabled={working} onClick={() => void changeStatus(task, option)} key={option}>{personalActionLabel(task, option)}</Button>)}
+                          </div> : canMove ? <div className="form-actions" aria-label="الإجراء التالي">
+                            {directOptions.map((option) => <Button type="button" variant={option === "blocked" ? "secondary" : "primary"} disabled={working} onClick={() => void changeStatus(task, option)} key={option}>{personalActionLabel(task, option)}</Button>)}
+                            {approvalOptions.map((option) => <Button type="button" disabled={working} onClick={() => void changeStatus(task, option)} key={option}>{personalActionLabel(task, option)}</Button>)}
+                          </div> : null}
+                          {task.requires_review && task.status === "review" && isAssignee ? <small className="task-review-waiting">تم التسليم. لا يوجد إجراء آخر عليك الآن، ولا يمكنك اعتمادها بنفسك.</small> : task.requires_review && task.status === "review" && canMove ? <small className="task-review-waiting reviewer">النتيجة جاهزة لك: اعتمدها من الزر، أو افتح صفحة المهمة واكتب التعديل المطلوب.</small> : !isAssignee && !canMove && !taskIsClosed(task) ? <small className="task-review-waiting">هذه المهمة ليست مسندة إليك. يمكنك متابعتها أو طلب تعديل من صفحتها.</small> : null}
+                        </>}
                     </article>
                   );
                 })}

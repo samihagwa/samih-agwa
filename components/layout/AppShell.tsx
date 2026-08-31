@@ -134,7 +134,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const requestedSection = sectionForPathname(pathname);
   const allowedSections = membershipSections(membership);
   const sectionAllowed = canAccessWorkspaceSection(membership, requestedSection);
-  const contentSectionOpen = requestedSection === "planning" || requestedSection === "content";
+  const contentSectionOpen = requestedSection === "planning" || requestedSection === "content" || requestedSection === "campaigns";
 
   return (
     <div className="app-shell">

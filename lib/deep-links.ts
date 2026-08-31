@@ -33,6 +33,11 @@ export function taskDeepLink(taskId: string) {
   return `/tasks/${id}`;
 }
 
+export function taskDeliveryDeepLink(taskId: string) {
+  const id = encoded(taskId);
+  return `/tasks/${id}?action=deliver#delivery`;
+}
+
 export function taskReference(taskId: string) {
   const compact = taskId.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase();
   return `MW-${compact || "TASK"}`;

@@ -9,18 +9,25 @@ test("shared navigation exposes one permission-aware content area while old rout
     readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/access.ts", import.meta.url), "utf8"),
   ]);
-  for (const route of ["/tasks", "/content", "/scripts", "/publishing", "/brand", "/campaigns", "/crm", "/analytics", "/chat", "/team", "/settings"]) {
+  for (const route of ["/tasks", "/content", "/scripts", "/publishing", "/brand", "/crm", "/analytics", "/chat", "/team", "/settings"]) {
     assert.match(navigation, new RegExp(`href(?::|=)\\s*["']${route}`));
   }
   assert.doesNotMatch(navigation, /id:\s*["']planning["']/);
+  assert.doesNotMatch(navigation, /\{\s*id:\s*["']campaigns["']/);
+  assert.doesNotMatch(navigation, /label:\s*["']الحملات والإطلاقات["']/);
   assert.match(navigation, /label:\s*["']إدارة المحتوى["']/);
-  assert.match(navigation, /allowed\.has\("content"\) \|\| allowed\.has\("planning"\)/);
+  assert.match(navigation, /allowed\.has\("content"\) \|\| allowed\.has\("planning"\) \|\| allowed\.has\("campaigns"\)/);
+  assert.match(navigation, /campaigns:\s*\{ href:\s*["']\/campaigns["'] \}/);
   assert.match(contentNavigation, /href:\s*["']\/planning["']/);
   assert.match(contentNavigation, /href:\s*["']\/content["']/);
+  assert.match(contentNavigation, /id:\s*["']campaigns["'], href:\s*["']\/campaigns["']/);
+  assert.match(contentNavigation, /الإطلاقات — متقدم/);
   assert.match(contentNavigation, /visibleViews = views\.filter\(\(\{ id \}\) => allowed\.has\(id\)\)/);
   assert.match(shell, /<ContentSectionNav allowedSections=\{allowedSections\}/);
+  assert.match(shell, /requestedSection === "campaigns"/);
   assert.match(access, /\{ id: "planning", label: "الخطة وتقويم المحتوى", href: "\/planning" \}/);
   assert.match(access, /\{ id: "content", label: "طلبات التنفيذ", href: "\/content" \}/);
+  assert.match(access, /\{ id: "campaigns", label: "الحملات والإطلاقات", href: "\/campaigns" \}/);
 });
 
 test("internal navigation remains usable when the experimental client router fails", async () => {
@@ -877,7 +884,7 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(workspace, /كل المطلوب والروابط/);
   assert.match(workspace, /الكابشن النهائي/);
   assert.match(workspace, /const activeTasks = workTasks\.filter/);
-  assert.match(workspace, /النتيجة تغلق المهمة وتفتح التالية تلقائيًا/);
+  assert.match(workspace, /التنفيذ والتسليم من صفحة المهمة داخل «مهامي»/);
   assert.doesNotMatch(contentContract, /"brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing"/);
   assert.match(nonBlockingMigration, /task_record\.content_step = 'publishing'/);
   assert.match(nonBlockingMigration, /update public\.tasks set status = 'done'/);
@@ -948,8 +955,10 @@ test("content production briefs, assets, and revision rounds share one secured w
   assert.match(workspace, /مركز الأصول/);
   assert.match(workspace, /جولات التعديل/);
   assert.match(workspace, /functions\.invoke\("content-commands"/);
-  assert.match(workspace, /حفظ التسليم وإغلاق المهمة/);
-  assert.match(workspace, /تأكيد أنه تم النشر/);
+  assert.match(workspace, /taskDeliveryDeepLink/);
+  assert.match(workspace, /تم التنفيذ — أضف التسليم/);
+  assert.match(workspace, /تم النشر — أضف الرابط/);
+  assert.doesNotMatch(workspace, /deliveryFormTaskId|submitStepDelivery/);
   assert.match(taskWorkspace, /فتح وتسليم المهمة/);
   assert.doesNotMatch(taskWorkspace, /status-select compact/);
   assert.match(commands, /recording.*editing.*thumbnail.*caption.*design.*scheduling.*publishing/);
@@ -1002,7 +1011,7 @@ test("social post deliverables expand into parallel copy and design workflows wi
   assert.match(contentCommand, /update_social_post_brief/);
   assert.match(campaignWorkspace, /إنشاء البند ومصنع البوستات/);
   assert.match(campaignWorkspace, /الكابشن والتصميم بالتوازي/);
-  assert.match(contentWorkspace, /النتيجة تغلق المهمة وتفتح التالية تلقائيًا/);
+  assert.match(contentWorkspace, /التنفيذ والتسليم من صفحة المهمة داخل «مهامي»/);
   assert.match(contentWorkspace, /كل المطلوب والروابط/);
   assert.match(contentWorkspace, /item\.copy_brief/);
   assert.match(contentWorkspace, /item\.design_brief/);
@@ -1522,6 +1531,79 @@ test("standalone task deliveries stay visible and editable by the assignee after
   assert.match(types, /task_deliveries:/);
   assert.match(types, /submit_task_delivery:/);
   assert.match(css, /\.task-delivery-compose/);
+});
+
+test("task completion is atomic and board delivery actions cannot bypass the result", async () => {
+  const [migration, board, detail, deepLinks] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260830181331_atomic_task_delivery_completion.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/deep-links.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /drop function public\.submit_task_delivery\(uuid, text, text\)/);
+  assert.match(migration, /create function public\.submit_task_delivery/);
+  assert.match(migration, /insert into public\.task_deliveries[\s\S]*update public\.tasks[\s\S]*set status = completion_status/);
+  assert.match(migration, /when task_record\.requires_review then 'review'::public\.task_status[\s\S]*else 'done'::public\.task_status/);
+  assert.match(migration, /task_record\.version <> expected_task_version[\s\S]*Task changed since this page was opened/);
+  assert.match(migration, /current_delivery_version is distinct from expected_delivery_version[\s\S]*Delivery changed since this page was opened/);
+  assert.match(migration, /task_record\.status = 'done' and task_record\.requires_review[\s\S]*approved delivery can only change through a new revision request/);
+  assert.match(migration, /set_config\('app\.task_delivery_task_id', task_record\.id::text, true\)/);
+  assert.match(migration, /old\.status = 'in_progress' and new\.status in \('review', 'done'\)[\s\S]*raise exception 'Submit the task result before completion'/);
+  assert.match(migration, /grant execute on function public\.submit_task_delivery\(uuid, text, text, bigint, bigint\)[\s\S]*to authenticated/);
+
+  assert.match(board, /taskDeliveryDeepLink/);
+  assert.match(board, /const directOptions = options\.filter\(\(option\) => !\["review", "done"\]\.includes\(option\)\)/);
+  assert.match(board, /<Button href=\{taskDeliveryDeepLink\(task\.id\)\}>/);
+  assert.doesNotMatch(board, /changeStatus\(task, task\.requires_review \? "review" : "done"\)/);
+  assert.match(detail, /rpc\("submit_task_delivery"/);
+  assert.match(detail, /expected_task_version: deliverySnapshot\.taskVersion/);
+  assert.match(detail, /expected_delivery_version: deliverySnapshot\.deliveryVersion/);
+  assert.match(detail, /deliveryDraftStale/);
+  assert.match(detail, /task\.status === "done" && !task\.requires_review/);
+  assert.match(detail, /task\.requires_review \? "حفظ وإرسال للمراجعة" : "تسليم وإغلاق المهمة"/);
+  assert.match(deepLinks, /export function taskDeliveryDeepLink\(taskId: string\)[\s\S]*\?action=deliver#delivery/);
+});
+
+test("weekly task templates are secured and materialize idempotently as ordinary My Work tasks", async () => {
+  const [migration, workspace] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260830181350_weekly_task_routines.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /create table public\.recurring_task_templates/);
+  assert.match(migration, /alter table public\.recurring_task_templates enable row level security/);
+  for (const policy of ["recurring_task_templates_leadership_select", "recurring_task_templates_leadership_insert", "recurring_task_templates_leadership_update"]) {
+    assert.match(migration, new RegExp(`create policy "${policy}"`));
+  }
+  assert.match(migration, /unique \(recurring_template_id, recurrence_slot_at\)/);
+  assert.match(migration, /on conflict \(recurring_template_id, recurrence_slot_at\) do nothing/);
+  assert.match(migration, /insert into public\.tasks[\s\S]*estimated_minutes, is_work_item, recurring_template_id/);
+  assert.match(migration, /task\.recurring_rule_created/);
+  assert.match(migration, /task\.recurring_materialized[\s\S]*generated_automatically/);
+  assert.match(migration, /cron\.schedule\([\s\S]*'market-whales-weekly-task-routines'[\s\S]*'17 \* \* \* \*'/);
+  assert.match(migration, /Members see only the concrete task occurrences generated from them/);
+
+  assert.match(workspace, /\.eq\("is_work_item", true\)/);
+  assert.match(workspace, /\.from\("recurring_task_templates"\)/);
+  assert.match(workspace, /rpc\("materialize_recurring_tasks"/);
+  assert.match(workspace, /recurring_template_id/);
+  assert.match(workspace, /أسبوعية ثابتة/);
+  assert.match(workspace, /داخل «مهامي»/);
+  assert.match(workspace, /\.eq\("version", template\.version\)[\s\S]*\.select\("id"\)[\s\S]*\.maybeSingle\(\)/);
+  assert.match(workspace, /setTaskCreateMode\("weekly"\); setCapacityWarning\(null\)/);
+  assert.match(workspace, /setCapacityWarning\(null\); setShowCreate\(\(value\) => !value\)/);
+});
+
+test("task cards remain visually separated without changing the design system", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.kanban-stack \{[^}]*gap: 18px/);
+  assert.match(css, /\.task-card \{[^}]*border: 2px solid #c7d5d4[^}]*box-shadow: 0 10px 28px/);
+  assert.match(css, /\.task-card-top \{[^}]*border-bottom: 1px solid var\(--line\)/);
+  assert.match(css, /\.kanban-stack > \.task-card:nth-child\(even\) \{ background: #f8fbfa/);
+  assert.match(css, /\.task-card h3 \{[^}]*background: #eef6f4[^}]*font-weight: 950/);
+  assert.match(css, /\.task-card::before \{[^}]*inset-inline-start: 0/);
 });
 
 test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {
