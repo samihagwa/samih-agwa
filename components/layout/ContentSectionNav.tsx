@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import type { WorkspaceSection } from "../../lib/access";
 
 const views = [
-  { id: "planning", href: "/planning", label: "الخطة والتقويم", icon: CalendarRange },
-  { id: "content", href: "/content", label: "طلبات التنفيذ", icon: Clapperboard },
-  { id: "campaigns", href: "/campaigns", label: "الإطلاقات — متقدم", icon: Rocket },
+  { id: "planning", href: "/planning", label: "الخطة — للمدير", icon: CalendarRange },
+  { id: "content", href: "/content", label: "طلبات المحتوى", icon: Clapperboard },
+  { id: "campaigns", href: "/campaigns", label: "الإطلاقات — للمدير", icon: Rocket },
 ] satisfies Array<{ id: Extract<WorkspaceSection, "planning" | "content" | "campaigns">; href: string; label: string; icon: typeof CalendarRange }>;
 
 export function ContentSectionNav({ allowedSections }: { allowedSections: WorkspaceSection[] }) {
@@ -18,10 +18,10 @@ export function ContentSectionNav({ allowedSections }: { allowedSections: Worksp
   if (!visibleViews.length) return null;
 
   return (
-    <nav className="workspace-view-switch content-section-nav" aria-label="أقسام إدارة المحتوى">
+    <nav className="workspace-view-switch content-section-nav" aria-label="أقسام المحتوى">
       <div>
-        <strong>أدوات إدارة المحتوى</strong>
-        <small>الخطة تحدد ماذا ومتى، وطلبات التنفيذ تجهز الشغل، والإطلاقات للحملات الكبيرة. قسم المهام يعرض لكل شخص الجزء المسند إليه فقط، وهو مكان التنفيذ اليومي.</small>
+        <strong>مسار المحتوى</strong>
+        <small>العمل اليومي والتعديل والتسليم داخل «مهامي». هنا تنشئ طلب المحتوى مرة واحدة؛ الخطة والإطلاقات أدوات إدارة وليست مهامًا إضافية على الفريق.</small>
       </div>
       <div className="page-actions">
         {visibleViews.map(({ href, label, icon: Icon }) => {

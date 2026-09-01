@@ -35,7 +35,7 @@ function isHttpUrl(value: string) {
 
 function commandError(error: { message: string } | null, fallback: string) {
   if (!error) return null;
-  const userError = /Only |active organization|not found|invalid|cannot|must |required|allowed|unknown|workflow|reviewer|leadership|creator|owner|membership|prerequisite|raw material|attach/i.test(error.message);
+  const userError = /Only |active organization|not found|invalid|cannot|must |required|allowed|unknown|workflow|reviewer|leadership|creator|owner|membership|prerequisite|raw material|attach|changed|refresh/i.test(error.message);
   return jsonResponse({ message: userError ? error.message : fallback }, userError ? 400 : 500);
 }
 
@@ -103,6 +103,24 @@ async function updateSocialPostBrief(body: Record<string, unknown>, context: Con
     content_design_brief: designBrief,
   });
   return commandError(error, "تعذّر تحديث Brief البوست.") ?? jsonResponse({ updated: data });
+}
+
+async function updateContentCaption(body: Record<string, unknown>, context: Context) {
+  const contentId = text(body.content_item_id);
+  const caption = text(body.caption);
+  const expectedVersion = Number(body.expected_content_version);
+  if (!contentId || caption.length < 3 || caption.length > 10000
+    || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+    return jsonResponse({ message: "اكتب الكابشن النهائي وحدد نسخة ملف المحتوى الحالية." }, 400);
+  }
+
+  const { data, error } = await context!.supabaseAdmin.rpc("update_content_caption_v1", {
+    target_user_id: context!.userClaims!.id,
+    target_content_item_id: contentId,
+    expected_content_version: expectedVersion,
+    content_caption: caption,
+  });
+  return commandError(error, "تعذّر حفظ الكابشن النهائي.") ?? jsonResponse({ version: data });
 }
 
 async function submitStepDelivery(body: Record<string, unknown>, context: Context) {
@@ -249,6 +267,7 @@ export default {
     if (body.action === "update_request_text") return updateContentRequest(body, context);
     if (body.action === "update_brief") return updateBrief(body, context);
     if (body.action === "update_social_post_brief") return updateSocialPostBrief(body, context);
+    if (body.action === "update_content_caption") return updateContentCaption(body, context);
     if (body.action === "submit_step_delivery") return submitStepDelivery(body, context);
     if (body.action === "add_asset") return addAsset(body, context);
     if (body.action === "remove_asset") return removeAsset(body, context);

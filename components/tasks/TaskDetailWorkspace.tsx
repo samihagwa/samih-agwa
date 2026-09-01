@@ -44,10 +44,14 @@ type Task = Tables<"tasks">;
 type TaskEvent = Tables<"task_events">;
 type TaskDiscussionMessage = Tables<"task_discussion_messages">;
 type TaskRevisionRequest = Tables<"task_revision_requests">;
+type ContentRevisionRequest = Tables<"content_revision_requests">;
 type TaskDelivery = Tables<"task_deliveries">;
 type ContentAsset = Tables<"content_assets">;
 type ContentStepDelivery = Tables<"content_step_deliveries">;
-type ContentRequest = Pick<Tables<"content_items">, "id" | "intake_request" | "intake_source_url" | "caption_brief">;
+type ContentRequest = Pick<
+  Tables<"content_items">,
+  "id" | "version" | "intake_request" | "intake_source_url" | "caption_brief" | "editing_brief" | "thumbnail_brief" | "copy_brief" | "design_brief"
+>;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
 type Person = { id: string; name: string; role: Membership["role"] };
@@ -59,10 +63,18 @@ type Workspace = {
   events: TaskEvent[];
   discussion: TaskDiscussionMessage[];
   revisions: TaskRevisionRequest[];
+  contentRevisions: ContentRevisionRequest[];
   taskDeliveries: TaskDelivery[];
   assets: ContentAsset[];
   deliveries: ContentStepDelivery[];
   contentRequest: ContentRequest | null;
+};
+
+type CaptionDraft = {
+  contentItemId: string;
+  baseVersion: number;
+  baseValue: string;
+  value: string;
 };
 
 function formatDate(value: string | null) {
@@ -109,6 +121,68 @@ function LinkifiedText({ text }: { text: string }) {
     : part)}</>;
 }
 
+const requestSectionHeadings = new Set([
+  "الطلب العام",
+  "تعليمات المونتاج",
+  "تعليمات الغلاف",
+  "تعليمات الكابشن",
+  "تعليمات التصميم",
+  "تعليمات النشر",
+]);
+
+function requestSection(text: string, heading: string) {
+  const lines = text.split(/\r?\n/);
+  const collected: string[] = [];
+  let active = false;
+  for (const line of lines) {
+    const normalized = line.trim().replace(/[:：]\s*$/, "");
+    if (requestSectionHeadings.has(normalized)) {
+      if (active) break;
+      active = normalized === heading;
+      continue;
+    }
+    if (active) collected.push(line);
+  }
+  return collected.join("\n").trim();
+}
+
+function roleSpecificInstructions(fullRequest: string, heading: string, storedBrief: string) {
+  const embeddedBrief = requestSection(fullRequest, heading);
+  const explicitBrief = storedBrief.trim();
+  const looksLikeLegacyRequestCopy = explicitBrief.startsWith("الطلب العام:")
+    || explicitBrief === fullRequest
+    || (explicitBrief.length >= 10 && fullRequest.startsWith(explicitBrief));
+
+  if (embeddedBrief && looksLikeLegacyRequestCopy) return embeddedBrief;
+  return explicitBrief || embeddedBrief || fullRequest;
+}
+
+function instructionsForTask(task: Task, contentRequest: ContentRequest | null, fullRequest: string) {
+  if (!task.content_step || !contentRequest) return fullRequest;
+  if (task.content_step === "editing") {
+    return roleSpecificInstructions(fullRequest, "تعليمات المونتاج", contentRequest.editing_brief);
+  }
+  if (task.content_step === "thumbnail") {
+    return roleSpecificInstructions(fullRequest, "تعليمات الغلاف", contentRequest.thumbnail_brief);
+  }
+  if (task.content_step === "caption") {
+    return contentRequest.copy_brief.trim()
+      || requestSection(fullRequest, "تعليمات الكابشن")
+      || fullRequest;
+  }
+  if (task.content_step === "design") {
+    return contentRequest.design_brief.trim()
+      || requestSection(fullRequest, "تعليمات التصميم")
+      || fullRequest;
+  }
+  if (task.content_step === "publishing") {
+    return contentRequest.caption_brief.trim()
+      || requestSection(fullRequest, "تعليمات النشر")
+      || fullRequest;
+  }
+  return requestSection(fullRequest, "الطلب العام") || fullRequest;
+}
+
 const deliveryInputsByStep: Partial<Record<ContentStep, ContentStep[]>> = {
   editing: ["recording"],
   scheduling: ["caption", "design"],
@@ -118,7 +192,10 @@ const deliveryInputsByStep: Partial<Record<ContentStep, ContentStep[]>> = {
 const assetInputsByStep: Partial<Record<ContentStep, ContentStep[]>> = {
   recording: ["brief", "recording"],
   editing: ["brief", "recording", "editing"],
-  thumbnail: ["brief", "thumbnail"],
+  // Raw links are shared source material. The designer still sees only the
+  // cover brief as instructions, but can open the supplied frame/image/video
+  // references without hunting through the full content workspace.
+  thumbnail: ["brief", "recording", "thumbnail"],
   caption: ["brief", "caption"],
   design: ["brief", "design"],
   scheduling: ["brief", "caption", "design", "scheduling"],
@@ -126,6 +203,14 @@ const assetInputsByStep: Partial<Record<ContentStep, ContentStep[]>> = {
 };
 
 const contentStepsRequiringResultUrl = new Set<ContentStep>(["recording", "editing", "thumbnail", "design", "publishing"]);
+const contentStepsSupportingRevision = new Set<ContentStep>(["recording", "editing", "thumbnail", "caption", "design"]);
+
+const contentRevisionStatusLabels: Record<ContentRevisionRequest["status"], string> = {
+  requested: "مطلوب",
+  in_progress: "قيد التنفيذ",
+  resolved: "تم تنفيذه",
+  cancelled: "ملغي",
+};
 
 function taskEventTitle(event: TaskEvent) {
   if (event.event_type === "created") return "تم إنشاء المهمة";
@@ -143,9 +228,10 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
-  const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [showRevisionForm, setShowRevisionForm] = useState(() => typeof window !== "undefined" && new URL(window.location.href).searchParams.get("action") === "revise");
   const [deliveryFormOpen, setDeliveryFormOpen] = useState(() => typeof window !== "undefined" && window.location.hash === "#delivery");
   const [deliverySnapshot, setDeliverySnapshot] = useState<{ taskVersion: number; deliveryVersion: number | null } | null>(null);
+  const [captionDraft, setCaptionDraft] = useState<CaptionDraft | null>(null);
   const [discussionDraft, setDiscussionDraft] = useState("");
   const [error, setError] = useState<string | null>(configured ? null : "اتصال تسجيل الدخول غير متاح مؤقتًا.");
   const [notice, setNotice] = useState<string | null>(null);
@@ -158,6 +244,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     setWorkspace(null);
     setDeliveryFormOpen(false);
     setDeliverySnapshot(null);
+    setCaptionDraft(null);
   }, []);
   const clearTransientState = useCallback(() => { setError(null); setNotice(null); }, []);
 
@@ -189,6 +276,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         { data: events, error: eventsError },
         { data: discussion, error: discussionError },
         { data: revisions, error: revisionsError },
+        { data: contentRevisions, error: contentRevisionsError },
         { data: taskDeliveries, error: taskDeliveriesError },
         { data: assets, error: assetsError },
         { data: deliveries, error: deliveriesError },
@@ -197,6 +285,9 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         supabase.from("task_events").select("*").eq("task_id", task.id).order("occurred_at", { ascending: false }).limit(100),
         supabase.from("task_discussion_messages").select("*").eq("task_id", task.id).order("created_at", { ascending: true }).limit(200),
         supabase.from("task_revision_requests").select("*").eq("task_id", task.id).order("requested_at", { ascending: false }).limit(100),
+        task.content_item_id
+          ? supabase.from("content_revision_requests").select("*").eq("task_id", task.id).order("requested_at", { ascending: false }).limit(100)
+          : Promise.resolve({ data: [] as ContentRevisionRequest[], error: null }),
         !task.content_item_id && !task.launch_id && !task.launch_deliverable_id && !task.crm_contact_id
           ? supabase.from("task_deliveries").select("*").eq("task_id", task.id).limit(1)
           : Promise.resolve({ data: [] as TaskDelivery[], error: null }),
@@ -207,12 +298,13 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
           ? supabase.from("content_step_deliveries").select("*").eq("content_item_id", task.content_item_id).order("submitted_at", { ascending: false })
           : Promise.resolve({ data: [] as ContentStepDelivery[], error: null }),
         task.content_item_id
-          ? supabase.from("content_items").select("id, intake_request, intake_source_url, caption_brief").eq("id", task.content_item_id).maybeSingle()
+          ? supabase.from("content_items").select("id, version, intake_request, intake_source_url, caption_brief, editing_brief, thumbnail_brief, copy_brief, design_brief").eq("id", task.content_item_id).maybeSingle()
           : Promise.resolve({ data: null as ContentRequest | null, error: null }),
       ]);
       if (eventsError) throw eventsError;
       if (discussionError) throw discussionError;
       if (revisionsError) throw revisionsError;
+      if (contentRevisionsError) throw contentRevisionsError;
       if (taskDeliveriesError) throw taskDeliveriesError;
       if (assetsError) throw assetsError;
       if (deliveriesError) throw deliveriesError;
@@ -225,6 +317,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         ...(events ?? []).flatMap((event) => event.actor_id ? [event.actor_id] : []),
         ...(discussion ?? []).map((message) => message.author_id),
         ...(revisions ?? []).map((revision) => revision.requested_by),
+        ...(contentRevisions ?? []).flatMap((revision) => [revision.requested_by, revision.assigned_to, ...(revision.resolved_by ? [revision.resolved_by] : [])]),
         ...(taskDeliveries ?? []).map((delivery) => delivery.submitted_by),
         ...(assets ?? []).map((asset) => asset.created_by),
         ...(deliveries ?? []).map((delivery) => delivery.submitted_by),
@@ -255,10 +348,31 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         events: events ?? [],
         discussion: discussion ?? [],
         revisions: revisions ?? [],
+        contentRevisions: contentRevisions ?? [],
         taskDeliveries: taskDeliveries ?? [],
         assets: assets ?? [],
         deliveries: deliveries ?? [],
         contentRequest,
+      });
+      setCaptionDraft((current) => {
+        if (!contentRequest) return null;
+        const serverValue = contentRequest.caption_brief ?? "";
+        if (!current || current.contentItemId !== contentRequest.id) {
+          return {
+            contentItemId: contentRequest.id,
+            baseVersion: contentRequest.version,
+            baseValue: serverValue,
+            value: serverValue,
+          };
+        }
+        if (current.baseVersion === contentRequest.version) return current;
+        if (current.value !== current.baseValue) return current;
+        return {
+          contentItemId: contentRequest.id,
+          baseVersion: contentRequest.version,
+          baseValue: serverValue,
+          value: serverValue,
+        };
       });
       setError(null);
     } catch (loadError) {
@@ -305,7 +419,8 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       channel = channel
         .on("postgres_changes", { event: "*", schema: "public", table: "content_items", filter: `id=eq.${workspace.task.content_item_id}` }, () => void loadTaskData(session, false))
         .on("postgres_changes", { event: "*", schema: "public", table: "content_assets", filter: `content_item_id=eq.${workspace.task.content_item_id}` }, () => void loadTaskData(session, false))
-        .on("postgres_changes", { event: "*", schema: "public", table: "content_step_deliveries", filter: `content_item_id=eq.${workspace.task.content_item_id}` }, () => void loadTaskData(session, false));
+        .on("postgres_changes", { event: "*", schema: "public", table: "content_step_deliveries", filter: `content_item_id=eq.${workspace.task.content_item_id}` }, () => void loadTaskData(session, false))
+        .on("postgres_changes", { event: "*", schema: "public", table: "content_revision_requests", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false));
     }
     channel.subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -385,8 +500,27 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     if (!workspace || !session) return;
     const formElement = event.currentTarget;
     const instructions = String(new FormData(formElement).get("instructions") ?? "").trim();
-    if (instructions.length < 3) { setError("اكتب التعديل المطلوب بوضوح."); return; }
+    if (instructions.length < 5) { setError("اكتب التعديل المطلوب بوضوح في 5 حروف على الأقل."); return; }
     setWorking(true); setError(null); setNotice(null);
+    if (workspace.task.content_item_id && workspace.task.content_step) {
+      const { error: commandError } = await getSupabaseBrowserClient().functions.invoke("content-commands", {
+        body: {
+          action: "request_revision",
+          content_item_id: workspace.task.content_item_id,
+          target_stage: workspace.task.content_step,
+          revision_instructions: instructions,
+        },
+      });
+      if (commandError) setError(await getSupabaseFunctionErrorMessage(commandError, "تعذّر إرسال طلب التعديل."));
+      else {
+        formElement.reset();
+        setShowRevisionForm(false);
+        setNotice(`تم إرسال تعديل «${contentStepConfig[workspace.task.content_step].label}» للمسؤول وإعادة فتح مرحلته.`);
+        await loadTaskData(session, false);
+      }
+      setWorking(false);
+      return;
+    }
     const { error: insertError } = await getSupabaseBrowserClient().from("task_revision_requests").insert({
       task_id: workspace.task.id,
       instructions,
@@ -419,6 +553,72 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       await loadTaskData(session, false);
     }
     setWorking(false);
+  }
+
+  async function saveContentCaption(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!workspace?.contentRequest || !workspace.task.content_item_id || !session || !captionDraft) return;
+    if (captionDraft.contentItemId !== workspace.contentRequest.id
+      || captionDraft.baseVersion !== workspace.contentRequest.version) {
+      setError("وصل إصدار أحدث للكابشن أثناء الكتابة. راجع التعارض الظاهر داخل خانة الكابشن قبل الحفظ.");
+      return;
+    }
+    const captionText = captionDraft.value.trim();
+    if (captionText.length < 3) {
+      setError("اكتب الكابشن من 3 حروف على الأقل.");
+      return;
+    }
+    setWorking(true); setError(null); setNotice(null);
+    const { data: commandData, error: commandError } = await getSupabaseBrowserClient().functions.invoke("content-commands", {
+      body: {
+        action: "update_content_caption",
+        content_item_id: workspace.task.content_item_id,
+        caption: captionText,
+        expected_content_version: captionDraft.baseVersion,
+      },
+    });
+    if (commandError) {
+      setError(await getSupabaseFunctionErrorMessage(commandError, "تعذّر حفظ الكابشن."));
+      await loadTaskData(session, false);
+    } else {
+      const returnedVersion = Number((commandData as { version?: unknown } | null)?.version);
+      setCaptionDraft({
+        contentItemId: workspace.contentRequest.id,
+        baseVersion: Number.isSafeInteger(returnedVersion) && returnedVersion > 0
+          ? returnedVersion
+          : captionDraft.baseVersion,
+        baseValue: captionText,
+        value: captionText,
+      });
+      setNotice("تم حفظ الكابشن داخل طلب المحتوى وسيظهر لمسؤول النشر.");
+      await loadTaskData(session, false);
+    }
+    setWorking(false);
+  }
+
+  function useLatestCaption() {
+    if (!workspace?.contentRequest) return;
+    const value = workspace.contentRequest.caption_brief ?? "";
+    setCaptionDraft({
+      contentItemId: workspace.contentRequest.id,
+      baseVersion: workspace.contentRequest.version,
+      baseValue: value,
+      value,
+    });
+    setError(null);
+    setNotice("تم تحميل أحدث كابشن. مسودتك السابقة لم تعد مستخدمة.");
+  }
+
+  function rebaseCaptionDraft() {
+    if (!workspace?.contentRequest || !captionDraft) return;
+    setCaptionDraft({
+      ...captionDraft,
+      contentItemId: workspace.contentRequest.id,
+      baseVersion: workspace.contentRequest.version,
+      baseValue: workspace.contentRequest.caption_brief ?? "",
+    });
+    setError(null);
+    setNotice("تم الاحتفاظ بمسودتك على أحدث نسخة. راجع الفرق ثم احفظها يدويًا.");
   }
 
   async function saveTaskDelivery(event: FormEvent<HTMLFormElement>) {
@@ -519,7 +719,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   if (!configured) return <section className="panel empty-state"><AlertTriangle size={20} /><div><h2>اتصال تسجيل الدخول غير متاح مؤقتًا</h2><p>حدّث الصفحة بعد استعادة الاتصال.</p></div></section>;
   if (!session || !workspace) return <section className="panel empty-state"><AlertTriangle size={20} /><div><h2>تعذّر فتح ملف المهمة</h2><p>{error ?? "سجّل الدخول بحساب عضو مصرح له."}</p></div><Button href="/tasks" variant="secondary">العودة للمهام</Button></section>;
 
-  const { task, discussion, revisions, events } = workspace;
+  const { task, discussion, revisions, contentRevisions, events } = workspace;
   const isAssignee = task.owner_id === session.user.id;
   const isRequester = task.created_by === session.user.id;
   const platformAdmin = canManageAllTaskExecution(workspace.membership.role);
@@ -532,8 +732,23 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     isRequester,
     role: workspace.membership.role,
   });
-  const canRequestRevision = !linkedWorkflow && !isAssignee && task.status !== "cancelled" && task.status !== "backlog" && (isRequester || platformAdmin);
+  const contentTask = Boolean(task.content_item_id && task.content_step);
+  const standaloneTask = !linkedWorkflow;
+  const contentTaskSupportsRevision = Boolean(task.content_step && contentStepsSupportingRevision.has(task.content_step));
+  const canRequestContentRevision = contentTask
+    && contentTaskSupportsRevision
+    && !readOnly
+    && !isAssignee
+    && ["review", "done"].includes(task.status)
+    && (isRequester || platformAdmin);
+  const canRequestStandaloneRevision = standaloneTask
+    && !isAssignee
+    && task.status !== "cancelled"
+    && task.status !== "backlog"
+    && (isRequester || platformAdmin);
+  const canRequestRevision = canRequestContentRevision || canRequestStandaloneRevision;
   const canDiscuss = !readOnly && (isAssignee || isRequester || platformAdmin);
+  const canEditCaption = contentTask && !readOnly && (isAssignee || isRequester || platformAdmin);
   const owner = peopleById.get(task.owner_id);
   const requester = peopleById.get(task.created_by);
   const currentDelivery = task.content_item_id
@@ -547,12 +762,18 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const inputDeliveries = workspace.deliveries.filter((delivery) => delivery.task_id !== task.id && inputDeliverySteps.includes(delivery.step));
   const inputAssetSteps = task.content_step ? assetInputsByStep[task.content_step] ?? [task.content_step] : [];
   const taskAssets = workspace.assets.filter((asset) => !asset.stage || inputAssetSteps.includes(asset.stage));
-  const canonicalRequest = workspace.contentRequest?.intake_request?.trim()
+  const fullRequest = workspace.contentRequest?.intake_request?.trim()
     || task.description?.trim()
     || "لا يوجد شرح إضافي لهذه المهمة. ارجع لطالب المهمة من قسم السؤال والجواب إذا احتجت توضيحًا.";
+  const taskInstructions = instructionsForTask(task, workspace.contentRequest, fullRequest);
+  const captionServerValue = workspace.contentRequest?.caption_brief ?? "";
+  const captionDraftMatchesItem = Boolean(captionDraft && captionDraft.contentItemId === workspace.contentRequest?.id);
+  const captionDraftStale = Boolean(captionDraftMatchesItem
+    && captionDraft
+    && workspace.contentRequest
+    && captionDraft.baseVersion !== workspace.contentRequest.version);
+  const captionDraftDirty = Boolean(captionDraftMatchesItem && captionDraft && captionDraft.value !== captionDraft.baseValue);
   const hasExecutionResources = taskAssets.length > 0 || inputDeliveries.length > 0;
-  const standaloneTask = !linkedWorkflow;
-  const contentTask = Boolean(task.content_item_id && task.content_step);
   const canSubmitDelivery = !readOnly && isAssignee
     && (task.status === "in_progress" || (task.status === "done" && !task.requires_review))
     && (standaloneTask || contentTask);
@@ -571,6 +792,26 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const linkedLabel = task.content_item_id ? "فتح ملف المحتوى"
     : task.launch_deliverable_id || task.launch_id ? "فتح ملف الإطلاق"
       : task.crm_contact_id ? "فتح ملف العميل" : null;
+  const revisionTimeline = [
+    ...revisions.map((revision) => ({
+      id: `task:${revision.id}`,
+      requestedAt: revision.requested_at,
+      title: "تعديل عام للمهمة",
+      instructions: revision.instructions,
+      requestedBy: revision.requested_by,
+      assignedTo: task.owner_id,
+      meta: `على نسخة v${revision.task_version}`,
+    })),
+    ...contentRevisions.map((revision) => ({
+      id: `content:${revision.id}`,
+      requestedAt: revision.requested_at,
+      title: `تعديل ${contentStepConfig[revision.stage].label} · الجولة ${revision.round}`,
+      instructions: revision.instructions,
+      requestedBy: revision.requested_by,
+      assignedTo: revision.assigned_to,
+      meta: `${contentRevisionStatusLabels[revision.status]}${revision.resolved_at ? ` · أُغلق ${formatDate(revision.resolved_at)}` : ""}`,
+    })),
+  ].sort((left, right) => new Date(right.requestedAt).getTime() - new Date(left.requestedAt).getTime());
 
   return (
     <section className="task-detail-workspace">
@@ -607,10 +848,10 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         </aside>
 
         <div className="task-detail-main">
-          {showRevisionForm && canRequestRevision ? <section className="panel task-detail-section task-revision-compose">
+          {showRevisionForm && canRequestRevision ? <section id="revision" className="panel task-detail-section task-revision-compose">
             <div className="section-heading compact"><div><p className="overline">تعليمات واضحة للمسؤول</p><h2>ما التعديل المطلوب؟</h2><p>بعد الإرسال ترجع المهمة إلى التنفيذ تلقائيًا لو كانت مكتملة أو تحت المراجعة أو متوقفة.</p></div><MessageSquareText size={19} /></div>
             <form onSubmit={requestRevision}>
-              <label><span>تفاصيل التعديل</span><textarea name="instructions" required minLength={3} maxLength={5000} rows={5} placeholder="مثال: عدّل أول 10 ثوانٍ، واحذف الجزء من 00:22 إلى 00:38، ثم ارفع النسخة الجديدة على نفس الرابط." /></label>
+              <label><span>تفاصيل التعديل</span><textarea name="instructions" required minLength={5} maxLength={5000} rows={5} placeholder="مثال: عدّل أول 10 ثوانٍ، واحذف الجزء من 00:22 إلى 00:38، ثم ارفع النسخة الجديدة على نفس الرابط." /></label>
               <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={14} /> : <Send size={14} />} إرسال التعديل للمسؤول</Button><button className="text-button" type="button" onClick={() => setShowRevisionForm(false)}>إلغاء</button></div>
             </form>
           </section> : null}
@@ -618,10 +859,36 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
           <section className="panel task-detail-section task-requirements-section">
             <div className="section-heading compact"><div><p className="overline">المطلوب الآن</p><h2>{isAssignee ? "نفّذ المطلوب بدون بحث أو تخمين" : isRequester ? "الطلب والتسليم في مكان واحد" : "كل المطلوب للتنفيذ"}</h2><p>شرح المهمة أولًا، ثم الملفات والمصادر، وبعدها التسليم النهائي بوضوح.</p></div><FileText size={19} /></div>
             <div className="task-detail-instructions">
-              <span><FileText size={14} /> كل المطلوب والروابط</span>
-              <p><LinkifiedText text={canonicalRequest} /></p>
+              <span><FileText size={14} /> {task.content_step ? `المطلوب منك · ${contentStepConfig[task.content_step].label}` : "كل المطلوب والروابط"}</span>
+              <p><LinkifiedText text={taskInstructions} /></p>
               {workspace.contentRequest?.intake_source_url ? <a className="task-original-source" href={workspace.contentRequest.intake_source_url} target="_blank" rel="noreferrer">فتح المصدر الأصلي <ExternalLink size={12} /></a> : null}
             </div>
+
+            {task.content_item_id && taskInstructions !== fullRequest ? <details className="task-full-request">
+              <summary>عرض الطلب الأساسي الكامل عند الحاجة</summary>
+              <div><LinkifiedText text={fullRequest} /></div>
+            </details> : null}
+
+            {task.content_item_id ? <section className={`task-caption-block${task.content_step === "publishing" ? " publishing-caption" : ""}`}>
+              <header><div><MessageSquareText size={15} /><div><strong>الكابشن داخل نفس الطلب</strong><small>{task.content_step === "publishing" ? "راجع النص النهائي هنا قبل النشر." : "محفوظ مرة واحدة ويصل تلقائيًا لمسؤول النشر."}</small></div></div><StatusBadge tone={workspace.contentRequest?.caption_brief.trim() ? "success" : "neutral"}>{workspace.contentRequest?.caption_brief.trim() ? "محفوظ" : "غير مكتوب"}</StatusBadge></header>
+              {canEditCaption ? <form onSubmit={saveContentCaption}>
+                {captionDraftStale ? <div className="form-notice error" role="alert">
+                  <strong>وصل إصدار أحدث أثناء كتابة الكابشن.</strong>
+                  <p>مسودتك ما زالت محفوظة في الخانة ولم نستبدلها تلقائيًا. قارنها بالنسخة الحالية ثم اختر كيف تكمل.</p>
+                  {captionServerValue ? <details><summary>عرض الكابشن المحفوظ حاليًا</summary><p><LinkifiedText text={captionServerValue} /></p></details> : <small>النسخة الأحدث لا تحتوي كابشنًا.</small>}
+                  <div className="form-actions"><button className="text-button" type="button" onClick={useLatestCaption}>استخدام النسخة الأحدث</button><button className="text-button" type="button" onClick={rebaseCaptionDraft}>الاحتفاظ بمسودتي ومراجعتها</button></div>
+                </div> : null}
+                <label><span>نص الكابشن والهاشتاجات</span><textarea name="caption_text" minLength={3} maxLength={10000} rows={6} required value={captionDraftMatchesItem ? captionDraft?.value ?? "" : captionServerValue} onChange={(event) => {
+                  const value = event.target.value;
+                  const contentRequest = workspace.contentRequest;
+                  if (!contentRequest) return;
+                  setCaptionDraft((current) => current?.contentItemId === contentRequest.id
+                    ? { ...current, value }
+                    : { contentItemId: contentRequest.id, baseVersion: contentRequest.version, baseValue: contentRequest.caption_brief ?? "", value });
+                }} placeholder="اكتب الكابشن النهائي والهاشتاجات هنا…" disabled={working} /></label>
+                <div className="form-actions"><Button type="submit" variant={task.content_step === "publishing" ? "primary" : "secondary"} disabled={working || captionDraftStale || !captionDraftDirty}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ الكابشن</Button><small>{captionDraftDirty ? "عندك تعديل غير محفوظ. الحفظ لا يغيّر حالة المهمة ولا يعتبرها منشورة." : "الكابشن مطابق للنسخة المحفوظة."}</small></div>
+              </form> : workspace.contentRequest?.caption_brief.trim() ? <p><LinkifiedText text={workspace.contentRequest.caption_brief} /></p> : <p className="task-resource-empty">لم يُكتب الكابشن حتى الآن.</p>}
+            </section> : null}
 
             {task.content_item_id ? <div className="task-resource-block">
               <header><div><Paperclip size={15} /><div><strong>ملفات وروابط التنفيذ</strong><small>المصادر والتسليمات السابقة التي تحتاجها في هذه الخطوة.</small></div></div><StatusBadge tone={hasExecutionResources ? "info" : "neutral"}>{hasExecutionResources ? `${taskAssets.length + inputDeliveries.length} مرفق` : "لا يوجد"}</StatusBadge></header>
@@ -684,8 +951,8 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
           </section>
 
           <section className="panel task-detail-section">
-            <div className="section-heading compact"><div><p className="overline">طلبات التعديل</p><h2>تعليمات لا تضيع في الشات</h2></div><StatusBadge tone={revisions.length ? "warning" : "neutral"}>{revisions.length}</StatusBadge></div>
-            {revisions.length ? <ol className="task-revision-list">{revisions.map((revision) => <li key={revision.id}><span aria-hidden="true" /><div><strong>{peopleById.get(revision.requested_by)?.name ?? "طالب المهمة"}</strong><p>{revision.instructions}</p><small>{formatDate(revision.requested_at)} · على نسخة v{revision.task_version}</small></div></li>)}</ol> : <p className="task-empty-proof"><CheckCircle2 size={14} /> لا توجد طلبات تعديل حتى الآن.</p>}
+            <div className="section-heading compact"><div><p className="overline">سجل التعديلات</p><h2>كل جولة تعديل مرتبطة بهذه المهمة</h2><p>طلبات تعديل مرحلة المحتوى والتعديلات العامة تظهر هنا بترتيبها الحقيقي.</p></div><StatusBadge tone={revisionTimeline.length ? "warning" : "neutral"}>{revisionTimeline.length}</StatusBadge></div>
+            {revisionTimeline.length ? <ol className="task-revision-list">{revisionTimeline.map((revision) => <li key={revision.id}><span aria-hidden="true" /><div><strong>{revision.title}</strong><p>{revision.instructions}</p><small>طلبه {peopleById.get(revision.requestedBy)?.name ?? "طالب المهمة"} من {peopleById.get(revision.assignedTo)?.name ?? "المسؤول"} · {formatDate(revision.requestedAt)} · {revision.meta}</small></div></li>)}</ol> : <p className="task-empty-proof"><CheckCircle2 size={14} /> لا توجد طلبات تعديل حتى الآن.</p>}
           </section>
 
           <section className="panel task-detail-section">

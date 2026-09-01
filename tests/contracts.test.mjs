@@ -15,13 +15,13 @@ test("shared navigation exposes one permission-aware content area while old rout
   assert.doesNotMatch(navigation, /id:\s*["']planning["']/);
   assert.doesNotMatch(navigation, /\{\s*id:\s*["']campaigns["']/);
   assert.doesNotMatch(navigation, /label:\s*["']الحملات والإطلاقات["']/);
-  assert.match(navigation, /label:\s*["']إدارة المحتوى["']/);
+  assert.match(navigation, /label:\s*["']طلبات المحتوى["']/);
   assert.match(navigation, /allowed\.has\("content"\) \|\| allowed\.has\("planning"\) \|\| allowed\.has\("campaigns"\)/);
   assert.match(navigation, /campaigns:\s*\{ href:\s*["']\/campaigns["'] \}/);
   assert.match(contentNavigation, /href:\s*["']\/planning["']/);
   assert.match(contentNavigation, /href:\s*["']\/content["']/);
   assert.match(contentNavigation, /id:\s*["']campaigns["'], href:\s*["']\/campaigns["']/);
-  assert.match(contentNavigation, /الإطلاقات — متقدم/);
+  assert.match(contentNavigation, /الإطلاقات — للمدير/);
   assert.match(contentNavigation, /visibleViews = views\.filter\(\(\{ id \}\) => allowed\.has\(id\)\)/);
   assert.match(shell, /<ContentSectionNav allowedSections=\{allowedSections\}/);
   assert.match(shell, /requestedSection === "campaigns"/);
@@ -501,6 +501,34 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(config, /\[functions\.script-ai\][\s\S]*verify_jwt = true/);
 });
 
+test("script lifecycle filters use persisted script states and linked production facts", async () => {
+  const [workspace, editor, css] = await Promise.all([
+    readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  for (const filter of ["idea", "draft", "ready_to_record", "production", "recorded", "published", "archived"]) {
+    assert.match(workspace, new RegExp(`value: "${filter}"`));
+  }
+  assert.match(workspace, /script\.spoken_script\.trim\(\)\.length < 20 \? "idea" : "draft"/);
+  assert.match(workspace, /linkedStep\(tasks, script, "recording"\)\?\.status === "done"/);
+  assert.match(workspace, /linkedStep\(tasks, script, "publishing"\)\?\.status === "done"/);
+  assert.match(workspace, /aria-pressed=\{statusFilter === filter\.value\}/);
+  assert.match(workspace, /changeScriptStatus\(script, "ready_to_record"\)/);
+  assert.match(workspace, /expected_edit_version: script\.edit_version/);
+  assert.doesNotMatch(workspace, /changeScriptStatus\(script, "(?:recorded|published|handed_off)"\)/);
+
+  assert.match(editor, /الاختيار المعتمد: \$\{option\.label\}/);
+  assert.match(editor, /thumbnail_notes: thumbnailOptionText\(option\)/);
+  assert.match(editor, /thumbnailInstructionsSaved/);
+  assert.match(editor, /تعليمات الغلاف التي ستصل للمصمم/);
+  assert.match(editor, /workspace\.script\.thumbnail_notes\.trim\(\)/);
+  assert.match(css, /\.script-status-filters button\[aria-pressed="true"\]/);
+  assert.match(css, /\.script-variants-grid article\.selected/);
+  assert.match(css, /\.script-handoff-cover-summary/);
+});
+
 test("AI providers are owner-managed, Vault-backed, testable, and provider-agnostic", async () => {
   const [migration, ambiguityFix, commands, adapter, settings, editor, types, config] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821012128_ai_provider_registry.sql", import.meta.url), "utf8"),
@@ -865,8 +893,8 @@ test("planning is a thin calendar over the same canonical request instead of a d
   assert.match(planning, /حفظ في التقويم فقط/);
   assert.doesNotMatch(planning, /name="hook_direction"|name="cta"/);
   assert.match(migration, /if target_kind = 'reel' then[\s\S]*create_simplified_content_workflow_v1/);
-  assert.match(navigation, /الخطة تحدد ماذا ومتى/);
-  assert.match(navigation, /قسم المهام يعرض لكل شخص الجزء المسند إليه فقط/);
+  assert.match(navigation, /العمل اليومي والتعديل والتسليم داخل «مهامي»/);
+  assert.match(navigation, /الخطة والإطلاقات أدوات إدارة وليست مهامًا إضافية على الفريق/);
 });
 
 test("task workflow is shared between UI types and database enforcement", async () => {
@@ -1492,6 +1520,96 @@ test("Telegram workflow notifications are private, opt-in, idempotent, and open 
   assert.match(readme, /Old notifications are not backfilled/);
 });
 
+test("task completion and revision resolution produce one durable notification per logical cycle", async () => {
+  const [migration, invariant] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260901154447_make_task_completion_notifications_idempotent.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/tests/task_notification_idempotency.sql", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /function private\.task_completion_notification_cycle/);
+  assert.match(migration, /'content-revision:' \|\| revision\.id::text/);
+  assert.match(migration, /'task-revision:' \|\| revision\.id::text/);
+  assert.match(migration, /union all[\s\S]*order by cycle\.requested_at desc/);
+  assert.match(migration, /if task_status <> 'done' then/);
+  assert.match(migration, /target_action = 'resolve' and revision_record\.status = 'resolved'/);
+  assert.match(migration, /new\.status is distinct from old\.status[\s\S]*new\.status = 'done'/);
+  assert.match(migration, /:done:cycle:/);
+  assert.match(migration, /app\.content_revision_request_id/);
+  assert.match(migration, /and not is_content_revision_reopen/);
+  assert.doesNotMatch(migration, /:done:v' \|\| new\.version/);
+  assert.match(invariant, /UNIQUE \(dedupe_key\)/);
+  assert.match(invariant, /PRIMARY KEY \(notification_id\)/);
+});
+
+test("content revisions reopen once, notify once, and share their task card read-only", async () => {
+  const [migration, invariant, functional] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260901155005_simplify_content_revision_execution.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/tests/content_revision_execution_invariants.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/tests/content_revision_notification_and_shared_task_rls.sql", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /unique index if not exists content_revision_requests_one_open_per_task_idx/);
+  assert.match(migration, /function private\.enforce_task_rules\(\)[\s\S]*from public\.content_revision_requests revision/);
+  assert.match(migration, /revision\.content_item_id = old\.content_item_id/);
+  assert.match(migration, /revision\.stage = old\.content_step/);
+  assert.match(migration, /revision\.assigned_to = old\.owner_id/);
+  assert.match(migration, /function public\.request_content_revision/);
+  assert.match(migration, /clean_instructions is null/);
+  assert.match(migration, /app\.content_revision_request_id/);
+  assert.match(migration, /delivery\.submitted_at >= revision\.requested_at/);
+  assert.match(migration, /function private\.guard_content_approval_revisions[\s\S]*revision\.task_id <> new\.id/);
+  assert.match(migration, /function public\.change_content_revision[\s\S]*membership\.status = 'active'/);
+  assert.doesNotMatch(
+    migration.match(/create or replace function public\.change_content_revision[\s\S]*?\n\$\$;/)?.[0] ?? "",
+    /update public\.tasks/,
+  );
+  assert.match(migration, /'revision:' \|\| new\.id \|\| ':requested:user:'/);
+  assert.match(migration, /array\['content','tasks'\]::text\[\]/);
+  assert.match(migration, /function private\.can_read_shared_content_task_actor/);
+  assert.match(migration, /participant_task\.owner_id = target_user_id/);
+  assert.match(migration, /participant_task\.status <> 'cancelled'/);
+  assert.match(migration, /policy "tasks_select_involved_members"[\s\S]*can_read_shared_content_task_actor/);
+  assert.match(invariant, /One-open-content-revision-per-task/);
+  assert.match(invariant, /Content RLS was disabled/);
+  assert.match(invariant, /delivery\.submitted_at >= revision\.requested_at/);
+  assert.match(invariant, /Shared content-card visibility leaked into task execution policy/);
+  assert.match(functional, /returned_notification_count <> 0/);
+  assert.match(functional, /telegram_outbox_count > 1/);
+  assert.match(functional, /Standalone task revision notification behavior changed/);
+  assert.match(functional, /set local role authenticated/);
+  assert.match(functional, /unauthorized_update_count <> 0/);
+});
+
+test("content caption updates are optimistic, involvement-scoped, audited, and retry-safe", async () => {
+  const [migration, edge, invariant] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260901154508_add_secure_content_caption_update.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/tests/content_caption_update_invariants.sql", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(migration, /function public\.update_content_caption_v1/);
+  assert.match(migration, /item_record\.version <> expected_content_version/);
+  assert.match(migration, /item_record\.caption_brief = clean_caption[\s\S]*return item_record\.version/);
+  assert.match(migration, /actor_is_requester[\s\S]*actor_is_step_owner[\s\S]*actor_is_content_leadership/);
+  assert.match(migration, /task\.owner_id = target_user_id[\s\S]*task\.is_work_item/);
+  assert.match(migration, /task\.content_step in \([\s\S]*'publishing'/);
+  assert.match(migration, /task\.status <> 'cancelled'/);
+  assert.match(migration, /function private\.guard_content_item_write/);
+  assert.match(migration, /changed_fields <@ allowed_caption_fields[\s\S]*task\.is_work_item/);
+  assert.match(migration, /array\['content'\]::text\[\]/);
+  assert.match(migration, /'content\.caption_updated'/);
+  assert.match(migration, /'content:' \|\| item_record\.id \|\| ':caption:v'/);
+  assert.match(migration, /to service_role/);
+  assert.match(edge, /body\.action === "update_content_caption"/);
+  assert.match(edge, /rpc\("update_content_caption_v1"/);
+  assert.match(edge, /expected_content_version: expectedVersion/);
+  assert.match(edge, /changed\|refresh/);
+  assert.match(invariant, /retry-idempotent/);
+  assert.match(invariant, /task\.is_work_item/);
+  assert.match(invariant, /task\.content_step in/);
+  assert.match(invariant, /Content item RLS must remain enabled/);
+});
+
 test("member Telegram linking verifies usernames, works without publishing access, and supports a durable test", async () => {
   const [migration, notificationCenter, webhook, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260829040000_member_telegram_linking_experience.sql", import.meta.url), "utf8"),
@@ -1677,15 +1795,17 @@ test("results workspace reports only evidence-backed internal metrics and labels
   assert.match(css, /\.analytics-kpi-grid, \.analytics-source-status > div:last-child \{ grid-template-columns: 1fr;/);
 });
 
-test("task cards remain visually separated without changing the design system", async () => {
+test("task cards remain compact and visually separated without changing the design system", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(css, /\.kanban-stack \{[^}]*gap: 18px/);
-  assert.match(css, /\.task-card \{[^}]*border: 2px solid #c7d5d4[^}]*box-shadow: 0 10px 28px/);
+  assert.match(css, /\.kanban-stack \{[^}]*gap: 10px/);
+  assert.match(css, /\.task-card \{[^}]*border: 1px solid #b9ccca[^}]*box-shadow: 0 6px 18px/);
   assert.match(css, /\.task-card-top \{[^}]*border-bottom: 1px solid var\(--line\)/);
   assert.match(css, /\.kanban-stack > \.task-card:nth-child\(even\) \{ background: #f8fbfa/);
   assert.match(css, /\.task-card h3 \{[^}]*background: #eef6f4[^}]*font-weight: 950/);
   assert.match(css, /\.task-card::before \{[^}]*inset-inline-start: 0/);
+  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-auto-flow: column/);
+  assert.match(css, /\.task-card\.task-closed h3 \{[^}]*text-decoration: line-through/);
 });
 
 test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {

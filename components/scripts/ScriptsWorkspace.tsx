@@ -1,7 +1,7 @@
 "use client";
 
 import type { Session } from "@supabase/supabase-js";
-import { Archive, Bot, FilePenLine, Lightbulb, LoaderCircle, LockKeyhole, Plus, Radar, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, UserRound, UsersRound } from "lucide-react";
+import { Archive, Bot, CheckCircle2, FilePenLine, Lightbulb, LoaderCircle, LockKeyhole, Plus, Radar, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, UserRound, UsersRound } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentUuidDeepLink } from "../../lib/deep-links";
 import { formatScriptDate, lines, scriptInputModeConfig, scriptResearchKindConfig, scriptStatusConfig } from "../../lib/scripts";
@@ -29,6 +29,21 @@ type Workspace = {
   productionTasks: Task[];
 };
 type Tab = "scripts" | "radar" | "voice";
+type ScriptStage = "idea" | "draft" | "ready_to_record" | "production" | "recorded" | "ready_to_publish" | "published" | "archived";
+type ScriptFilter = "active" | ScriptStage | "all";
+
+const scriptFilters: { value: ScriptFilter; label: string }[] = [
+  { value: "active", label: "العمل الحالي" },
+  { value: "idea", label: "فكرة" },
+  { value: "draft", label: "قيد الكتابة" },
+  { value: "ready_to_record", label: "جاهز للتصوير" },
+  { value: "production", label: "قيد التنفيذ" },
+  { value: "recorded", label: "تم التصوير" },
+  { value: "ready_to_publish", label: "جاهز للنشر" },
+  { value: "published", label: "تم النشر" },
+  { value: "archived", label: "مؤرشف" },
+  { value: "all", label: "الكل" },
+];
 
 const initialScriptForm = {
   title: "", input_mode: "idea", source_text: "", objective: "",
@@ -50,6 +65,28 @@ function scriptCardStatus(script: Script, tasks: Task[]) {
   if (editing && ["ready", "in_progress", "review"].includes(editing.status)) return { label: "قيد المونتاج", tone: "info" as const };
   if (recording?.status === "done") return { label: "تم التصوير", tone: "success" as const };
   return { label: "قيد التنفيذ", tone: "info" as const };
+}
+
+function linkedStep(tasks: Task[], script: Script, step: Task["content_step"]) {
+  if (!script.content_item_id) return undefined;
+  return tasks.find((task) => task.content_item_id === script.content_item_id && task.content_step === step);
+}
+
+function scriptStage(script: Script, tasks: Task[]): ScriptStage {
+  if (script.status === "archived") return "archived";
+  if (script.status === "draft") return script.spoken_script.trim().length < 20 ? "idea" : "draft";
+  if (script.status === "ready_to_record") return "ready_to_record";
+  if (linkedStep(tasks, script, "publishing")?.status === "done") return "published";
+  if (["ready", "in_progress", "review"].includes(linkedStep(tasks, script, "publishing")?.status ?? "")) return "ready_to_publish";
+  if (linkedStep(tasks, script, "recording")?.status === "done") return "recorded";
+  return "production";
+}
+
+function matchesScriptFilter(script: Script, tasks: Task[], filter: ScriptFilter) {
+  if (filter === "all") return true;
+  const stage = scriptStage(script, tasks);
+  if (filter === "active") return !["published", "archived"].includes(stage);
+  return stage === filter;
 }
 
 function emptyState(icon: typeof FilePenLine, title: string, body: string) {
@@ -136,7 +173,7 @@ export function ScriptsWorkspace() {
     return new URL(window.location.href).searchParams.get("tab") === "radar" || currentUuidDeepLink("research", "research") ? "radar" : "scripts";
   });
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("active");
+  const [statusFilter, setStatusFilter] = useState<ScriptFilter>("active");
   const [showCreateScript, setShowCreateScript] = useState(false);
   const [showCreateResearch, setShowCreateResearch] = useState(false);
   const [scriptForm, setScriptForm] = useState(initialScriptForm);
@@ -231,10 +268,19 @@ export function ScriptsWorkspace() {
     const query = search.trim().toLocaleLowerCase("ar");
     return workspace.scripts.filter((script) => {
       const matchesSearch = !query || [script.title, script.objective, script.spoken_script, script.caption, script.content_pillar ?? ""].some((value) => value.toLocaleLowerCase("ar").includes(query));
-      const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? script.status !== "archived" : script.status === statusFilter);
+      const matchesStatus = matchesScriptFilter(script, workspace.productionTasks, statusFilter);
       return matchesSearch && matchesStatus;
     });
   }, [search, statusFilter, workspace]);
+
+  const scriptFilterCounts = useMemo(() => {
+    const counts = new Map<ScriptFilter, number>();
+    if (!workspace) return counts;
+    for (const filter of scriptFilters) {
+      counts.set(filter.value, workspace.scripts.filter((script) => matchesScriptFilter(script, workspace.productionTasks, filter.value)).length);
+    }
+    return counts;
+  }, [workspace]);
 
   async function createScript(event: FormEvent) {
     event.preventDefault(); if (!workspace || !session || !canWriteScripts) return;
@@ -265,12 +311,14 @@ export function ScriptsWorkspace() {
     finally { setSaving(false); }
   }
 
-  async function changeScriptStatus(script: Script, status: "draft" | "archived") {
+  async function changeScriptStatus(script: Script, status: "draft" | "ready_to_record" | "archived") {
     if (!canWriteScripts) return;
     setWorkingScriptId(script.id); setError(null); setNotice(null);
     try {
       await invokeCommand({ action: "change_status", script_id: script.id, expected_edit_version: script.edit_version, status });
-      setNotice(status === "archived" ? "تم نقل الاسكريبت إلى الأرشيف." : "تم استعادة الاسكريبت إلى قيد الكتابة.");
+      setNotice(status === "archived" ? "تم نقل الاسكريبت إلى الأرشيف."
+        : status === "ready_to_record" ? "تم نقل الاسكريبت إلى جاهز للتصوير."
+        : "تم نقل الاسكريبت إلى قيد الكتابة.");
       await refresh();
     } catch (statusError) { setError(statusError instanceof Error ? statusError.message : "تعذّر تغيير حالة الاسكريبت."); }
     finally { setWorkingScriptId(null); }
@@ -371,7 +419,20 @@ export function ScriptsWorkspace() {
     {tab === "scripts" ? <>
       <section className="panel scripts-control-panel">
         <div className="section-heading"><div><p className="overline">المساحة الخاصة</p><h2>اسكريبتاتي</h2><p>لا يستطيع أي عضو آخر، بما في ذلك مدير المنصة، فتح اسكريبتاتك أو بصمتك. عند التسليم فقط تُنشأ منه نسخة مشتركة داخل طلبات التنفيذ.</p></div>{canWriteScripts ? <Button type="button" onClick={() => setShowCreateScript((value) => !value)}><Plus size={15} /> اسكريبت جديد</Button> : null}</div>
-        <div className="scripts-filters"><label className="search-field"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث في العنوان أو النص أو الكابشن..." /></label><select aria-label="تصفية حسب الحالة" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="active">العمل الحالي</option><option value="draft">قيد الكتابة</option><option value="ready_to_record">جاهز للتصوير</option><option value="handed_off">متابعة التنفيذ</option><option value="archived">الأرشيف</option><option value="all">كل الحالات</option></select></div>
+        <div className="scripts-filters">
+          <label className="search-field"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث في العنوان أو النص أو الكابشن..." /></label>
+          <div className="script-status-filters" role="group" aria-label="تصفية الاسكريبتات حسب الحالة">
+            {scriptFilters.map((filter) => <button
+              key={filter.value}
+              type="button"
+              aria-pressed={statusFilter === filter.value}
+              className={statusFilter === filter.value ? "active" : ""}
+              onClick={() => setStatusFilter(filter.value)}
+              title={["recorded", "ready_to_publish", "published"].includes(filter.value) ? "تتحدث تلقائيًا من مهام التنفيذ المرتبطة" : undefined}
+            >{filter.label}<span>{(scriptFilterCounts.get(filter.value) ?? 0).toLocaleString("ar-EG")}</span></button>)}
+          </div>
+          <small className="script-filter-note">«تم التصوير» و«جاهز للنشر» و«تم النشر» تتحدث تلقائيًا من مهام التنفيذ؛ لا يغيّرها أي عضو يدويًا.</small>
+        </div>
         {showCreateScript && canWriteScripts ? <form className="script-create-form" onSubmit={(event) => void createScript(event)}>
           <label className="span-2"><span>عنوان الاسكريبت</span><input required minLength={3} maxLength={180} value={scriptForm.title} onChange={(event) => setScriptForm((form) => ({ ...form, title: event.target.value }))} placeholder="مثال: ليه بتتوتر وإنت كسبان؟" /></label>
           <label className="span-2"><span>كل المطلوب والروابط</span><textarea className="script-request-textarea" required minLength={10} maxLength={30000} rows={14} value={scriptForm.source_text} onChange={(event) => setScriptForm((form) => ({ ...form, source_text: event.target.value }))} placeholder="اكتب الفكرة، المطلوب، ملاحظاتك، وأي روابط في نفس الخانة…" /><small>النص والروابط سيظلان معًا كما كتبتهما، وهما المرجع الأساسي للاسكريبت.</small></label>
@@ -392,9 +453,21 @@ export function ScriptsWorkspace() {
       {statusFilter === "archived" ? <aside className="script-archive-note"><Archive size={17} /><div><strong>الأرشيف خارج ضغط الشغل اليومي</strong><p>تقدر تسترجع أو تحذف نهائيًا اسكريبتاتك غير المرتبطة بالإنتاج أو بمرجع محفوظ.</p></div></aside> : null}
       <div className="scripts-grid">{filteredScripts.length ? filteredScripts.map((script) => {
         const config = scriptCardStatus(script, workspace.productionTasks);
+        const stage = scriptStage(script, workspace.productionTasks);
         const working = workingScriptId === script.id;
         const canArchive = script.status !== "archived";
-        return <article className="script-card" data-status={script.status} key={script.id}><header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{script.objective}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header><dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl><footer><span>{formatScriptDate(script.updated_at)}</span><div className="script-card-actions"><a className="button button-secondary" href={`/scripts/${script.id}`}>{script.status === "handed_off" ? "متابعة التنفيذ" : "فتح الاسكريبت"}</a>{canWriteScripts && canArchive ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "archived")}>{working ? <LoaderCircle className="spin" size={14} /> : <Archive size={14} />} أرشفة</button> : null}{canWriteScripts && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} استرجاع</button> : null}{canWriteScripts && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button danger-text" disabled={working} onClick={() => void deleteScript(script)}><Trash2 size={14} /> حذف نهائي</button> : null}</div></footer></article>;
+        return <article className="script-card" data-status={script.status} data-stage={stage} key={script.id}>
+          <header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{script.objective}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header>
+          <dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl>
+          <footer><span>{formatScriptDate(script.updated_at)}</span><div className="script-card-actions">
+            <a className="button button-secondary" href={`/scripts/${script.id}`}>{script.status === "handed_off" ? "متابعة التنفيذ" : "فتح الاسكريبت"}</a>
+            {canWriteScripts && script.status === "draft" && script.spoken_script.trim().length >= 20 ? <button type="button" className="text-button script-quick-transition" disabled={working} onClick={() => void changeScriptStatus(script, "ready_to_record")}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} جاهز للتصوير</button> : null}
+            {canWriteScripts && script.status === "ready_to_record" ? <button type="button" className="text-button script-quick-transition" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} إرجاع للكتابة</button> : null}
+            {canWriteScripts && canArchive ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "archived")}>{working ? <LoaderCircle className="spin" size={14} /> : <Archive size={14} />} أرشفة</button> : null}
+            {canWriteScripts && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} استرجاع</button> : null}
+            {canWriteScripts && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button danger-text" disabled={working} onClick={() => void deleteScript(script)}><Trash2 size={14} /> حذف نهائي</button> : null}
+          </div></footer>
+        </article>;
       }) : emptyState(Archive, "لا توجد اسكريبتات مطابقة", statusFilter === "active" ? "ابدأ باسكريبت جديد أو غيّر البحث والفلترة." : "غيّر الفلترة لرؤية العمل الحالي أو الأرشيف.")}</div>
     </> : null}
 

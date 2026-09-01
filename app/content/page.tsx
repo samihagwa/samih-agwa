@@ -9,7 +9,7 @@ export default function ContentPage() {
   return (
     <main className="page-stack">
       <PageHeader
-        eyebrow="إدارة المحتوى · طلبات التنفيذ"
+        eyebrow="طلبات المحتوى"
         title="كل قطعة محتوى في طلب واحد"
         description="نفس النص والروابط يظلان المرجع المشترك، بينما يرى كل مسؤول مهمته فقط ويغلقها بتسليم واحد."
         actions={<StatusBadge tone="success">مرتبط ببورد المهام</StatusBadge>}

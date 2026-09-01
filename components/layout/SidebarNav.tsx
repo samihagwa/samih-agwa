@@ -7,7 +7,7 @@ import type { WorkspaceSection } from "../../lib/access";
 const items = [
   { id: "dashboard", href: "/", label: "مركز القيادة", icon: LayoutDashboard },
   { id: "tasks", href: "/tasks", label: "مهامي", icon: SquareKanban },
-  { id: "content", href: "/content", label: "إدارة المحتوى", icon: Clapperboard },
+  { id: "content", href: "/content", label: "طلبات المحتوى", icon: Clapperboard },
   { id: "scripts", href: "/scripts", label: "استوديو الاسكريبتات", icon: FilePenLine },
   { id: "publishing", href: "/publishing", label: "النشر التلقائي", icon: Send },
   { id: "brand", href: "/brand", label: "مركز معرفة البراند", icon: BookOpenCheck },

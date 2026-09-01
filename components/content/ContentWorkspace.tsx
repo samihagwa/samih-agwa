@@ -99,7 +99,7 @@ function captionOptionText(option: CaptionOption) {
 }
 
 function thumbnailOptionText(option: ThumbnailOption) {
-  return `النص على الغلاف: ${option.cover_text}\nالاتجاه البصري: ${option.visual_direction}\nصلته بالاسكريبت: ${option.script_connection}`;
+  return `الاختيار المعتمد: ${option.label}\nالنص على الغلاف: ${option.cover_text}\nالاتجاه البصري: ${option.visual_direction}\nصلته بالاسكريبت: ${option.script_connection}`;
 }
 
 function contentRequestText(item: ContentItem) {
@@ -561,14 +561,14 @@ export function ContentWorkspace() {
         const contentCoordinator = item.created_by === session.user.id;
         const canEditBrief = !readOnly && (platformAdmin || contentCoordinator);
         const canAddAsset = !readOnly && (platformAdmin || contentCoordinator || workflowOwner);
-        const canRequestRevision = !readOnly && (platformAdmin || contentCoordinator || workflowOwner);
+        const canRequestRevision = !readOnly && (platformAdmin || contentCoordinator);
         const canChangeTimeline = !readOnly && (platformAdmin || editingTask?.owner_id === session.user.id);
         const completedCueCount = itemTimeline.filter((cue) => cue.completed_at).length;
         const openCueCount = itemTimeline.length - completedCueCount;
         const isSocialPost = item.format === "post";
         const workflowSteps = contentWorkflowSteps(item.format);
         const revisionOptions = contentRevisionSteps(item.format).filter((step) =>
-          itemTasks.some((task) => task.content_step === step && task.status !== "cancelled")
+          itemTasks.some((task) => task.content_step === step && ["review", "done"].includes(task.status))
         );
         const canonicalRequest = contentRequestText(item);
         const deliveryTasks = itemTasks.filter((task) => task.content_step
@@ -608,8 +608,9 @@ export function ContentWorkspace() {
 
           <section className="content-brand-references"><div><BookOpenCheck size={16} /><div><p className="overline">اختياري</p><h4>مراجع البراند</h4></div></div>{itemBrandArticles.length ? <div>{itemBrandArticles.map((article) => <a href={`/brand#article-${article.id}`} key={article.id}><strong>{article.title}</strong><small>{brandCategoryConfig[article.category].label} · v{article.version}{article.status === "archived" ? " · نسخة محفوظة" : ""}</small></a>)}</div> : <p>لا توجد مراجع إضافية مرتبطة بهذا الطلب.</p>}</section>
 
-          {canUseThumbnailAi ? <section className="content-ai-choice-panel">
-            <div className="content-ai-choice-heading"><div><Sparkles size={16} /><div><strong>مساعد الغلاف للمصمم</strong><small>يقرأ الاسكريبت والفكرة ثم يعرض بدائل فقط؛ لا يعتمد شيئًا تلقائيًا.</small></div></div><Button type="button" variant="secondary" disabled={Boolean(aiWorking) || working} onClick={() => void generateContentAiChoices(item, "thumbnail")}>{aiWorking === `${item.id}:thumbnail` ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} 3 اقتراحات غلاف</Button></div>
+          {canUseThumbnailAi || item.thumbnail_brief.trim() ? <section className="content-ai-choice-panel">
+            <div className="content-ai-choice-heading"><div><Sparkles size={16} /><div><strong>مساعد الغلاف للمصمم</strong><small>يقرأ الاسكريبت والفكرة ثم يعرض بدائل فقط؛ لا يعتمد شيئًا تلقائيًا.</small></div></div>{canUseThumbnailAi ? <Button type="button" variant="secondary" disabled={Boolean(aiWorking) || working} onClick={() => void generateContentAiChoices(item, "thumbnail")}>{aiWorking === `${item.id}:thumbnail` ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} 3 اقتراحات غلاف</Button> : null}</div>
+            {item.thumbnail_brief.trim() ? <aside className="content-ai-saved-choice" role="status"><CheckCircle2 size={17} /><div><strong>تعليمات الغلاف المحفوظة</strong><p><LinkifiedText text={item.thumbnail_brief} /></p></div></aside> : null}
             {itemThumbnailChoices?.options.length ? <div className="script-variants-grid" aria-label="اقتراحات الغلاف داخل طلب التنفيذ">{itemThumbnailChoices.options.map((option, index) => <article key={`${option.label}-${index}`}><header><span>غلاف {index + 1}</span><strong>{option.label}</strong></header><p><strong>النص:</strong> {option.cover_text}</p><p><strong>الاتجاه البصري:</strong> {option.visual_direction}</p><p><strong>صلته بالنص:</strong> {option.script_connection}</p><Button type="button" disabled={working} onClick={() => void applyContentAiChoice(item, "thumbnail", itemThumbnailChoices.version, thumbnailOptionText(option))}><CheckCircle2 size={14} /> اختيار واعتماد للمهمة</Button></article>)}</div> : <small className="content-ai-cost-note">الضغط يستهلك طلب API واحد. الاختيار فقط هو الذي يُحفظ ويُرسل لمهمة الغلاف.</small>}
           </section> : null}
 
@@ -650,20 +651,17 @@ export function ContentWorkspace() {
             </section>
 
             <section className="production-tool-panel">
-              <div className="production-tool-heading"><div><MessageSquareText size={16} /><div><p className="overline">Feedback Loop</p><h4>جولات التعديل</h4></div></div>{canRequestRevision ? <button className="text-button" type="button" onClick={() => setRevisionFormId(revisionFormId === item.id ? null : item.id)}><Plus size={13} /> طلب تعديل</button> : null}</div>
+              <div className="production-tool-heading"><div><MessageSquareText size={16} /><div><p className="overline">Feedback Loop</p><h4>جولات التعديل</h4></div></div>{canRequestRevision && revisionOptions.length ? <button className="text-button" type="button" onClick={() => setRevisionFormId(revisionFormId === item.id ? null : item.id)}><Plus size={13} /> طلب تعديل</button> : null}</div>
               {itemRevisions.length ? <ol className="revision-list">{itemRevisions.map((revision) => {
-                const canWorkRevision = !readOnly && (platformAdmin || revision.assigned_to === session.user.id);
-                const canCancelRevision = !readOnly && (platformAdmin || revision.requested_by === session.user.id);
                 return <li key={revision.id} id={`revision-${revision.id}`} data-direct-target={linkedRevisionId === revision.id || undefined} tabIndex={linkedRevisionId === revision.id ? -1 : undefined}>
                   <div className="revision-top"><strong>جولة {revision.round} · {contentStepConfig[revision.stage].label}</strong><StatusBadge tone={contentRevisionStatusConfig[revision.status].tone}>{contentRevisionStatusConfig[revision.status].label}</StatusBadge></div>
                   {linkedRevisionId === revision.id ? <span className="direct-target-label"><Route size={11} /> ده التعديل المطلوب</span> : null}
                   <p>{revision.instructions}</p><small>إلى {peopleById.get(revision.assigned_to)?.name ?? "صاحب المرحلة"} · {formatDate(revision.requested_at)}</small>
-                  {revision.status === "requested" && canWorkRevision ? <Button type="button" variant="secondary" disabled={working} onClick={() => void runCommand({ action: "start_revision", revision_id: revision.id }, "بدأ تنفيذ التعديل وأعيد فتح مهمة المرحلة.")}>بدء التنفيذ</Button> : null}
-                  {revision.status === "in_progress" && canWorkRevision ? <Button type="button" variant="secondary" disabled={working} onClick={() => void runCommand({ action: "resolve_revision", revision_id: revision.id }, "تم إرسال التعديل للمراجعة.")}>تم التنفيذ وإرسال للمراجعة</Button> : null}
-                  {["requested", "in_progress"].includes(revision.status) && canCancelRevision ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void runCommand({ action: "cancel_revision", revision_id: revision.id }, "تم إلغاء طلب التعديل مع الاحتفاظ بسجله.")}>إلغاء الطلب</button> : null}
+                  <Button href={taskDeepLink(revision.task_id)} variant="secondary"><Route size={13} /> فتح المهمة المحددة</Button>
+                  {["requested", "in_progress"].includes(revision.status) ? <small className="revision-single-action-note">المهمة اتفتحت لصاحبها بالفعل؛ تسليم النتيجة من «مهامي» يقفل جولة التعديل تلقائيًا.</small> : null}
                 </li>;
               })}</ol> : <p className="tool-empty">لا توجد تعديلات مسجلة. عند طلب تعديل سيُسند تلقائيًا لصاحب المرحلة برقم جولة واضح.</p>}
-              {revisionFormId === item.id && canRequestRevision ? <form className="compact-command-form" onSubmit={(event) => void requestRevision(event, item.id)}>
+              {revisionFormId === item.id && canRequestRevision && revisionOptions.length ? <form className="compact-command-form" onSubmit={(event) => void requestRevision(event, item.id)}>
                 <label><span>المرحلة المطلوب تعديلها</span><select name="target_stage" defaultValue={isSocialPost ? "caption" : "editing"}>{revisionOptions.map((step) => <option value={step} key={step}>{contentStepConfig[step].label}</option>)}</select></label>
                 <label><span>ما المطلوب تغييره بالضبط؟</span><textarea name="revision_instructions" minLength={5} maxLength={5000} rows={4} required placeholder="اكتب التوقيت أو المشهد، المشكلة، والنتيجة المطلوبة. مثال: 00:18 اخفض الموسيقى واترك نصف ثانية صمت قبل الجملة التالية." /></label>
                 <div className="form-actions"><Button type="submit" disabled={working}>إسناد التعديل</Button><button className="text-button" type="button" onClick={() => setRevisionFormId(null)}>إلغاء</button></div>

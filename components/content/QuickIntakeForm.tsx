@@ -62,6 +62,13 @@ const rawMaterialLabels: Record<RawMaterialKind, string> = {
   source: "مصدر أو ملف آخر",
 };
 
+const MAX_CONTENT_REQUEST_LENGTH = 30_000;
+const contentRequestHeadings = new Set([
+  "الطلب العام",
+  "تعليمات المونتاج",
+  "تعليمات الغلاف",
+]);
+
 function isWebUrl(value: string) {
   try {
     const source = new URL(value);
@@ -78,6 +85,32 @@ function formatReviewDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "موعد غير صالح";
   return new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function withoutDuplicateHeadings(value: string, headingsToRemove: Set<string>) {
+  const seen = new Set<string>();
+  return value.split(/\r?\n/).filter((line) => {
+    const heading = line.trim().replace(/[:：]\s*$/, "");
+    if (!contentRequestHeadings.has(heading)) return true;
+    if (headingsToRemove.has(heading) || seen.has(heading)) return false;
+    seen.add(heading);
+    return true;
+  }).join("\n").trim();
+}
+
+function buildContentRequest(request: string, editing: string, thumbnail: string) {
+  const editingText = withoutDuplicateHeadings(editing, contentRequestHeadings);
+  const thumbnailText = withoutDuplicateHeadings(thumbnail, contentRequestHeadings);
+  const generatedHeadings = new Set(["الطلب العام"]);
+  if (editingText) generatedHeadings.add("تعليمات المونتاج");
+  if (thumbnailText) generatedHeadings.add("تعليمات الغلاف");
+  const requestText = withoutDuplicateHeadings(request, generatedHeadings);
+
+  return [
+    `الطلب العام:\n${requestText}`,
+    editingText ? `تعليمات المونتاج:\n${editingText}` : "",
+    thumbnailText ? `تعليمات الغلاف:\n${thumbnailText}` : "",
+  ].filter(Boolean).join("\n\n");
 }
 
 export function QuickIntakeForm({
@@ -105,6 +138,8 @@ export function QuickIntakeForm({
   const [title, setTitle] = useState("");
   const [publishAt, setPublishAt] = useState(defaultPublish);
   const [requestText, setRequestText] = useState("");
+  const [editingBrief, setEditingBrief] = useState("");
+  const [thumbnailBrief, setThumbnailBrief] = useState("");
   const [rawMaterials, setRawMaterials] = useState<RawMaterialDraft[]>([
     { id: "raw-material-1", kind: "raw_video", url: "" },
   ]);
@@ -132,8 +167,13 @@ export function QuickIntakeForm({
         return "اختر تاريخًا ووقتًا صحيحين للنشر.";
       }
     }
-    if (targetStep === 2 && requestText.trim().length < 10) {
-      return "اكتب المطلوب كاملًا؛ النص الحالي قصير ولا يوضح المهمة.";
+    if (targetStep === 2) {
+      if (requestText.trim().length < 10) {
+        return "اكتب المطلوب كاملًا؛ النص الحالي قصير ولا يوضح المهمة.";
+      }
+      if (buildContentRequest(requestText, editingBrief, thumbnailBrief).length > MAX_CONTENT_REQUEST_LENGTH) {
+        return "الطلب بعد دمج الشرح وتعليمات المونتاج والغلاف أطول من 30,000 حرف. اختصره قليلًا ثم أكمل.";
+      }
     }
     if (targetStep === 3) {
       if (!rawMaterials.length) return "أضف رابط مادة خام واحدًا على الأقل قبل المتابعة.";
@@ -221,7 +261,7 @@ export function QuickIntakeForm({
       request_id: requestId.current,
       target_publish_at: new Date(publishAt).toISOString(),
       content_title: title.trim(),
-      content_request_text: requestText.trim(),
+      content_request_text: buildContentRequest(requestText, editingBrief, thumbnailBrief),
       raw_materials: rawMaterials.map(({ kind, url }) => ({ kind, url: url.trim() })),
       editing_owner_id: editingOwnerId,
       thumbnail_owner_id: thumbnailOwnerId,
@@ -258,7 +298,11 @@ export function QuickIntakeForm({
 
         {step === 2 ? <>
           <div className="quick-intake-step-heading"><MessageSquareText size={20} /><div><p className="overline">المرجع الأساسي</p><h3 id="quick-intake-step-2" ref={stepHeadingRef} tabIndex={-1}>اكتب كل المطلوب والروابط</h3><p>الصق نفس الرسالة التي كنت سترسلها في جروب الشغل؛ ستظل كما هي للجميع.</p></div></div>
-          <label className="quick-intake-main-field quick-intake-request"><span>شرح الطلب بالكامل</span><textarea value={requestText} onChange={(event) => { setRequestText(event.target.value); setStepError(null); }} minLength={10} maxLength={30000} rows={16} required placeholder="السكريبت، الحذف، الثواني، تعليمات المونتاج والغلاف، روابط الصور والمصادر، وأي ملاحظات…" /><small>أي رابط داخل النص سيظل في مكانه ويظهر قابلًا للفتح.</small></label>
+          <label className="quick-intake-main-field quick-intake-request"><span>الطلب العام وكل الروابط</span><textarea value={requestText} onChange={(event) => { setRequestText(event.target.value); setStepError(null); }} minLength={10} maxLength={26000} rows={11} required placeholder="السكريبت أو الفكرة، روابط الصور والمصادر، وأي ملاحظات مشتركة…" /><small>أي رابط داخل النص سيظل في مكانه ويظهر قابلًا للفتح.</small></label>
+          <div className="quick-intake-specialized-briefs">
+            <label><span>تعليمات المونتاج — اختيارية</span><textarea value={editingBrief} onChange={(event) => { setEditingBrief(event.target.value); setStepError(null); }} maxLength={4000} rows={5} placeholder="الحذف، الثواني، الزوم، الكتابة على الشاشة، والمراجع الخاصة بالمونتاج…" /><small>ستظهر مباشرة لمسؤول المونتاج كـ«المطلوب منك».</small></label>
+            <label><span>تعليمات الغلاف — اختيارية</span><textarea value={thumbnailBrief} onChange={(event) => { setThumbnailBrief(event.target.value); setStepError(null); }} maxLength={4000} rows={5} placeholder="النص على الغلاف، الفكرة البصرية، الصور أو الألوان المطلوبة…" /><small>ستظهر مباشرة للمصمم، ويمكن اعتماد اقتراح AI عليها لاحقًا.</small></label>
+          </div>
         </> : null}
 
         {step === 3 ? <>
@@ -306,6 +350,8 @@ export function QuickIntakeForm({
             <ReviewItem label="النشر" value={publishingMode === "self" ? peopleById.get(currentUserId)?.name ?? "بنفسي" : peopleById.get(publishingOwnerId)?.name ?? "غير محدد"} onEdit={() => goToStep(6)} />
             <ReviewItem label="المواد الخام" value={`${rawMaterials.length} ${rawMaterials.length === 1 ? "رابط" : "روابط"}`} onEdit={() => goToStep(3)} />
             <ReviewItem label="كل المطلوب" value={requestText} onEdit={() => goToStep(2)} wide />
+            {editingBrief ? <ReviewItem label="تعليمات المونتاج" value={editingBrief} onEdit={() => goToStep(2)} wide /> : null}
+            {thumbnailBrief ? <ReviewItem label="تعليمات الغلاف" value={thumbnailBrief} onEdit={() => goToStep(2)} wide /> : null}
           </div>
           <BrandReferenceSelector articles={approvedBrandArticles} selectedIds={brandArticleIds} onToggle={toggleBrandArticle} />
           <p className="quick-intake-submit-proof"><CheckCircle2 size={15} /> بمجرد الإنشاء سيصل للمونتاج والغلاف طلبان واضحان، والنشر ينتظر اكتمالهما.</p>

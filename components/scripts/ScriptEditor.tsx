@@ -48,7 +48,7 @@ function localDateTime(date: Date) {
 }
 
 function thumbnailOptionText(option: ThumbnailOption) {
-  return `النص على الغلاف: ${option.cover_text}\nالاتجاه البصري: ${option.visual_direction}\nصلته بالاسكريبت: ${option.script_connection}`;
+  return `الاختيار المعتمد: ${option.label}\nالنص على الغلاف: ${option.cover_text}\nالاتجاه البصري: ${option.visual_direction}\nصلته بالاسكريبت: ${option.script_connection}`;
 }
 
 function canReceiveTasks(person: Person) {
@@ -284,7 +284,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   function chooseThumbnailOption(option: ThumbnailOption) {
     if (!form || readOnly) return;
     setForm({ ...form, thumbnail_notes: thumbnailOptionText(option) });
-    setNotice(`تم تحديد غلاف «${option.label}» بعلامة صح داخل المحرر. راجعه ثم اضغط حفظ لاعتماده.`);
+    setNotice(`تم اختيار غلاف «${option.label}» ونسخ تفاصيله إلى تعليمات الغلاف. راجعه ثم اضغط حفظ ليصل بنفس النص إلى مهمة المصمم.`);
   }
 
   async function approveVoiceSample() {
@@ -329,6 +329,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   const packExists = workspace.script.production_pack_source_version !== null;
   const packStale = workspace.script.production_pack_stale;
   const showProduction = readOnly || workspace.script.status === "ready_to_record";
+  const thumbnailInstructionsSaved = Boolean(form.thumbnail_notes.trim()) && form.thumbnail_notes === workspace.script.thumbnail_notes;
 
   return <section className="script-editor-workspace">
     <div className="script-editor-topbar"><Button href="/scripts" variant="ghost"><ArrowRight size={15} /> العودة للاستوديو</Button><div><StatusBadge tone={status.tone}>{status.label}</StatusBadge><span><UserRound size={13} /> {assignee}</span><span><FileClock size={13} /> النسخة {workspace.script.edit_version.toLocaleString("ar-EG")}</span></div></div>
@@ -388,14 +389,15 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
           <div className="script-fields-grid execution-fields">
             <label><span>تعليمات التسجيل</span><textarea disabled={readOnly} value={form.recording_notes} onChange={(event) => update("recording_notes", event.target.value)} /></label>
             <label><span>تعليمات المونتاج</span><textarea disabled={readOnly} value={form.editing_notes} onChange={(event) => update("editing_notes", event.target.value)} /></label>
-            <label><span>تعليمات الغلاف</span><textarea disabled={readOnly} value={form.thumbnail_notes} onChange={(event) => update("thumbnail_notes", event.target.value)} /></label>
+            <label className="script-thumbnail-notes"><span>تعليمات الغلاف</span><textarea disabled={readOnly} value={form.thumbnail_notes} onChange={(event) => update("thumbnail_notes", event.target.value)} /><small>المحتوى المحفوظ هنا هو نفسه الذي ينتقل إلى تعليمات مهمة الغلاف عند إنشاء طلب التنفيذ.</small></label>
             <label><span>النصوص على الشاشة</span><textarea disabled={readOnly} value={form.on_screen_text} onChange={(event) => update("on_screen_text", event.target.value)} /></label>
             <label><span>B-roll وصور ومصادر بصرية</span><textarea disabled={readOnly} value={form.b_roll_notes} onChange={(event) => update("b_roll_notes", event.target.value)} /></label>
             <label><span>حقائق تحتاج مراجعة</span><textarea disabled={readOnly} value={form.claims_notes} onChange={(event) => update("claims_notes", event.target.value)} /></label>
           </div>
+          {form.thumbnail_notes.trim() ? <aside className={`script-thumbnail-choice ${thumbnailInstructionsSaved ? "saved" : "unsaved"}`} role="status"><CheckCircle2 size={18} /><div><strong>{thumbnailInstructionsSaved ? "تعليمات الغلاف محفوظة" : "اختيار الغلاف يحتاج حفظ"}</strong><p>{thumbnailInstructionsSaved ? "هذه هي التعليمات التي ستصل للمصمم عند إنشاء طلب التنفيذ." : "راجع الاختيار ثم اضغط «حفظ التعديلات» قبل إنشاء طلب التنفيذ."}</p></div></aside> : null}
           {thumbnailOptions.length ? <div className="script-variants-grid" aria-label="اقتراحات الغلاف">{thumbnailOptions.map((option, index) => {
             const selected = form.thumbnail_notes === thumbnailOptionText(option);
-            return <article key={`${option.label}-${index}`}><header><span>غلاف {index + 1}</span><strong>{option.label}</strong></header><p><strong>النص:</strong> {option.cover_text}</p><p><strong>الاتجاه البصري:</strong> {option.visual_direction}</p><p><strong>صلته بالنص:</strong> {option.script_connection}</p><Button type="button" variant={selected ? "primary" : "secondary"} aria-pressed={selected} onClick={() => chooseThumbnailOption(option)}>{selected ? <CheckCircle2 size={15} /> : null}{selected ? " محدد بعلامة صح" : "اختيار هذا الغلاف"}</Button></article>;
+            return <article className={selected ? "selected" : undefined} key={`${option.label}-${index}`}><header><span>غلاف {index + 1}</span><strong>{option.label}</strong></header><p><strong>النص:</strong> {option.cover_text}</p><p><strong>الاتجاه البصري:</strong> {option.visual_direction}</p><p><strong>صلته بالنص:</strong> {option.script_connection}</p><Button type="button" variant={selected ? "primary" : "secondary"} aria-pressed={selected} onClick={() => chooseThumbnailOption(option)}>{selected ? <CheckCircle2 size={15} /> : null}{selected ? thumbnailInstructionsSaved ? " الاختيار محفوظ" : " مختار — احفظ التعديلات" : "اختيار هذا الغلاف"}</Button></article>;
           })}</div> : null}
         </section>
         <section className="panel script-editor-section">
@@ -420,7 +422,21 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         {workspace.script.status === "archived" && !workspace.script.content_item_id ? <Button type="button" variant="secondary" disabled={saving} onClick={() => void changeStatus("draft")}><RefreshCw size={15} /> استعادة لقيد الكتابة</Button> : null}
         {workspace.script.status === "archived" && !workspace.script.content_item_id ? <Button type="button" variant="ghost" className="danger-text" disabled={saving} onClick={() => void deleteScript()}><Trash2 size={15} /> حذف نهائي</Button> : null}
       </div> : <p className="tool-empty">هذه الحالة للعرض فقط، ولا توجد إجراءات متاحة لحسابك.</p>}
-      {showHandoff && canWriteScript && assignablePeople.length ? <form className="script-handoff-form" onSubmit={(event) => void handoff(event)}><div className="script-handoff-heading"><Factory size={19} /><div><strong>إنشاء طلب التنفيذ</strong><p>عند تأكيدك فقط تُنسخ النسخة النهائية ويصل لكل مكلف الجزء الخاص به. إما تُنشأ المهام كلها معًا، أو لا يُحفظ شيء.</p></div></div><div className="script-fields-grid"><label><span>موعد النشر</span><input required type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} /></label><label><span>التسجيل وصناعة المحتوى</span><select value={contentCreatorId} onChange={(event) => setContentCreatorId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>المونتاج</span><select value={editingOwnerId} onChange={(event) => setEditingOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>الغلاف</span><select value={thumbnailOwnerId} onChange={(event) => setThumbnailOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label><span>النشر</span><select value={publishingOwnerId} onChange={(event) => setPublishingOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></div><div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Factory size={15} />} إنشاء الطلب والمهام</Button><Button type="button" variant="ghost" onClick={() => setShowHandoff(false)}>إلغاء</Button></div></form> : null}
+      {showHandoff && canWriteScript && assignablePeople.length ? <form className="script-handoff-form" onSubmit={(event) => void handoff(event)}>
+        <div className="script-handoff-heading"><Factory size={19} /><div><strong>إنشاء طلب التنفيذ</strong><p>عند تأكيدك فقط تُنسخ النسخة النهائية ويصل لكل مكلف الجزء الخاص به. إما تُنشأ المهام كلها معًا، أو لا يُحفظ شيء.</p></div></div>
+        <aside className={`script-handoff-cover-summary ${workspace.script.thumbnail_notes.trim() ? "ready" : "empty"}`}>
+          <CheckCircle2 size={18} />
+          <div><strong>تعليمات الغلاف التي ستصل للمصمم</strong><p>{workspace.script.thumbnail_notes.trim() || "لا توجد تعليمات غلاف محفوظة. يمكنك إنشاء الطلب، لكن مهمة المصمم ستصل بدون اتجاه غلاف محدد."}</p></div>
+        </aside>
+        <div className="script-fields-grid">
+          <label><span>موعد النشر</span><input required type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} /></label>
+          <label><span>التسجيل وصناعة المحتوى</span><select value={contentCreatorId} onChange={(event) => setContentCreatorId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+          <label><span>المونتاج</span><select value={editingOwnerId} onChange={(event) => setEditingOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+          <label><span>الغلاف</span><select value={thumbnailOwnerId} onChange={(event) => setThumbnailOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+          <label><span>النشر</span><select value={publishingOwnerId} onChange={(event) => setPublishingOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+        </div>
+        <div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Factory size={15} />} إنشاء الطلب والمهام</Button><Button type="button" variant="ghost" onClick={() => setShowHandoff(false)}>إلغاء</Button></div>
+      </form> : null}
     </section>
 
     <section className="panel script-history-panel">
