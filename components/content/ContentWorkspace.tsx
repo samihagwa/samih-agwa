@@ -262,6 +262,12 @@ export function ContentWorkspace() {
   });
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("create") !== "reel") return;
+    const timeout = window.setTimeout(() => setShowQuickIntake(true), 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
     if (!workspace) return;
     const supabase = getSupabaseBrowserClient();
     const refresh = () => void refreshContent(workspace.organization.id);

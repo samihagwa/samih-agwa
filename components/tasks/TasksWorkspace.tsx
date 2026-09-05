@@ -3,6 +3,7 @@
 import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
+  Archive,
   Bot,
   CalendarClock,
   CheckCircle2,
@@ -43,6 +44,7 @@ import { Button } from "../ui/Button";
 import { CollapsibleText } from "../ui/CollapsibleText";
 import { StatusBadge } from "../ui/StatusBadge";
 import { TaskScheduleCalendar } from "./TaskScheduleCalendar";
+import { WeeklyContentRoutineForm } from "./WeeklyContentRoutineForm";
 
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
@@ -62,12 +64,12 @@ type Workspace = {
   people: TeamPerson[];
 };
 
-type TaskFilter = "active" | "mine" | "overdue" | "completed" | "all";
+type TaskFilter = "active" | "mine" | "overdue" | "completed" | "archived" | "all";
 type BoardEntry = { id: string; contentItemId: string | null; tasks: Task[]; sortTasks: Task[]; laneId: string };
 type TaskDateRange = { from: string; to: string };
 type TaskCreateMode = "once" | "weekly";
 type TaskCreateStep = 1 | 2 | 3;
-type TaskView = "board" | "schedule";
+type TaskSection = "today" | "team" | "schedule" | "archive";
 type TaskSubmission = {
   organization_id: string;
   title: string;
@@ -177,7 +179,7 @@ function deriveTaskTitle(explicitTitle: string, description: string) {
 }
 
 function taskFilterTimestamp(task: Task, filter: TaskFilter) {
-  const value = filter === "completed" ? task.completed_at ?? task.updated_at : task.due_at;
+  const value = ["completed", "archived"].includes(filter) ? task.completed_at ?? task.updated_at : task.due_at;
   return new Date(value).getTime();
 }
 
@@ -238,6 +240,7 @@ function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string
     if (filter === "mine" || filter === "active") return taskNeedsViewerAction(task, currentUserId);
     if (filter === "overdue") return taskNeedsViewerAction(task, currentUserId) && isOverdue(task, now);
     if (filter === "completed") return task.owner_id === currentUserId && taskIsCompleted(task);
+    if (filter === "archived") return task.owner_id === currentUserId && taskIsClosed(task);
     return taskBelongsToViewer(task, currentUserId);
   }
   if (filter === "active") return !taskIsClosed(task);
@@ -247,6 +250,7 @@ function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string
   }
   if (filter === "overdue") return isOverdue(task, now);
   if (filter === "completed") return taskIsCompleted(task);
+  if (filter === "archived") return taskIsClosed(task);
   return true;
 }
 
@@ -271,6 +275,7 @@ function contentWorkflowMatchesFilter(tasks: Task[], filter: TaskFilter, current
   }
   if (filter === "overdue") return tasks.some((task) => isOverdue(task, now));
   if (filter === "completed") return tasks.every(taskIsCompleted);
+  if (filter === "archived") return tasks.every(taskIsClosed);
   return true;
 }
 
@@ -291,7 +296,6 @@ export function TasksWorkspace() {
   const configured = isSupabaseConfigured();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [contentRequests, setContentRequests] = useState<Record<string, string | null>>({});
   const [recurringTemplates, setRecurringTemplates] = useState<RecurringTaskTemplate[]>([]);
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
@@ -307,19 +311,17 @@ export function TasksWorkspace() {
   const [newTaskRequiresReview, setNewTaskRequiresReview] = useState(false);
   const [capacityWarning, setCapacityWarning] = useState<{ submission: TaskSubmission; snapshot: CapacitySnapshot } | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("mine");
-  const [taskView, setTaskView] = useState<TaskView>("board");
+  const [taskSection, setTaskSection] = useState<TaskSection>("today");
   const [requesterFilter, setRequesterFilter] = useState("all");
   const [dateRange, setDateRange] = useState<TaskDateRange>({ from: "", to: "" });
   const [linkedTaskId] = useState(() => currentUuidDeepLink("task", "task"));
   const [renderNow, setRenderNow] = useState(() => Date.now());
   const taskCreateForm = useRef<HTMLFormElement | null>(null);
   const openedTaskLink = useRef<string | null>(null);
-  const visibleContentIdsRef = useRef<Set<string>>(new Set());
 
   const clearWorkspace = useCallback(() => {
     setWorkspace(null);
     setTasks([]);
-    setContentRequests({});
     setRecurringTemplates([]);
     setCapacityWarning(null);
     setShowCreate(false);
@@ -330,7 +332,7 @@ export function TasksWorkspace() {
     setNewTaskDueAt(defaultTaskDue());
     setNewTaskOwnerId("");
     setNewTaskRequiresReview(false);
-    setTaskView("board");
+    setTaskSection("today");
     setFilter("mine");
   }, []);
 
@@ -366,19 +368,6 @@ export function TasksWorkspace() {
     setRecurringTemplates(data ?? []);
   }, []);
 
-  const fetchContentRequests = useCallback(async (organizationId: string, contentItemIds: string[]) => {
-    if (!contentItemIds.length) return null;
-    const { data, error: contentError } = await getSupabaseBrowserClient()
-      .from("content_items")
-      .select("id, intake_request")
-      .eq("organization_id", organizationId)
-      .in("id", contentItemIds);
-
-    if (contentError) return null;
-    const rowsById = new Map((data ?? []).map((item) => [item.id, item.intake_request?.trim() || null]));
-    return Object.fromEntries(contentItemIds.map((contentItemId) => [contentItemId, rowsById.get(contentItemId) ?? null]));
-  }, []);
-
   const loadWorkspace = useCallback(async (activeSession: Session) => {
     const supabase = getSupabaseBrowserClient();
     setLoading(true);
@@ -397,7 +386,6 @@ export function TasksWorkspace() {
       if (!membership) {
         setWorkspace(null);
         setTasks([]);
-        setContentRequests({});
         setRecurringTemplates([]);
         return;
       }
@@ -432,7 +420,7 @@ export function TasksWorkspace() {
       }));
 
       setWorkspace({ organization, membership, people });
-      setFilter(canManageTasks(membership.role) ? "active" : "mine");
+      setFilter("mine");
       await Promise.all([
         refreshTasks(membership.organization_id),
         refreshRecurringTemplates(membership.organization_id, canManageTasks(membership.role)),
@@ -482,7 +470,7 @@ export function TasksWorkspace() {
   const manager = canManageTasks(workspace?.membership.role ?? null);
   const platformAdmin = canManageAllTaskExecution(workspace?.membership.role ?? null);
   const readOnly = workspace?.membership.role === "viewer";
-  const personalView = !manager || filter === "mine";
+  const personalView = !manager || taskSection === "today";
 
   const boardEntries = useMemo(() => {
     if (!session) return [];
@@ -513,61 +501,11 @@ export function TasksWorkspace() {
         contentItemId,
         tasks: orderedTasks,
         sortTasks: personalView ? viewerTasks : orderedTasks,
-        laneId: personalView ? filter === "completed" ? "closed" : "focus" : boardLaneForTasks(orderedTasks, isContentWorkflow),
+        laneId: personalView ? ["completed", "archived"].includes(filter) ? "closed" : "focus" : boardLaneForTasks(orderedTasks, isContentWorkflow),
       }];
     });
     return sortBoardEntries(entries);
   }, [dateRange, filter, linkedTaskId, personalView, renderNow, requesterFilter, session, tasks]);
-
-  const visibleContentItemIds = useMemo(() => [...new Set(boardEntries
-    .map((entry) => entry.contentItemId)
-    .filter((contentItemId): contentItemId is string => Boolean(contentItemId)))], [boardEntries]);
-  const visibleContentItemKey = visibleContentItemIds.join(",");
-
-  useEffect(() => {
-    visibleContentIdsRef.current = new Set(visibleContentItemKey ? visibleContentItemKey.split(",") : []);
-  }, [visibleContentItemKey]);
-
-  useEffect(() => {
-    if (!workspace || !visibleContentItemKey) return;
-    let active = true;
-    void fetchContentRequests(workspace.organization.id, visibleContentItemKey.split(",")).then((requests) => {
-      if (active && requests) setContentRequests((current) => ({ ...current, ...requests }));
-    });
-    return () => {
-      active = false;
-    };
-  }, [fetchContentRequests, visibleContentItemKey, workspace]);
-
-  useEffect(() => {
-    if (!workspace) return;
-    const supabase = getSupabaseBrowserClient();
-    const channel = supabase
-      .channel(`task-content-requests:${workspace.organization.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "content_items",
-          filter: `organization_id=eq.${workspace.organization.id}`,
-        },
-        (payload) => {
-          const nextRecord = payload.new as { id?: string };
-          const previousRecord = payload.old as { id?: string };
-          const changedId = nextRecord.id ?? previousRecord.id;
-          if (!changedId || !visibleContentIdsRef.current.has(changedId)) return;
-          void fetchContentRequests(workspace.organization.id, [changedId]).then((requests) => {
-            if (requests) setContentRequests((current) => ({ ...current, ...requests }));
-          });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [fetchContentRequests, workspace]);
 
   useEffect(() => {
     if (!linkedTaskId || openedTaskLink.current === linkedTaskId || !tasks.some((task) => task.id === linkedTaskId)) return;
@@ -772,23 +710,27 @@ export function TasksWorkspace() {
     await persistTask(submission);
   }
 
-  async function toggleRecurringTemplate(template: RecurringTaskTemplate) {
+  async function toggleRecurringTemplate(templates: RecurringTaskTemplate[]) {
     if (!workspace) return;
+    const template = templates[0];
+    if (!template) return;
+    const paused = templates.every((item) => item.paused);
     setWorking(true); setError(null); setNotice(null);
     try {
-      const { data: updatedTemplate, error: updateError } = await getSupabaseBrowserClient()
+      let query = getSupabaseBrowserClient()
         .from("recurring_task_templates")
-        .update({ paused: !template.paused })
-        .eq("id", template.id)
-        .eq("version", template.version)
-        .select("id")
-        .maybeSingle();
+        .update({ paused: !paused })
+        .eq("organization_id", workspace.organization.id);
+      query = template.content_bundle_id
+        ? query.eq("content_bundle_id", template.content_bundle_id)
+        : query.eq("id", template.id).eq("version", template.version);
+      const { data: updatedTemplates, error: updateError } = await query.select("id");
       if (updateError) setError(updateError.message);
-      else if (!updatedTemplate) {
-        setError("تم تعديل المهمة الأسبوعية من جلسة أخرى. حمّلنا أحدث نسخة؛ راجعها وحاول مرة ثانية.");
+      else if (!updatedTemplates?.length) {
+        setError("تم تعديل المسار الأسبوعي من جلسة أخرى. حمّلنا أحدث نسخة؛ راجعها وحاول مرة ثانية.");
         await refreshRecurringTemplates(workspace.organization.id, true);
       } else {
-        setNotice(template.paused ? "تم تشغيل المهمة الأسبوعية من الموعد القادم." : "تم إيقاف المهمة الأسبوعية؛ المهام المنشأة سابقًا لم تتغير.");
+        setNotice(paused ? "تم تشغيل المسار الأسبوعي من الموعد القادم." : "تم إيقاف المسار الأسبوعي؛ المهام المنشأة سابقًا لم تتغير.");
         await refreshRecurringTemplates(workspace.organization.id, true);
       }
     } catch (refreshError) {
@@ -798,23 +740,27 @@ export function TasksWorkspace() {
     }
   }
 
-  async function archiveRecurringTemplate(template: RecurringTaskTemplate) {
-    if (!workspace || !window.confirm(`أرشفة المهمة الأسبوعية «${template.title}»؟ المهام السابقة ستظل محفوظة.`)) return;
+  async function archiveRecurringTemplate(templates: RecurringTaskTemplate[]) {
+    const template = templates[0];
+    if (!workspace || !template) return;
+    const label = template.content_bundle_title ?? template.title;
+    if (!window.confirm(`أرشفة المهمة الأسبوعية «${label}»؟ المهام السابقة ستظل محفوظة.`)) return;
     setWorking(true); setError(null); setNotice(null);
     try {
-      const { data: archivedTemplate, error: updateError } = await getSupabaseBrowserClient()
+      let query = getSupabaseBrowserClient()
         .from("recurring_task_templates")
         .update({ archived_at: new Date().toISOString(), paused: true })
-        .eq("id", template.id)
-        .eq("version", template.version)
-        .select("id")
-        .maybeSingle();
+        .eq("organization_id", workspace.organization.id);
+      query = template.content_bundle_id
+        ? query.eq("content_bundle_id", template.content_bundle_id)
+        : query.eq("id", template.id).eq("version", template.version);
+      const { data: archivedTemplates, error: updateError } = await query.select("id");
       if (updateError) setError(updateError.message);
-      else if (!archivedTemplate) {
-        setError("تم تعديل المهمة الأسبوعية من جلسة أخرى، لذلك لم نؤرشف نسخة قديمة. حمّلنا أحدث البيانات.");
+      else if (!archivedTemplates?.length) {
+        setError("تم تعديل المسار الأسبوعي من جلسة أخرى، لذلك لم نؤرشف نسخة قديمة. حمّلنا أحدث البيانات.");
         await refreshRecurringTemplates(workspace.organization.id, true);
       } else {
-        setNotice("تمت أرشفة المهمة الأسبوعية، ولن تُنشأ منها مواعيد جديدة.");
+        setNotice("تمت أرشفة المسار الأسبوعي كاملًا، ولن تُنشأ منه مواعيد جديدة.");
         await refreshRecurringTemplates(workspace.organization.id, true);
       }
     } catch (refreshError) {
@@ -880,16 +826,21 @@ export function TasksWorkspace() {
   const taskCreateOwnerId = newTaskOwnerId || session.user.id;
   const taskCreateOwner = peopleById.get(taskCreateOwnerId);
   const taskCreateTitle = deriveTaskTitle(newTaskTitle, newTaskDescription);
+  const recurringTemplateGroups = [...recurringTemplates.reduce((groups, template) => {
+    const key = template.content_bundle_id ? `bundle:${template.content_bundle_id}` : `task:${template.id}`;
+    groups.set(key, [...(groups.get(key) ?? []), template]);
+    return groups;
+  }, new Map<string, RecurringTaskTemplate[]>()).entries()].map(([id, templates]) => ({ id, templates }));
   const linkedTask = linkedTaskId ? tasks.find((task) => task.id === linkedTaskId) ?? null : null;
   const linkedLaneId = linkedTaskId ? boardEntries.find((entry) => entry.tasks.some((task) => task.id === linkedTaskId))?.laneId : null;
   const advancedFiltersActive = requesterFilter !== "all" || Boolean(dateRange.from || dateRange.to);
-  const personalLaneLabel = filter === "completed"
-    ? "اللي خلصته"
+  const personalLaneLabel = taskSection === "archive"
+    ? "الأرشيف"
     : filter === "overdue"
       ? "المتأخر عندي"
       : "المطلوب مني الآن";
   const availableLanes = personalView
-    ? [{ id: filter === "completed" ? "closed" : "focus", label: personalLaneLabel }]
+    ? [{ id: ["completed", "archived"].includes(filter) ? "closed" : "focus", label: personalLaneLabel }]
     : boardLanes;
   const visibleLanes = availableLanes.filter((lane) => {
     if (linkedLaneId === lane.id) return true;
@@ -899,56 +850,53 @@ export function TasksWorkspace() {
   });
   const filteredTaskCount = boardEntries.reduce((total, entry) => total + entry.tasks.length, 0);
   const myOpenTaskCount = tasks.filter((task) => taskNeedsViewerAction(task, session.user.id)).length;
-  const quickFilters: TaskFilter[] = manager
-    ? ["mine", "active", "overdue", "completed", "all"]
-    : ["mine", "overdue", "completed"];
+  const quickFilters: TaskFilter[] = taskSection === "team" ? ["active", "overdue", "all"] : ["mine", "overdue"];
+
+  function openTaskSection(section: TaskSection) {
+    setTaskSection(section);
+    setShowCreate(false);
+    setRequesterFilter("all");
+    setDateRange({ from: "", to: "" });
+    if (section === "today") setFilter("mine");
+    if (section === "team") setFilter("active");
+    if (section === "archive") setFilter("archived");
+  }
   return (
     <section className="tasks-workspace">
-      <div className="workspace-toolbar">
-        <div><p className="overline">{workspace.organization.name}</p><h2>{manager ? "مهامي والفريق" : "مهامي"}</h2><p>{manager ? `عندك ${myOpenTaskCount.toLocaleString("ar-EG")} مهمة تحتاج إجراء منك. افتح عرض الفريق فقط عند المتابعة.` : myOpenTaskCount ? `عندك ${myOpenTaskCount.toLocaleString("ar-EG")} مهمة مطلوبة منك الآن. افتح المهمة ونفّذ الإجراء التالي فقط.` : "لا يوجد شيء مطلوب منك الآن."}</p></div>
-        <div className="toolbar-actions">
-          {taskView === "board" ? <div className="segmented-control" aria-label="تصفية المهام">
-            {quickFilters.map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "mine" ? "المطلوب مني" : value === "active" ? "شغل الفريق" : value === "overdue" ? manager ? "متأخر عند الفريق" : "المتأخر عندي" : value === "completed" ? manager ? "مكتمل الفريق" : "اللي خلصته" : "كل الفريق"}</button>)}
-          </div> : null}
+      <header className="task-command-bar">
+        <nav className="task-section-tabs" aria-label="أقسام المهام">
+          <button type="button" className={taskSection === "today" ? "active" : ""} aria-current={taskSection === "today" ? "page" : undefined} onClick={() => openTaskSection("today")}><CheckCircle2 size={15} /> اليوم <span>{myOpenTaskCount.toLocaleString("ar-EG")}</span></button>
+          {manager ? <button type="button" className={taskSection === "team" ? "active" : ""} aria-current={taskSection === "team" ? "page" : undefined} onClick={() => openTaskSection("team")}><UserRoundCheck size={15} /> شغل الفريق</button> : null}
+          <button type="button" className={taskSection === "schedule" ? "active" : ""} aria-current={taskSection === "schedule" ? "page" : undefined} onClick={() => openTaskSection("schedule")}><CalendarClock size={15} /> الجدول الأسبوعي</button>
+          <button type="button" className={taskSection === "archive" ? "active" : ""} aria-current={taskSection === "archive" ? "page" : undefined} onClick={() => openTaskSection("archive")}><Archive size={15} /> الأرشيف</button>
+        </nav>
+        <div className="task-command-actions">
           <button className="icon-button" type="button" aria-label="تحديث المهام" onClick={() => void refreshTasks(workspace.organization.id)}><RefreshCw size={17} /></button>
-          {manager && taskView === "board" ? <><Button type="button" variant="secondary" onClick={() => { resetTaskCreateDraft(); setTaskCreateMode("weekly"); setShowCreate(true); }}><Repeat2 size={16} /> مهمة أسبوعية</Button><Button type="button" onClick={() => { resetTaskCreateDraft(); setTaskCreateMode("once"); setShowCreate(true); }}><Plus size={16} /> مهمة مرة واحدة</Button></> : null}
+          {manager && taskSection === "team" ? <Button href="/content?create=reel" variant="secondary"><Film size={15} /> طلب محتوى</Button> : null}
+          {manager ? <Button type="button" onClick={() => { resetTaskCreateDraft(); setTaskCreateMode(taskSection === "schedule" ? "weekly" : "once"); setShowCreate(true); }}><Plus size={16} /> إضافة</Button> : null}
         </div>
-      </div>
+      </header>
 
       {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
       {linkedTask ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح المهمة المطلوبة مباشرة: <strong>{taskReference(linkedTask.id)}</strong> — الكارت المحدد ظاهر بإطار واضح.</p> : linkedTaskId ? <p className="form-notice error" role="alert">المهمة المطلوبة غير موجودة أو ليست ضمن صلاحيات حسابك.</p> : null}
 
-      <div className="workspace-view-switch task-primary-view">
-        <div><p className="overline">عرض العمل</p><strong>{taskView === "board" ? "نفّذ المطلوب الآن بدون زحمة المواعيد القادمة." : "شاهد الشهر بالكامل والمهام الأسبوعية قبل إنشائها على البورد."}</strong></div>
-        <div className="segmented-control" aria-label="اختيار عرض المهام"><button type="button" className={taskView === "board" ? "active" : ""} onClick={() => setTaskView("board")}>المطلوب الآن</button><button type="button" className={taskView === "schedule" ? "active" : ""} onClick={() => setTaskView("schedule")}><CalendarClock size={13} /> الجدول الشهري</button></div>
-      </div>
-
-      {taskView === "board" && manager && !personalView ? <div className="panel task-filter-panel" aria-label="فلترة بورد المهام">
-        <div className="task-filter-heading">
-          <CalendarClock size={19} aria-hidden="true" />
-          <div><strong>فلترة أدق</strong><small role="status">ظاهر الآن {filteredTaskCount.toLocaleString("ar-EG")} مهمة</small></div>
-        </div>
-        <label className="task-filter-field">
-          <span><UserRoundCheck size={13} aria-hidden="true" /> طالب المهمة</span>
-          <select value={requesterFilter} onChange={(event) => setRequesterFilter(event.target.value)}>
-            <option value="all">كل طالبي المهام</option>
-            {workspace.people.map((person) => <option value={person.id} key={person.id}>{person.id === session.user.id ? `أنا — ${person.name}` : person.name}</option>)}
-          </select>
-        </label>
-        <label className="task-filter-field">
-          <span>من تاريخ</span>
-          <input type="date" value={dateRange.from} max={dateRange.to || undefined} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} />
-        </label>
-        <label className="task-filter-field">
-          <span>إلى تاريخ</span>
-          <input type="date" value={dateRange.to} min={dateRange.from || undefined} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} />
-        </label>
-        <button className="task-filter-reset" type="button" disabled={!advancedFiltersActive} onClick={() => { setRequesterFilter("all"); setDateRange({ from: "", to: "" }); }}>مسح الفلاتر الإضافية</button>
-        <small className="task-filter-note">الفترة تعتمد على موعد التسليم، وعند اختيار «المكتمل» تعتمد على تاريخ إكمال المهمة.</small>
+      {taskSection !== "schedule" && taskSection !== "archive" ? <div className="task-list-toolbar">
+        <div className="segmented-control" aria-label="تصفية المهام">{quickFilters.map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "mine" ? "المطلوب الآن" : value === "active" ? "المفتوح" : value === "overdue" ? "المتأخر" : "الكل"}</button>)}</div>
+        <small role="status">{filteredTaskCount.toLocaleString("ar-EG")} مهمة ظاهرة</small>
       </div> : null}
 
-      {taskView === "board" && showCreate && manager ? (
+      {manager && ["team", "archive"].includes(taskSection) ? <details className="panel task-filter-panel">
+        <summary><CalendarClock size={16} /> فلترة بالتاريخ وطالب المهمة {advancedFiltersActive ? <StatusBadge tone="info">مفعّلة</StatusBadge> : null}</summary>
+        <div className="task-filter-fields" aria-label="فلترة بورد المهام">
+          <label className="task-filter-field"><span><UserRoundCheck size={13} aria-hidden="true" /> طالب المهمة</span><select value={requesterFilter} onChange={(event) => setRequesterFilter(event.target.value)}><option value="all">كل طالبي المهام</option>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.id === session.user.id ? `أنا — ${person.name}` : person.name}</option>)}</select></label>
+          <label className="task-filter-field"><span>من تاريخ</span><input type="date" value={dateRange.from} max={dateRange.to || undefined} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} /></label>
+          <label className="task-filter-field"><span>إلى تاريخ</span><input type="date" value={dateRange.to} min={dateRange.from || undefined} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} /></label>
+          <button className="task-filter-reset" type="button" disabled={!advancedFiltersActive} onClick={() => { setRequesterFilter("all"); setDateRange({ from: "", to: "" }); }}>مسح الفلاتر</button>
+        </div>
+      </details> : null}
+
+      {showCreate && manager ? (
         <form ref={taskCreateForm} className="panel task-create-form" onSubmit={createTask} onChange={() => setCapacityWarning(null)}>
           <div className="section-heading"><div><p className="overline">3 خطوات خفيفة</p><h2>إسناد مهمة</h2></div><div className="toolbar-actions"><Button type="button" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent("workspace-ai:ask", { detail: { question: "راجع تقويم الفريق والمهام المفتوحة، وساعدني أختار مسؤولًا وموعدًا واقعيين للمهمة الجديدة. وضّح أي حمل زائد، ولا تغيّر أي بيانات من نفسك." } }))}><Bot size={14} /> اسأل AI قبل الإسناد</Button><button className="text-button" type="button" onClick={closeTaskCreate}>إغلاق</button></div></div>
 
@@ -1018,23 +966,39 @@ export function TasksWorkspace() {
         </form>
       ) : null}
 
-      {taskView === "board" && manager ? <details className="panel recurring-task-rules" open>
-        <summary><span><Repeat2 size={16} /><strong>المهام الأسبوعية الثابتة</strong><small>{recurringTemplates.length.toLocaleString("ar-EG")} قاعدة تعمل من داخل «مهامي»</small></span><span>إدارة</span></summary>
+      {taskSection === "schedule" && manager ? <WeeklyContentRoutineForm
+        organizationId={workspace.organization.id}
+        currentUserId={session.user.id}
+        people={assignablePeople.map((person) => ({ id: person.id, name: person.name }))}
+        onSaved={async () => {
+          await Promise.all([
+            refreshTasks(workspace.organization.id),
+            refreshRecurringTemplates(workspace.organization.id, true),
+          ]);
+        }}
+      /> : null}
+
+      {taskSection === "schedule" && manager ? <details className="panel recurring-task-rules">
+        <summary><span><Repeat2 size={16} /><strong>المهام الأسبوعية الثابتة</strong><small>{recurringTemplateGroups.length.toLocaleString("ar-EG")} مسار يعمل من داخل «مهامي»</small></span><span>إدارة</span></summary>
         <div className="recurring-task-rule-list">
-          {recurringTemplates.map((template) => {
-            const owner = peopleById.get(template.owner_id);
-            return <article key={template.id} data-paused={template.paused || undefined}>
-              <div><strong>{template.title}</strong><small>{owner?.name ?? "عضو فريق"} · كل {weekdayLabels[template.weekday]} الساعة {template.time_local.slice(0, 5)}{template.ends_on ? ` · حتى ${template.ends_on}` : ""}</small></div>
-              <StatusBadge tone={template.paused ? "neutral" : "success"}>{template.paused ? "متوقفة" : "تعمل"}</StatusBadge>
-              <div className="recurring-task-rule-actions"><button className="text-button" type="button" disabled={working} onClick={() => void toggleRecurringTemplate(template)}>{template.paused ? <Repeat2 size={12} /> : <CirclePause size={12} />} {template.paused ? "تشغيل" : "إيقاف"}</button><button className="text-button danger-text" type="button" disabled={working} onClick={() => void archiveRecurringTemplate(template)}>أرشفة</button></div>
-              {template.last_error ? <small className="recurring-task-error">تحتاج مراجعة: {template.last_error}</small> : null}
+          {recurringTemplateGroups.map((group) => {
+            const template = group.templates[0];
+            if (!template) return null;
+            const paused = group.templates.every((item) => item.paused);
+            const owners = [...new Set(group.templates.map((item) => peopleById.get(item.owner_id)?.name ?? "عضو فريق"))];
+            const errors = [...new Set(group.templates.flatMap((item) => item.last_error ? [item.last_error] : []))];
+            return <article key={group.id} data-paused={paused || undefined}>
+              <div><strong>{template.content_bundle_title ?? template.title}</strong><small>{template.content_bundle_id ? `${group.templates.length.toLocaleString("ar-EG")} مراحل · ${owners.join("، ")} · النشر كل ${weekdayLabels[template.bundle_anchor_weekday ?? template.weekday]} الساعة ${(template.bundle_anchor_time ?? template.time_local).slice(0, 5)}` : `${owners[0]} · كل ${weekdayLabels[template.weekday]} الساعة ${template.time_local.slice(0, 5)}`}{template.ends_on ? ` · حتى ${template.ends_on}` : ""}</small></div>
+              <StatusBadge tone={paused ? "neutral" : "success"}>{paused ? "متوقف" : "يعمل"}</StatusBadge>
+              <div className="recurring-task-rule-actions"><button className="text-button" type="button" disabled={working} onClick={() => void toggleRecurringTemplate(group.templates)}>{paused ? <Repeat2 size={12} /> : <CirclePause size={12} />} {paused ? "تشغيل" : "إيقاف"}</button><button className="text-button danger-text" type="button" disabled={working} onClick={() => void archiveRecurringTemplate(group.templates)}>أرشفة</button></div>
+              {errors.map((message) => <small className="recurring-task-error" key={message}>تحتاج مراجعة: {message}</small>)}
             </article>;
           })}
-          {!recurringTemplates.length ? <div className="task-filter-empty"><Repeat2 size={22} /><div><strong>لا توجد مهام أسبوعية بعد</strong><p>مثل: لايف أيمن كل أربعاء، أو تسليم ريل ثابت كل سبت. أنشئها مرة واحدة وستظهر تلقائيًا في موعدها.</p></div><button className="text-button" type="button" onClick={() => { resetTaskCreateDraft(); setTaskCreateMode("weekly"); setShowCreate(true); }}>إنشاء أول مهمة أسبوعية</button></div> : null}
+          {!recurringTemplateGroups.length ? <div className="task-filter-empty"><Repeat2 size={22} /><div><strong>لا توجد مهام أسبوعية بعد</strong><p>مثل: لايف أيمن كل أربعاء، أو تسليم ريل ثابت كل سبت. أنشئها مرة واحدة وستظهر تلقائيًا في موعدها.</p></div><button className="text-button" type="button" onClick={() => { resetTaskCreateDraft(); setTaskCreateMode("weekly"); setShowCreate(true); }}>إنشاء أول مهمة أسبوعية</button></div> : null}
         </div>
       </details> : null}
 
-      {taskView === "schedule" ? <TaskScheduleCalendar organizationId={workspace.organization.id} currentUserId={session.user.id} manager={manager} people={assignablePeople.map((person) => ({ id: person.id, name: person.name }))} tasks={tasks} /> : visibleLanes.length ? <div className="kanban-board" aria-label={personalView ? "مهامي" : "بورد مهام الفريق"}>
+      {taskSection === "schedule" ? <TaskScheduleCalendar organizationId={workspace.organization.id} currentUserId={session.user.id} manager={manager} people={assignablePeople.map((person) => ({ id: person.id, name: person.name }))} tasks={tasks} /> : visibleLanes.length ? <div className={`kanban-board task-${taskSection}-board`} aria-label={personalView ? "مهامي" : "بورد مهام الفريق"}>
         {visibleLanes.map((lane) => {
           const laneEntries = boardEntries.filter((entry) => entry.laneId === lane.id);
           const laneTone = lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : lane.id === "closed" ? "success" : "info";
@@ -1047,22 +1011,16 @@ export function TasksWorkspace() {
                     const overdueTasks = entry.tasks.filter((task) => isOverdue(task, renderNow));
                     const completedTasks = entry.tasks.filter(taskIsCompleted).length;
                     const progress = Math.round((completedTasks / entry.tasks.length) * 100);
-                    const contentRequest = contentRequests[entry.contentItemId]?.trim()
-                      || entry.tasks.find((task) => task.description?.trim())?.description?.trim()
-                      || "";
                     return <article className={`task-card content-workflow-group ${overdueTasks.length ? "task-overdue" : ""} ${completedTasks === entry.tasks.length ? "task-closed" : ""}`} data-state={lane.id} key={entry.id}>
-                      <div className="task-card-top"><span className="workflow-task-label"><Film size={12} /> طلب محتوى واحد · {entry.tasks.length} مراحل</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل الطلب" : lane.label}</StatusBadge></div>
+                      <div className="task-card-top"><span className="workflow-task-label"><Film size={12} /> طلب محتوى · {entry.tasks.length} مراحل</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل" : lane.label}</StatusBadge></div>
                       <div className="content-workflow-heading"><h3>{contentGroupTitle(entry.tasks[0])}</h3>{!personalView ? <a className="task-production-link" href={`/content?content=${entry.contentItemId}#content-${entry.contentItemId}`}><FileText size={12} /> ملف الطلب الكامل</a> : null}</div>
-                      {!personalView && contentRequest ? <CollapsibleText text={contentRequest} maxCharacters={140} className="task-description" /> : null}
                       <div className="content-workflow-progress">
-                        <div><span>تقدم التنفيذ</span><strong>{progress}%</strong></div>
+                        <div><span>التقدم</span><strong>{progress}%</strong></div>
                         <span className="content-workflow-progress-track" role="progressbar" aria-label="نسبة تقدم ملف المحتوى" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></span>
-                        <small>{completedTasks} من {entry.tasks.length} خطوات مكتملة</small>
                       </div>
                       {overdueTasks.length ? <span className="overdue-label"><AlertTriangle size={14} /> {overdueTasks.length} خطوة متأخرة — الأقدم منذ {formatOverdueDuration(overdueTasks.sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0], renderNow)}</span> : null}
                       <div className="content-workflow-subtasks">{entry.tasks.map((task, index) => {
                         const owner = peopleById.get(task.owner_id);
-                        const requester = peopleById.get(task.created_by);
                         const completed = taskIsCompleted(task);
                         const closed = taskIsClosed(task);
                         const isAssignedToViewer = task.owner_id === session.user.id;
@@ -1092,7 +1050,7 @@ export function TasksWorkspace() {
                         return <section className={className} data-direct-target={directTarget || undefined} id={taskDomId(task.id)} tabIndex={directTarget ? -1 : undefined} key={task.id}>
                           <div className="content-subtask-copy">
                             <span className="content-subtask-marker" aria-label={completed ? "مكتملة" : `الخطوة ${index + 1}`}>{completed ? <CheckCircle2 size={16} /> : index + 1}</span>
-                            <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · طلبها {requester?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}{isMine ? <b> · مهمتك الآن</b> : null}</small>{directTarget ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}</div>
+                            <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}{isMine ? <b> · مهمتك الآن</b> : null}</small>{directTarget ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}</div>
                           </div>
                           <div className="content-subtask-action">
                             <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
@@ -1124,6 +1082,7 @@ export function TasksWorkspace() {
                         || option !== "review" || task.status === "review")
                     );
                   const directOptions = options.filter((option) => !["review", "done"].includes(option));
+                  const primaryDirectOption = directOptions.find((option) => option !== "blocked") ?? directOptions[0];
                   const approvalOptions = task.status === "review"
                     ? options.filter((option) => option === "done")
                     : [];
@@ -1141,9 +1100,6 @@ export function TasksWorkspace() {
                     && !task.crm_contact_id
                     && task.status !== "cancelled"
                     && task.status !== "backlog";
-                  const taskDescription = task.content_item_id
-                    ? contentRequests[task.content_item_id]?.trim() || task.description?.trim() || ""
-                    : task.description?.trim() || "";
                   return (
                     <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""} ${taskIsCompleted(task) ? "task-closed" : ""}`} data-priority={task.priority} data-status={task.status} data-direct-target={linkedTaskId === task.id || undefined} id={taskDomId(task.id)} tabIndex={linkedTaskId === task.id ? -1 : undefined} key={task.id}>
                       <div className="task-card-top">{!personalView || ["high", "urgent"].includes(task.priority) ? <span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span> : null}<StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small className="task-reference">{taskReference(task.id)}</small></div>
@@ -1154,27 +1110,22 @@ export function TasksWorkspace() {
                       {task.recurring_template_id ? <span className="workflow-task-label recurring-task-label"><Repeat2 size={12} /> أسبوعية ثابتة</span> : null}
                       {task.launch_deliverable_id ? <a className="task-production-link" href={`/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`}><FileText size={12} /> فتح التفاصيل وتسليم النتيجة</a> : null}
                       {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> CRM · متابعة عميل</span> : null}
-                      {task.crm_contact_id ? <a className="task-production-link" href={`/crm/${task.crm_contact_id}`}><ContactRound size={12} /> فتح ملف العميل وتسجيل النتيجة</a> : null}
                       <h3>{task.title}</h3>
-                      <a className="task-open-link" href={taskDeepLink(task.id)}><FileText size={13} /> {task.content_item_id ? "فتح وتسليم المهمة" : "فتح صفحة المهمة"} {taskReference(task.id)}</a>
-                      {taskDescription ? <CollapsibleText text={taskDescription} maxCharacters={170} className="task-description" /> : null}
-                      {task.requires_review ? <p className="task-review-rule"><ShieldCheck size={13} /> بعد التسليم يراجعها {requester?.name ?? "طالب المهمة"}.</p> : null}
-                      <dl className="task-meta">{!personalView ? <div><dt><CircleUserRound size={14} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div> : null}<div><dt><UserRoundCheck size={14} /> طلبها</dt><dd>{requester?.name ?? "عضو فريق"}</dd></div><div><dt><CalendarClock size={14} /> موعد التسليم</dt><dd>{formatDeadline(task.due_at)}</dd></div></dl>
+                      <div className="task-card-summary"><span><CircleUserRound size={13} /> {!personalView ? owner?.name ?? "عضو فريق" : `طلبها ${requester?.name ?? "عضو فريق"}`}</span><span><CalendarClock size={13} /> {formatDeadline(task.due_at)}</span>{task.requires_review ? <span><ShieldCheck size={13} /> بمراجعة</span> : null}</div>
                       {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة منذ {formatOverdueDuration(task, renderNow)}</span> : null}
                       {task.crm_contact_id
-                        ? <p className="crm-task-guard"><ShieldCheck size={13} /> سجّل نتيجة التواصل من ملف العميل، والمهمة ستتحدث تلقائيًا.</p>
+                        ? <Button href={`/crm/${task.crm_contact_id}`}><ContactRound size={14} /> فتح العميل وتسجيل النتيجة</Button>
                         : <>
                           {canDeliverFromTask ? <div className="form-actions task-completion-actions task-card-actions" aria-label="إنهاء المهمة">
                             <Button href={taskDeliveryDeepLink(task.id)}>
                               <CheckCircle2 size={16} /> {task.content_step === "publishing" ? "تم النشر — أضف الرابط" : "تم تنفيذ المهمة — أضف التسليم"}
                             </Button>
-                            {directOptions.map((option) => <Button type="button" variant="secondary" disabled={working} onClick={() => void changeStatus(task, option)} key={option}>{personalActionLabel(task, option)}</Button>)}
+                            <Button href={taskDeepLink(task.id)} variant="secondary"><FileText size={14} /> فتح التفاصيل</Button>
                           </div> : canMove ? <div className="form-actions task-card-actions" aria-label="الإجراء التالي">
-                            {directOptions.map((option) => <Button type="button" variant={option === "blocked" ? "secondary" : "primary"} disabled={working} onClick={() => void changeStatus(task, option)} key={option}>{personalActionLabel(task, option)}</Button>)}
-                            {approvalOptions.map((option) => <Button type="button" disabled={working} onClick={() => void changeStatus(task, option)} key={option}>{personalActionLabel(task, option)}</Button>)}
-                          </div> : null}
-                          {canRequestRevisionShortcut ? <a className="task-revision-shortcut" href={`${taskDeepLink(task.id)}?action=revise#revision`}><MessageSquareText size={13} /> طلب تعديل مختصر</a> : null}
-                          {task.requires_review && task.status === "review" && isAssignee ? <small className="task-review-waiting">تم التسليم. لا يوجد إجراء آخر عليك الآن، ولا يمكنك اعتمادها بنفسك.</small> : task.requires_review && task.status === "review" && canMove ? <small className="task-review-waiting reviewer">النتيجة جاهزة لك: اعتمدها من الزر، أو افتح صفحة المهمة واكتب التعديل المطلوب.</small> : !isAssignee && !canMove && !taskIsClosed(task) ? <small className="task-review-waiting">هذه المهمة ليست مسندة إليك. يمكنك متابعتها أو طلب تعديل من صفحتها.</small> : null}
+                            {approvalOptions.length ? <Button href={taskDeepLink(task.id)}><FileText size={14} /> مراجعة التسليم</Button> : primaryDirectOption ? <Button type="button" disabled={working} onClick={() => void changeStatus(task, primaryDirectOption)}>{personalActionLabel(task, primaryDirectOption)}</Button> : null}
+                            <Button href={taskDeepLink(task.id)} variant="secondary"><FileText size={14} /> فتح التفاصيل</Button>
+                          </div> : <a className="task-open-link" href={taskDeepLink(task.id)}><FileText size={13} /> فتح تفاصيل المهمة</a>}
+                          {canRequestRevisionShortcut ? <a className="task-revision-shortcut" href={`${taskDeepLink(task.id)}?action=revise#revision`}><MessageSquareText size={13} /> طلب تعديل</a> : null}
                         </>}
                     </article>
                   );
@@ -1184,7 +1135,7 @@ export function TasksWorkspace() {
             </section>
           );
         })}
-      </div> : <div className="task-filter-empty" role="status"><CalendarClock size={24} /><div><strong>{personalView ? "لا يوجد شيء مطلوب منك هنا" : "لا توجد مهام مطابقة"}</strong><p>{personalView ? "عندما تُسند إليك مهمة ستظهر هنا ومعها المطلوب والموعد وزر الإجراء التالي." : "غيّر الحالة أو الفترة الزمنية أو طالب المهمة لعرض نتائج أخرى."}</p></div>{filter !== "mine" ? <button className="text-button" type="button" onClick={() => { setFilter("mine"); setRequesterFilter("all"); setDateRange({ from: "", to: "" }); }}>العودة إلى مهامي</button> : manager ? <button className="text-button" type="button" onClick={() => setFilter("active")}>فتح شغل الفريق</button> : null}</div>}
+      </div> : <div className="task-filter-empty" role="status"><CalendarClock size={24} /><div><strong>{taskSection === "archive" ? "الأرشيف فارغ" : personalView ? "لا يوجد شيء مطلوب منك الآن" : "لا توجد مهام مطابقة"}</strong><p>{taskSection === "archive" ? "المهام المكتملة والملغاة ستظهر هنا تلقائيًا." : personalView ? "عندما تُسند إليك مهمة ستظهر هنا مع موعدها وزر الإجراء التالي." : "غيّر الحالة أو الفترة الزمنية أو طالب المهمة لعرض نتائج أخرى."}</p></div>{taskSection !== "today" ? <button className="text-button" type="button" onClick={() => openTaskSection("today")}>العودة إلى اليوم</button> : manager ? <button className="text-button" type="button" onClick={() => openTaskSection("team")}>فتح شغل الفريق</button> : null}</div>}
     </section>
   );
 }

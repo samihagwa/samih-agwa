@@ -13,10 +13,11 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.match(board, /const key = task\.content_item_id \? `content:\$\{task\.content_item_id\}` : `task:\$\{task\.id\}`/);
   assert.match(board, /if \(entry\.contentItemId\)/);
   assert.doesNotMatch(board, /if \(entry\.contentItemId && !personalView\)/);
-  assert.match(board, /setFilter\(canManageTasks\(membership\.role\) \? "active" : "mine"\)/);
+  assert.match(board, /setFilter\("mine"\)/);
+  assert.match(board, /type TaskSection = "today" \| "team" \| "schedule" \| "archive"/);
   assert.match(board, /const canOpenDetails = isAssignedToViewer \|\| isRequester \|\| platformAdmin/);
   assert.match(board, /const canRequestRevisionShortcut = !isAssignedToViewer[\s\S]*!readOnly[\s\S]*\(isRequester \|\| platformAdmin\)[\s\S]*contentStepsSupportingRevision\.has\(task\.content_step\)[\s\S]*\["review", "done"\]\.includes\(task\.status\)/);
-  assert.match(board, /طلب محتوى واحد/);
+  assert.match(board, /طلب محتوى ·/);
   assert.match(board, /طلب تعديل/);
   assert.match(board, /boardEntryCompletionTimestamp\(right\) - boardEntryCompletionTimestamp\(left\)/);
   assert.match(board, /function taskIsCompleted\(task: Task\) \{\s*return task\.status === "done";/);
@@ -30,7 +31,7 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.doesNotMatch(board, /filter === "completed"[^\n]+taskIsClosed/);
   assert.doesNotMatch(board, /const completed = taskIsClosed\(task\)/);
 
-  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-auto-flow: column/);
+  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(145px, 1fr\)\)/);
   assert.match(css, /\.content-workflow-subtasks > section\.completed strong \{[^}]*text-decoration: line-through/);
   assert.match(css, /\.task-card\.task-closed h3 \{[^}]*text-decoration: line-through/);
 
@@ -90,4 +91,30 @@ test("chosen cover instructions remain visible and reach the designer after refr
   assert.match(content, /تعليمات الغلاف المحفوظة/);
   assert.match(content, /LinkifiedText text=\{item\.thumbnail_brief\}/);
   assert.match(css, /\.content-ai-saved-choice/);
+});
+
+test("weekly team content is one request with role-specific dated work", async () => {
+  const [workspace, form, migration, css] = await Promise.all([
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/WeeklyContentRoutineForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260905021652_recurring_team_content_workflows.sql", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(workspace, /WeeklyContentRoutineForm/);
+  assert.match(workspace, /content_bundle_id \? `bundle:/);
+  assert.match(workspace, /toggleRecurringTemplate\(group\.templates\)/);
+  assert.match(workspace, /archiveRecurringTemplate\(group\.templates\)/);
+  assert.match(form, /كل المطلوب والروابط — في مكان واحد/);
+  assert.match(form, /const bundleId = crypto\.randomUUID\(\)/);
+  assert.match(form, /step: "recording"[\s\S]*step: "editing"[\s\S]*step: "thumbnail"[\s\S]*step: "publishing"/);
+  assert.match(form, /step: "caption"[\s\S]*step: "design"[\s\S]*step: "publishing"/);
+  assert.match(form, /from\("recurring_task_templates"\)\.insert\(rows\)/);
+  assert.match(migration, /recurring_content_occurrences_bundle_unique/);
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /new\.content_item_id := content_id/);
+  assert.match(migration, /dependent\.content_step = 'editing' and prerequisite\.content_step = 'recording'/);
+  assert.doesNotMatch(migration, /dependent\.content_step in \('editing', 'thumbnail'\)/);
+  assert.match(migration, /dependent\.content_step = 'publishing'/);
+  assert.match(css, /\.weekly-content-routine/);
 });

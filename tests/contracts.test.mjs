@@ -172,7 +172,7 @@ test("task review is optional, requester-gated, and never self-approved", async 
   assert.match(workspace, /معيار القبول — اختياري/);
   assert.match(workspace, /هل المهمة تحتاج مراجعة؟/);
   assert.match(workspace, /task\.status === "review" && task\.created_by === currentUserId/);
-  assert.match(workspace, /لا يمكنك اعتمادها بنفسك/);
+  assert.match(workspace, /غير متاح عند إسناد المهمة لنفسك/);
   assert.match(workspace, /taskDeepLink\(task\.id\)/);
   assert.match(revisionMigration, /create table public\.task_revision_requests/);
   assert.match(revisionMigration, /task_revision_requests_insert_requester_or_platform_admin/);
@@ -264,7 +264,7 @@ test("task links stay visible, task discussion notifies exact participants, and 
   assert.match(notificationKinds, /'task_question'/);
   assert.match(notificationKinds, /'task_discussion'/);
   assert.match(board, /className="task-open-link" href=\{taskDeepLink\(task\.id\)\}/);
-  assert.match(board, /طلبها \{requester\?\.name/);
+  assert.match(board, /`طلبها \$\{requester\?\.name/);
   assert.match(detail, /from\("task_discussion_messages"\)\.insert/);
   assert.match(detail, /table: "task_discussion_messages"/);
   assert.match(detail, /اسأل .*طالب المهمة/);
@@ -963,9 +963,9 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(taskWorkspace, /if \(isContentWorkflow\) return tasks\.every\(taskIsClosed\) \? "closed" : "work"/);
   assert.match(taskWorkspace, /content-workflow-progress/);
   assert.match(taskWorkspace, /مهمتك الآن/);
-  assert.match(taskWorkspace, /contentRequests\[task\.content_item_id\]/);
+  assert.doesNotMatch(taskWorkspace, /contentRequests\[task\.content_item_id\]/);
   assert.match(taskWorkspace, /task\.content_item_id[\s\S]*transitions\.filter\(\(option\) => \["in_progress", "blocked"\]\.includes\(option\)\)/);
-  assert.match(taskWorkspace, /فتح وتسليم المهمة/);
+  assert.match(taskWorkspace, /taskDeliveryDeepLink\(task\.id\)/);
   assert.doesNotMatch(taskWorkspace, /task\.content_item_id \? <a className="task-production-link" href=\{`\/content/);
 });
 
@@ -1026,7 +1026,7 @@ test("content production briefs, assets, and revision rounds share one secured w
   assert.match(workspace, /تم التنفيذ — أضف التسليم/);
   assert.match(workspace, /تم النشر — أضف الرابط/);
   assert.doesNotMatch(workspace, /deliveryFormTaskId|submitStepDelivery/);
-  assert.match(taskWorkspace, /فتح وتسليم المهمة/);
+  assert.match(taskWorkspace, /تم تنفيذ المهمة — أضف التسليم/);
   assert.doesNotMatch(taskWorkspace, /status-select compact/);
   assert.match(commands, /recording.*editing.*thumbnail.*caption.*design.*scheduling.*publishing/);
   assert.match(completionMigration, /confirm_content_publishing_task_id/);
@@ -1267,7 +1267,7 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(workspace, /crm-create-dialog-backdrop/);
   assert.match(workspace, /aria-modal="true"/);
   assert.match(workspace, /functions\.invoke\("crm-commands"/);
-  assert.match(taskWorkspace, /فتح ملف العميل وتسجيل النتيجة/);
+  assert.match(taskWorkspace, /فتح العميل وتسجيل النتيجة/);
   assert.doesNotMatch(migration, /'متابعة عميل محتمل[^']*'\s*,\s*contact_full_name/);
   assert.match(contract, /allowedCrmTransitions/);
   assert.match(contract, /tradingview/);
@@ -1750,10 +1750,10 @@ test("weekly task templates are secured and materialize idempotently as ordinary
   assert.match(workspace, /\.eq\("version", template\.version\)[\s\S]*\.select\("id"\)[\s\S]*\.maybeSingle\(\)/);
   assert.match(workspace, /setTaskCreateMode\("weekly"\); setCapacityWarning\(null\)/);
   assert.match(workspace, /resetTaskCreateDraft\(\); setTaskCreateMode\("weekly"\); setShowCreate\(true\)/);
-  assert.match(workspace, /resetTaskCreateDraft\(\); setTaskCreateMode\("once"\); setShowCreate\(true\)/);
+  assert.match(workspace, /setTaskCreateMode\(taskSection === "schedule" \? "weekly" : "once"\)/);
 });
 
-test("My Work monthly schedule projects weekly routines without creating or hiding concrete tasks", async () => {
+test("My Work schedule defaults to a weekly roadmap and keeps month as a secondary view", async () => {
   const [workspace, schedule, types, css] = await Promise.all([
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TaskScheduleCalendar.tsx", import.meta.url), "utf8"),
@@ -1761,18 +1761,19 @@ test("My Work monthly schedule projects weekly routines without creating or hidi
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(workspace, /type TaskView = "board" \| "schedule"/);
+  assert.match(workspace, /type TaskSection = "today" \| "team" \| "schedule" \| "archive"/);
   assert.match(workspace, /<TaskScheduleCalendar organizationId=/);
   assert.match(schedule, /rpc\("get_recurring_task_schedule"/);
+  assert.match(schedule, /rpc\("get_team_capacity_calendar"/);
   assert.match(schedule, /timeZone: "Africa\/Cairo"/);
   assert.match(schedule, /projected: !routine\.materialized/);
   assert.match(schedule, /manager \? !ownerId \|\| task\.owner_id === ownerId : task\.owner_id === currentUserId/);
   assert.match(schedule, /entry\.taskId \? <a href=\{taskDeepLink\(entry\.taskId\)\}/);
   assert.doesNotMatch(schedule, /\.(?:insert|update|delete)\(/);
   assert.match(types, /get_recurring_task_schedule:/);
-  assert.match(css, /\.task-month-weekdays, \.task-month-grid \{[^}]*repeat\(7, minmax\(0, 1fr\)\)/);
-  assert.match(css, /\.task-month-grid \{ display: grid; grid-template-columns: 1fr;/);
-  assert.match(css, /\.task-month-grid > article:not\(\.has-work\) \{ display: none;/);
+  assert.match(css, /\.task-schedule-grid\.week \{ grid-template-columns: repeat\(7, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.task-schedule-grid\.week, \.task-schedule-grid\.month \{ grid-template-columns: 1fr;/);
+  assert.match(css, /\.task-schedule-grid\.month > article:not\(\.has-work\) \{ display: none;/);
 });
 
 test("results workspace reports only evidence-backed internal metrics and labels external data as unconnected", async () => {
@@ -1798,13 +1799,14 @@ test("results workspace reports only evidence-backed internal metrics and labels
 test("task cards remain compact and visually separated without changing the design system", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(css, /\.kanban-stack \{[^}]*gap: 10px/);
-  assert.match(css, /\.task-card \{[^}]*border: 1px solid #b9ccca[^}]*box-shadow: 0 6px 18px/);
+  assert.match(css, /\.kanban-stack \{[^}]*gap: 11px/);
+  assert.match(css, /\.task-card \{[^}]*border: 1px solid #b9ccca[^}]*box-shadow: 0 5px 15px/);
   assert.match(css, /\.task-card-top \{[^}]*border-bottom: 1px solid var\(--line\)/);
   assert.match(css, /\.kanban-stack > \.task-card:nth-child\(even\) \{ background: #f8fbfa/);
   assert.match(css, /\.task-card h3 \{[^}]*background: #eef6f4[^}]*font-weight: 950/);
   assert.match(css, /\.task-card::before \{[^}]*inset-inline-start: 0/);
-  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-auto-flow: column/);
+  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(145px, 1fr\)\)/);
+  assert.match(css, /\.task-today-board \.kanban-stack, \.task-archive-board \.kanban-stack \{ grid-template-columns: repeat\(2/);
   assert.match(css, /\.task-card\.task-closed h3 \{[^}]*text-decoration: line-through/);
 });
 

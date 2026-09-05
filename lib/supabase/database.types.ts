@@ -3263,10 +3263,59 @@ export type Database = {
           },
         ]
       }
+      recurring_content_occurrences: {
+        Row: {
+          bundle_slot: string
+          content_bundle_id: string
+          content_item_id: string
+          created_at: string
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          bundle_slot: string
+          content_bundle_id: string
+          content_item_id: string
+          created_at?: string
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          bundle_slot?: string
+          content_bundle_id?: string
+          content_item_id?: string
+          created_at?: string
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_content_occurrences_content_item_id_fkey"
+            columns: ["content_item_id"]
+            isOneToOne: true
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_content_occurrences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recurring_task_templates: {
         Row: {
           acceptance_criteria: string
           archived_at: string | null
+          bundle_anchor_time: string | null
+          bundle_anchor_weekday: number | null
+          content_bundle_format: Database["public"]["Enums"]["content_format"] | null
+          content_bundle_id: string | null
+          content_bundle_request: string | null
+          content_bundle_title: string | null
+          content_step: Database["public"]["Enums"]["content_step"] | null
           created_at: string
           created_by: string
           description: string
@@ -3290,6 +3339,13 @@ export type Database = {
         Insert: {
           acceptance_criteria?: string
           archived_at?: string | null
+          bundle_anchor_time?: string | null
+          bundle_anchor_weekday?: number | null
+          content_bundle_format?: Database["public"]["Enums"]["content_format"] | null
+          content_bundle_id?: string | null
+          content_bundle_request?: string | null
+          content_bundle_title?: string | null
+          content_step?: Database["public"]["Enums"]["content_step"] | null
           created_at?: string
           created_by: string
           description: string
@@ -3313,6 +3369,13 @@ export type Database = {
         Update: {
           acceptance_criteria?: string
           archived_at?: string | null
+          bundle_anchor_time?: string | null
+          bundle_anchor_weekday?: number | null
+          content_bundle_format?: Database["public"]["Enums"]["content_format"] | null
+          content_bundle_id?: string | null
+          content_bundle_request?: string | null
+          content_bundle_title?: string | null
+          content_step?: Database["public"]["Enums"]["content_step"] | null
           created_at?: string
           created_by?: string
           description?: string
