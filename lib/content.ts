@@ -19,6 +19,31 @@ export const contentStatusConfig: Record<
   cancelled: { label: "ملغي", tone: "danger" },
 };
 
+export const contentFormatConfig: Record<ContentFormat, { label: string }> = {
+  reel: { label: "ريلز" },
+  carousel: { label: "كاروسيل" },
+  post: { label: "بوست" },
+  story: { label: "ستوري" },
+  long_video: { label: "فيديو طويل" },
+  live: { label: "بث مباشر" },
+  email: { label: "بريد إلكتروني" },
+};
+
+const contentPlatformLabels: Record<string, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  linkedin: "LinkedIn",
+  telegram: "Telegram",
+  email: "Email",
+};
+
+export function contentPlatformLabel(platform: string) {
+  const normalized = platform.trim().toLowerCase();
+  return contentPlatformLabels[normalized] ?? platform.trim();
+}
+
 export const contentStepConfig: Record<ContentStep, { label: string; order: number }> = {
   brief: { label: "Brief", order: 1 },
   recording: { label: "مادة خام / تسجيل", order: 2 },

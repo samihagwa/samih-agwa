@@ -58,6 +58,29 @@ export function contentDeepLink(contentId: string) {
   return `/content?content=${id}#content-${id}`;
 }
 
+const workspaceContentHosts = new Set([
+  "os.samihagwa.com",
+  "market-whales-os.samihsmaih1234.chatgpt.site",
+]);
+
+export function contentSourceDeepLink(contentId: string, sourceUrl: string) {
+  const source = sourceUrl.trim();
+  try {
+    const parsed = new URL(source);
+    const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    const hasExactContentTarget = parsed.searchParams.has("content")
+      || /^#content-[0-9a-f-]+$/i.test(parsed.hash);
+    if (workspaceContentHosts.has(parsed.hostname.toLowerCase())
+      && pathname === "/content"
+      && !hasExactContentTarget) {
+      return contentDeepLink(contentId);
+    }
+  } catch {
+    return source;
+  }
+  return source;
+}
+
 export function contentRevisionDeepLink(contentId: string, revisionId: string) {
   const content = encoded(contentId);
   const revision = encoded(revisionId);

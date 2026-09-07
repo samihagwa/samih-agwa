@@ -1801,7 +1801,7 @@ test("task cards remain compact and visually separated without changing the desi
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(css, /\.kanban-stack \{[^}]*gap: 11px/);
-  assert.match(css, /\.task-card \{[^}]*border: 1px solid #b9ccca[^}]*box-shadow: 0 5px 15px/);
+  assert.match(css, /\.task-card \{[^}]*border: 2px solid #adc4c1[^}]*box-shadow: 0 5px 15px/);
   assert.match(css, /\.task-card-top \{[^}]*border-bottom: 1px solid var\(--line\)/);
   assert.match(css, /\.kanban-stack > \.task-card:nth-child\(even\) \{ background: #f8fbfa/);
   assert.match(css, /\.task-card h3 \{[^}]*background: #eef6f4[^}]*font-weight: 950/);

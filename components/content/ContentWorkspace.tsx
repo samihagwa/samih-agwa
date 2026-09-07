@@ -37,7 +37,7 @@ import {
 } from "../../lib/content";
 import { formatTimelineSeconds } from "../../lib/content-intake";
 import { brandCategoryConfig } from "../../lib/brand";
-import { currentUuidDeepLink, taskDeepLink, taskDeliveryDeepLink } from "../../lib/deep-links";
+import { contentSourceDeepLink, currentUuidDeepLink, taskDeepLink, taskDeliveryDeepLink } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -610,7 +610,7 @@ export function ContentWorkspace() {
               <label><span>رابط المصدر الأصلي — اختياري</span><input name="request_source_url" type="url" inputMode="url" dir="ltr" maxLength={2000} defaultValue={item.intake_source_url ?? ""} placeholder="https://drive.google.com/..." /><small>يمكن أن يكون Drive أو Dropbox أو Telegram أو أي رابط ويب صالح.</small></label>
               <div className="form-actions"><Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={15} /> : <CheckCircle2 size={15} />} حفظ النص كما هو</Button><button className="text-button" type="button" onClick={() => setEditingBriefId(null)}>إلغاء</button></div>
             </form> : <div className="content-canonical-request-body"><LinkifiedText text={canonicalRequest} /></div>}
-            {item.intake_source_url && editingBriefId !== item.id ? <a className="content-request-source-link" href={item.intake_source_url} target="_blank" rel="noreferrer">فتح المصدر الأصلي <ExternalLink size={12} /></a> : null}
+            {item.intake_source_url && editingBriefId !== item.id ? <a className="content-request-source-link" href={contentSourceDeepLink(item.id, item.intake_source_url)} target="_blank" rel="noreferrer">فتح المصدر الأصلي <ExternalLink size={12} /></a> : null}
           </section>
 
           <section className="content-brand-references"><div><BookOpenCheck size={16} /><div><p className="overline">اختياري</p><h4>مراجع البراند</h4></div></div>{itemBrandArticles.length ? <div>{itemBrandArticles.map((article) => <a href={`/brand#article-${article.id}`} key={article.id}><strong>{article.title}</strong><small>{brandCategoryConfig[article.category].label} · v{article.version}{article.status === "archived" ? " · نسخة محفوظة" : ""}</small></a>)}</div> : <p>لا توجد مراجع إضافية مرتبطة بهذا الطلب.</p>}</section>

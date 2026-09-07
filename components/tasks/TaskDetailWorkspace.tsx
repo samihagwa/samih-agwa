@@ -20,7 +20,7 @@ import {
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { contentAssetKindConfig, contentStepConfig, type ContentStep } from "../../lib/content";
 import { formatDateTime, formatDeadlineDistance } from "../../lib/date-time";
-import { taskReference } from "../../lib/deep-links";
+import { contentSourceDeepLink, taskReference } from "../../lib/deep-links";
 import {
   allowedTaskTransitionsForActor,
   canManageAllTaskExecution,
@@ -749,7 +749,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
             <div className="task-detail-instructions">
               <span><FileText size={14} /> {task.content_step ? `المطلوب منك · ${contentStepConfig[task.content_step].label}` : "كل المطلوب والروابط"}</span>
               <p><LinkifiedText text={taskInstructions} /></p>
-              {workspace.contentRequest?.intake_source_url ? <a className="task-original-source" href={workspace.contentRequest.intake_source_url} target="_blank" rel="noreferrer">فتح المصدر الأصلي <ExternalLink size={12} /></a> : null}
+              {workspace.contentRequest?.intake_source_url ? <a className="task-original-source" href={contentSourceDeepLink(workspace.contentRequest.id, workspace.contentRequest.intake_source_url)} target="_blank" rel="noreferrer">فتح المصدر الأصلي <ExternalLink size={12} /></a> : null}
             </div>
 
             {task.content_item_id && taskInstructions !== fullRequest ? <details className="task-full-request">

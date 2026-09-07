@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowRight, CalendarClock, CheckCircle2, ExternalLink, F
 import { useCallback, useMemo, useState } from "react";
 import { contentAssetKindConfig, contentStatusConfig, contentStepConfig } from "../../lib/content";
 import { formatDateTime, formatDeadlineDistance } from "../../lib/date-time";
-import { taskDeepLink } from "../../lib/deep-links";
+import { contentSourceDeepLink, taskDeepLink } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { taskStatusConfig, taskStatusLabel } from "../../lib/tasks";
@@ -108,7 +108,7 @@ export function ContentFileWorkspace({ contentId }: { contentId: string }) {
     <section className="panel content-file-request">
       <header><div><p className="overline">الطلب الأساسي</p><h2>كل المطلوب والروابط</h2></div><FileText size={19} /></header>
       <p><LinkifiedText text={requestText} /></p>
-      {item.intake_source_url ? <a className="task-original-source" href={item.intake_source_url} target="_blank" rel="noreferrer">فتح المصدر الأصلي <ExternalLink size={12} /></a> : null}
+      {item.intake_source_url ? <a className="task-original-source" href={contentSourceDeepLink(item.id, item.intake_source_url)} target="_blank" rel="noreferrer">فتح المصدر الأصلي <ExternalLink size={12} /></a> : null}
     </section>
 
     <section className="panel content-file-flow">

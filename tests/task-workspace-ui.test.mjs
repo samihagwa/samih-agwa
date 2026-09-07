@@ -3,12 +3,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("content requests stay grouped and compact across team and personal task views", async () => {
-  const [board, detail, contentFile, intake, scheduleAdvisor, css] = await Promise.all([
+  const [board, detail, contentFile, contentWorkspace, intake, scheduleAdvisor, deepLinks, css] = await Promise.all([
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentFileWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/QuickIntakeForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/PublishScheduleAdvisor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/deep-links.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
@@ -52,6 +54,10 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.match(intake, /PublishScheduleAdvisor/);
   assert.match(scheduleAdvisor, /محتوى مجدول/);
   assert.match(scheduleAdvisor, /cairoDateKey/);
+  assert.match(scheduleAdvisor, /format, platforms/);
+  assert.match(scheduleAdvisor, /contentFormatConfig\[item\.format\]\.label/);
+  assert.match(scheduleAdvisor, /publish-schedule-selected-day/);
+  assert.match(scheduleAdvisor, /formatTime\(item\.publish_at\)/);
 
   assert.match(detail, /instructionsForTask/);
   assert.match(detail, /roleSpecificInstructions/);
@@ -72,6 +78,13 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.match(detail, /task\.content_item_id \? `\/tasks\/content\/\$\{task\.content_item_id\}`/);
   assert.match(contentFile, /مسار التنفيذ/);
   assert.match(contentFile, /taskDeepLink\(task\.id\)/);
+  assert.match(contentFile, /contentSourceDeepLink\(item\.id, item\.intake_source_url\)/);
+  assert.match(contentWorkspace, /contentSourceDeepLink\(item\.id, item\.intake_source_url\)/);
+  assert.match(detail, /contentSourceDeepLink\(workspace\.contentRequest\.id, workspace\.contentRequest\.intake_source_url\)/);
+  assert.match(deepLinks, /workspaceContentHosts/);
+  assert.match(deepLinks, /return contentDeepLink\(contentId\)/);
+  assert.match(css, /\.task-card \{[^}]*border: 2px solid #adc4c1/);
+  assert.match(css, /\.content-workflow-subtasks > section \{[^}]*border: 2px solid var\(--line\)/);
 });
 
 test("script work filters separate ready-to-publish and keep finished work out of the active queue", async () => {

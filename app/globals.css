@@ -354,7 +354,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .task-today-board .kanban-column, .task-archive-board .kanban-column { min-height: 0; padding: 0; border: 0; background: transparent; }
 .task-today-board .kanban-column > header, .task-archive-board .kanban-column > header { display: none; }
 .task-today-board .kanban-stack, .task-archive-board .kanban-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.task-card { min-width: 0; position: relative; padding: 11px 12px; overflow: hidden; border: 1px solid #b9ccca; border-radius: 13px; background: var(--paper); box-shadow: 0 5px 15px rgba(16,36,49,.055); }
+.task-card { min-width: 0; position: relative; padding: 11px 12px; overflow: hidden; border: 2px solid #adc4c1; border-radius: 13px; background: var(--paper); box-shadow: 0 5px 15px rgba(16,36,49,.065); }
 .task-card::before { content: ""; width: 4px; position: absolute; inset-block: 0; inset-inline-start: 0; background: #9fb4b2; }
 .task-card[data-priority="low"]::before { background: #83bdb6; }
 .task-card[data-priority="normal"]::before, .task-card[data-state="active"]::before { background: var(--teal-700); }
@@ -430,7 +430,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .content-workflow-progress-track { height: 7px; display: block; overflow: hidden; border-radius: 999px; background: var(--teal-100); }
 .content-workflow-progress-track > span { height: 100%; display: block; border-radius: inherit; background: var(--teal-700); transition: width .2s ease; }
 .content-workflow-subtasks { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 7px; overflow: visible; padding-bottom: 1px; }
-.content-workflow-subtasks > section { min-width: 0; padding: 8px; display: grid; grid-template-columns: 1fr; align-content: space-between; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); scroll-snap-align: start; }
+.content-workflow-subtasks > section { min-width: 0; padding: 8px; display: grid; grid-template-columns: 1fr; align-content: space-between; gap: 8px; border: 2px solid var(--line); border-radius: 10px; background: var(--canvas); scroll-snap-align: start; }
 .content-workflow-subtasks > section.overdue { border-color: #e7aaa7; background: var(--red-100); }
 .content-workflow-subtasks > section.blocked { border-color: #d6b35d; background: var(--amber-100); }
 .content-workflow-subtasks > section.mine { border-color: var(--teal-700); box-shadow: inset 3px 0 0 var(--teal-700); }
@@ -2577,10 +2577,24 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
 .publish-schedule-advisor > header svg { color: var(--teal-700); }
 .publish-schedule-advisor > p { margin: 8px 0 0; display: flex; align-items: flex-start; gap: 5px; color: var(--red-700); font-size: 9px; }
 .publish-schedule-advisor > div { margin-top: 10px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-.publish-schedule-advisor button { min-width: 0; min-height: 70px; padding: 7px 5px; display: grid; place-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--canvas); color: var(--ink-700); cursor: pointer; }
+.publish-schedule-advisor button { min-width: 0; min-height: 92px; padding: 7px 6px; display: grid; place-items: center; align-content: center; gap: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--canvas); color: var(--ink-700); cursor: pointer; }
 .publish-schedule-advisor button:hover, .publish-schedule-advisor button.active { border-color: var(--teal-700); background: var(--teal-100); color: var(--teal-700); }
 .publish-schedule-advisor button span, .publish-schedule-advisor button small { font-size: 8px; }
 .publish-schedule-advisor button strong { font-size: 10px; }
+.publish-schedule-day-preview { width: 100%; min-width: 0; display: grid; gap: 1px; }
+.publish-schedule-day-preview b { color: var(--teal-700); font-size: 8px; }
+.publish-schedule-day-preview em { overflow: hidden; color: var(--ink-800); font-size: 8px; font-style: normal; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.publish-schedule-selected-day { margin-top: 9px; padding: 9px; display: grid; gap: 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+.publish-schedule-selected-day > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.publish-schedule-selected-day > header strong, .publish-schedule-selected-day.empty strong { color: var(--ink-900); font-size: 10px; }
+.publish-schedule-selected-day > header small, .publish-schedule-selected-day.empty small { color: var(--ink-500); font-size: 8px; }
+.publish-schedule-selected-day ul { margin: 0; padding: 0; display: grid; gap: 5px; list-style: none; }
+.publish-schedule-selected-day li { min-width: 0; padding: 7px 8px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.publish-schedule-selected-day li > span { padding: 3px 6px; border-radius: 999px; background: var(--teal-100); color: var(--teal-700); font-size: 8px; font-weight: 900; }
+.publish-schedule-selected-day li > div { min-width: 0; display: grid; gap: 2px; }
+.publish-schedule-selected-day li strong { overflow: hidden; color: var(--ink-900); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.publish-schedule-selected-day li small { color: var(--ink-500); font-size: 8px; }
+.publish-schedule-selected-day.empty { justify-items: start; }
 .publish-schedule-advisor > small { margin-top: 8px; display: block; color: var(--ink-500); font-size: 8px; }
 
 @media (max-width: 980px) {
