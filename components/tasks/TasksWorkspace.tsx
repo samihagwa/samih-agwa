@@ -7,6 +7,7 @@ import {
   Bot,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   CirclePause,
   CircleUserRound,
   ContactRound,
@@ -1043,8 +1044,19 @@ export function TasksWorkspace() {
                             ? "current"
                             : "upcoming",
                     }));
-                    return <article className={`task-card content-workflow-group ${overdueTasks.length ? "task-overdue" : ""} ${completedTasks === entry.tasks.length ? "task-closed" : ""}`} data-state={lane.id} key={entry.id}>
-                      <div className="task-card-top"><span className="workflow-task-label"><Film size={12} /> طلب محتوى · {entry.tasks.length} مراحل</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل" : lane.label}</StatusBadge></div>
+                    const reportOwner = peopleById.get(focusTask?.owner_id ?? entry.tasks[0].owner_id)?.name ?? "عضو فريق";
+                    const reportDueAt = focusTask?.due_at ?? entry.tasks[0].due_at;
+                    const reportOpen = Boolean(linkedTaskId && entry.tasks.some((task) => task.id === linkedTaskId));
+                    return <details className={`task-card task-report-row content-workflow-group ${overdueTasks.length ? "task-overdue" : ""} ${completedTasks === entry.tasks.length ? "task-closed" : ""}`} data-state={lane.id} open={reportOpen || undefined} key={entry.id}>
+                      <summary className="task-report-summary">
+                        <span className="task-report-chevron"><ChevronDown aria-hidden="true" size={17} /></span>
+                        <span className="task-report-title"><small>طلب محتوى · {entry.tasks.length} مراحل</small><strong>{contentGroupTitle(entry.tasks[0])}</strong></span>
+                        <span className="task-report-owner"><small>المرحلة الحالية</small><strong>{reportOwner}</strong></span>
+                        <span className="task-report-deadline"><small>الموعد</small><bdi dir="ltr">{formatDateTime(reportDueAt)}</bdi></span>
+                        <span className="task-report-state"><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل" : lane.label}</StatusBadge><small>{completedTasks}/{entry.tasks.length}</small></span>
+                      </summary>
+                      <div className="task-report-expanded">
+                      <div className="task-card-top"><span className="workflow-task-label"><Film aria-hidden="true" size={12} /> تفاصيل طلب المحتوى</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل" : lane.label}</StatusBadge></div>
                       <div className="content-workflow-heading"><h3><a href={`/tasks/content/${entry.contentItemId}`}>{contentGroupTitle(entry.tasks[0])}</a></h3><a className="task-production-link" href={`/tasks/content/${entry.contentItemId}`}><FileText size={12} /> فتح ملف المحتوى</a></div>
                       <div className="content-workflow-progress content-workflow-overview">
                         <div className="content-workflow-count"><span>التقدم</span><strong>{completedTasks} من {entry.tasks.length}</strong><small>{progress}%</small></div>
@@ -1097,7 +1109,8 @@ export function TasksWorkspace() {
                         </section>;
                         })}</div>
                       </details>
-                    </article>;
+                      </div>
+                    </details>;
                   }
                   const task = entry.tasks[0];
                   const owner = peopleById.get(task.owner_id);
@@ -1137,7 +1150,15 @@ export function TasksWorkspace() {
                     && task.status !== "cancelled"
                     && task.status !== "backlog";
                   return (
-                    <article className={`task-card ${isOverdue(task, renderNow) ? "task-overdue" : ""} ${taskIsCompleted(task) ? "task-closed" : ""}`} data-priority={task.priority} data-status={task.status} data-direct-target={linkedTaskId === task.id || undefined} id={taskDomId(task.id)} tabIndex={linkedTaskId === task.id ? -1 : undefined} key={task.id}>
+                    <details className={`task-card task-report-row ${isOverdue(task, renderNow) ? "task-overdue" : ""} ${taskIsCompleted(task) ? "task-closed" : ""}`} data-priority={task.priority} data-status={task.status} data-direct-target={linkedTaskId === task.id || undefined} id={taskDomId(task.id)} open={linkedTaskId === task.id || undefined} tabIndex={linkedTaskId === task.id ? -1 : undefined} key={task.id}>
+                      <summary className="task-report-summary">
+                        <span className="task-report-chevron"><ChevronDown aria-hidden="true" size={17} /></span>
+                        <span className="task-report-title"><small>{taskReference(task.id)}{task.content_step ? ` · ${contentStepConfig[task.content_step].label}` : ""}</small><strong>{task.title}</strong></span>
+                        <span className="task-report-owner"><small>{personalView ? "طالب المهمة" : "المسؤول"}</small><strong>{personalView ? requester?.name ?? "عضو فريق" : owner?.name ?? "عضو فريق"}</strong></span>
+                        <span className="task-report-deadline"><small>الموعد</small><bdi dir="ltr">{formatDateTime(task.due_at)}</bdi></span>
+                        <span className="task-report-state"><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge></span>
+                      </summary>
+                      <div className="task-report-expanded">
                       <div className="task-card-top">{!personalView || ["high", "urgent"].includes(task.priority) ? <span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span> : null}<StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small className="task-reference">{taskReference(task.id)}</small></div>
                       {linkedTaskId === task.id ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
@@ -1163,7 +1184,8 @@ export function TasksWorkspace() {
                           </div> : <a className="task-open-link" href={taskDeepLink(task.id)}><FileText size={13} /> فتح تفاصيل المهمة</a>}
                           {canRequestRevisionShortcut ? <a className="task-revision-shortcut" href={`${taskDeepLink(task.id)}?action=revise#revision`}><MessageSquareText size={13} /> طلب تعديل</a> : null}
                         </>}
-                    </article>
+                      </div>
+                    </details>
                   );
                 })}
                 {!laneEntries.length ? <div className="column-empty"><span>—</span><p>لا توجد مهام</p></div> : null}

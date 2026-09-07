@@ -1792,7 +1792,10 @@ test("results workspace reports only evidence-backed internal metrics and labels
 });
 
 test("task work uses a compact financial-report rhythm instead of floating kanban cards", async () => {
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const [css, workspace] = await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+  ]);
   const operatingCss = css.slice(css.lastIndexOf("Market Whales OS v72"));
 
   assert.match(operatingCss, /\.kanban-board, \.task-today-board, \.task-archive-board \{[^}]*display: block[^}]*border: 1px solid var\(--line\)/);
@@ -1802,6 +1805,10 @@ test("task work uses a compact financial-report rhythm instead of floating kanba
   assert.match(operatingCss, /\.task-card:hover \{ background: rgba\(108, 133, 149, \.035\)/);
   assert.match(operatingCss, /\.task-card\.task-overdue \{[^}]*box-shadow: inset -3px 0 0 var\(--red-700\)/);
   assert.match(operatingCss, /\.task-card-actions \{[^}]*border-top: 1px solid var\(--line\)/);
+  assert.match(workspace, /task-report-row/);
+  assert.match(workspace, /task-report-summary/);
+  assert.match(operatingCss, /\.task-report-summary \{[^}]*display: grid/);
+  assert.match(operatingCss, /\.task-report-row\[open\]/);
 });
 
 test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {
@@ -2049,12 +2056,14 @@ test("CRM customer files save communication results atomically and create the ne
 });
 
 test("CRM customer directory keeps every source filter permission-scoped and links exact records", async () => {
-  const [migration, directoryMigration, queueMigration, directory, page, nav, crmContract, types, css] = await Promise.all([
+  const [migration, directoryMigration, queueMigration, directory, page, mainPage, operationsPage, nav, crmContract, types, css] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260823014440_crm_customer_directory_sources.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260831134800_crm_sales_directory_and_schedule.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260907140356_crm_follow_up_queues.sql", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmCustomerDirectory.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/crm/customers/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/crm/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/crm/operations/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmSectionNav.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/crm.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
@@ -2086,14 +2095,21 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.match(queueMigration, /grant execute on function public\.search_crm_contacts_v5[\s\S]*to authenticated/);
   assert.match(directory, /rpc\("search_crm_contacts_v5"/);
   assert.match(directory, /crm-queue-tabs/);
-  assert.match(directory, /const \[queueFilter, setQueueFilter\] = useState<QueueFilter>\("today"\)/);
+  assert.match(directory, /const \[queueFilter, setQueueFilter\] = useState<QueueFilter>\("all"\)/);
   assert.match(directory, /<SegmentedProgress/);
   assert.match(directory, /const PAGE_SIZE = 25/);
   assert.match(directory, /crmContactDeepLink\(contact\.id\)/);
   assert.match(directory, /taskDeepLink\(openTask\.id\)/);
   assert.match(directory, /crmSourceConfig\[contact\.source\]\.label/);
-  assert.match(page, /دليل موحّد لكل العملاء/);
-  assert.match(nav, /href: "\/crm\/customers"/);
+  assert.match(directory, /crm-row-expand/);
+  assert.match(directory, /aria-expanded=\{expanded\}/);
+  assert.match(directory, /crm-filter-dialog/);
+  assert.match(page, /<CrmCustomerDirectory \/>/);
+  assert.match(mainPage, /<CrmCustomerDirectory \/>/);
+  assert.doesNotMatch(mainPage, /<CrmWorkspace \/>/);
+  assert.match(operationsPage, /<CrmWorkspace \/>/);
+  assert.match(nav, /href: "\/crm"/);
+  assert.match(nav, /href: "\/crm\/operations"/);
   assert.match(css, /\.crm-directory-table-wrap \{[^}]+overflow: auto/);
 });
 
