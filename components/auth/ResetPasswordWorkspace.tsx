@@ -2,7 +2,7 @@
 
 import type { Session } from "@supabase/supabase-js";
 import { CheckCircle2, KeyRound, LoaderCircle, LockKeyhole } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import { Button } from "../ui/Button";
 
@@ -13,16 +13,42 @@ export function ResetPasswordWorkspace() {
   const [working, setWorking] = useState(false);
   const [complete, setComplete] = useState(false);
   const [error, setError] = useState<string | null>(configured ? null : "خدمة الحسابات غير متاحة مؤقتًا.");
+  const recoveryVerification = useRef<ReturnType<ReturnType<typeof getSupabaseBrowserClient>["auth"]["verifyOtp"]> | null>(null);
 
   useEffect(() => {
     if (!configured) return;
     const supabase = getSupabaseBrowserClient();
     let active = true;
-    void supabase.auth.getSession().then(({ data }) => {
+    const query = new URLSearchParams(window.location.search);
+    const tokenHash = query.get("token_hash")?.trim();
+    const type = query.get("type")?.trim();
+
+    const finish = (nextSession: Session | null, nextError: string | null = null) => {
       if (!active) return;
-      setSession(data.session);
+      setSession(nextSession);
+      setError(nextError);
       setReady(true);
-    });
+    };
+
+    if (tokenHash) {
+      if (type !== "recovery") {
+        finish(null, "رابط الاستعادة غير صالح. اطلب رسالة جديدة من صفحة الدخول.");
+      } else {
+        recoveryVerification.current ??= supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+        void recoveryVerification.current.then(({ data, error: verificationError }) => {
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete("token_hash");
+          cleanUrl.searchParams.delete("type");
+          window.history.replaceState({}, "", `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+          finish(
+            verificationError ? null : data.session,
+            verificationError ? "رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رسالة جديدة من صفحة الدخول." : null,
+          );
+        });
+      }
+    } else {
+      void supabase.auth.getSession().then(({ data }) => finish(data.session));
+    }
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!active) return;
       setSession(nextSession);

@@ -398,7 +398,8 @@ export function CrmWorkspace() {
   }, [searchInput]);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("add") === "1") setShowCreate(true);
+    if (new URLSearchParams(window.location.search).get("add") !== "1") return;
+    queueMicrotask(() => setShowCreate(true));
   }, []);
 
   useEffect(() => {

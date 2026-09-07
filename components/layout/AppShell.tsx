@@ -130,7 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [mobileNavOpen]);
 
-  const publicJoinRoute = pathname.startsWith("/join") || pathname.startsWith("/reset-password");
+  const publicJoinRoute = pathname.startsWith("/join") || pathname.startsWith("/reset-password") || pathname.startsWith("/auth/confirm");
   if (publicJoinRoute) return <div className="public-access-shell"><div className="public-access-container">{children}</div></div>;
   if (!ready && pathname === "/login") return <LoginWorkspace />;
   if (!ready) return <main className="secure-login-page secure-loading"><LoaderCircle className="spin" size={28} /><h1>جارٍ التحقق من الوصول</h1><p>لن نعرض مساحة العمل قبل اعتماد الحساب.</p></main>;

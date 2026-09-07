@@ -1867,7 +1867,7 @@ test("team onboarding is owner-controlled, email-bound, auditable, and sends app
 });
 
 test("workspace access is owner-approved, password-based, section-scoped, and enforced before rendering or direct API access", async () => {
-  const [migration, functionFence, passwordMigration, access, shell, navigation, login, join, tasks, loginFunction, accountAccess, resetPassword, teamCommands, teamWorkspace, config, types] = await Promise.all([
+  const [migration, functionFence, passwordMigration, access, shell, navigation, login, join, tasks, loginFunction, accountAccess, resetPassword, authConfirm, teamCommands, teamWorkspace, config, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822012237_invite_only_section_access.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260822014445_section_scope_function_writes.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260907170004_owner_approved_password_auth.sql", import.meta.url), "utf8"),
@@ -1880,6 +1880,7 @@ test("workspace access is owner-approved, password-based, section-scoped, and en
     readFile(new URL("../supabase/functions/request-access-link/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/account-access/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/auth/ResetPasswordWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/AuthConfirmWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/team-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/team/TeamWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
@@ -1943,7 +1944,12 @@ test("workspace access is owner-approved, password-based, section-scoped, and en
   assert.match(accountAccess, /consume_workspace_auth_rate_limit/);
   assert.doesNotMatch(accountAccess, /console\.(?:log|error)\([^\n]*,\s*password(?:\W|$)/i);
   assert.match(resetPassword, /auth\.updateUser\(\{ password \}\)/);
+  assert.match(resetPassword, /auth\.verifyOtp\(\{ token_hash: tokenHash, type: "recovery" \}\)/);
+  assert.match(resetPassword, /searchParams\.delete\("token_hash"\)/);
   assert.match(resetPassword, /complete_password_recovery/);
+  assert.match(authConfirm, /auth\.verifyOtp\(\{ token_hash: tokenHash, type: "magiclink" \}\)/);
+  assert.match(authConfirm, /window\.location\.replace\("\/tasks"\)/);
+  assert.match(shell, /pathname\.startsWith\("\/auth\/confirm"\)/);
   assert.match(teamCommands, /create_team_invitation_with_sections/);
   assert.match(teamCommands, /manage_team_membership_access/);
   assert.match(teamCommands, /approve_access_request/);

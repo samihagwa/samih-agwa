@@ -65,6 +65,14 @@ test("password recovery page remains public without exposing the workspace shell
   assert.doesNotMatch(html, /<aside class="sidebar"/);
 });
 
+test("email sign-in confirmation remains public without exposing the workspace shell", async () => {
+  const response = await render("/auth/confirm");
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(html, /جارٍ فتح مساحة عملك/);
+  assert.doesNotMatch(html, /<aside class="sidebar"/);
+});
+
 test("invitation activation remains public without exposing the workspace shell", async () => {
   const response = await render("/join");
   const html = await response.text();

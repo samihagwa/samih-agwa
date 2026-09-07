@@ -239,18 +239,6 @@ export default {
     if (requestedConversationId && requestedConversationId !== conversationId) {
       return jsonResponse({ message: "المحادثة المطلوبة لا تخص هذا الحساب." }, 403);
     }
-    const { data: recentMessageRows } = await context.supabaseAdmin.from("assistant_messages")
-      .select("role, body")
-      .eq("conversation_id", conversationId)
-      .eq("user_id", actorId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(10);
-    const recentConversation: ConversationMessage[] = (recentMessageRows ?? []).reverse()
-      .filter((message) => message.role === "user" || message.role === "assistant")
-      .map((message) => ({ role: message.role as "user" | "assistant", body: text(message.body) }));
-    const memorySummary = text(conversation?.memory_summary);
-
     const workspaceContext: Record<string, unknown> = {
       generated_at: new Date().toISOString(), timezone: "Africa/Cairo",
       user: { id: actorId, role, leadership, allowed_sections: role === "owner" ? ["all"] : sections },
