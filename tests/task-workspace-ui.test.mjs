@@ -83,8 +83,9 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.match(detail, /contentSourceDeepLink\(workspace\.contentRequest\.id, workspace\.contentRequest\.intake_source_url\)/);
   assert.match(deepLinks, /workspaceContentHosts/);
   assert.match(deepLinks, /return contentDeepLink\(contentId\)/);
-  assert.match(css, /\.task-card \{[^}]*border: 2px solid #adc4c1/);
-  assert.match(css, /\.content-workflow-subtasks > section \{[^}]*border: 2px solid var\(--line\)/);
+  const operatingCss = css.slice(css.lastIndexOf("Market Whales OS v72"));
+  assert.match(operatingCss, /\.task-card \{[^}]*border: 0[^}]*border-bottom: 1px solid var\(--line\)/);
+  assert.match(operatingCss, /\.content-workflow-subtasks > section \{[^}]*border-radius: 0/);
 });
 
 test("script work filters separate ready-to-publish and keep finished work out of the active queue", async () => {

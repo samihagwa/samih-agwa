@@ -2,29 +2,23 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("shared navigation exposes one permission-aware content area while old routes remain valid", async () => {
-  const [navigation, contentNavigation, shell, access] = await Promise.all([
+test("shared navigation exposes grouped permission-aware operating areas while every route remains valid", async () => {
+  const [navigation, shell, access] = await Promise.all([
     readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/layout/ContentSectionNav.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/access.ts", import.meta.url), "utf8"),
   ]);
-  for (const route of ["/tasks", "/content", "/scripts", "/publishing", "/brand", "/crm", "/analytics", "/chat", "/team", "/settings"]) {
+  for (const route of ["/tasks", "/content", "/scripts", "/planning", "/campaigns", "/publishing", "/brand", "/crm", "/analytics", "/chat", "/team", "/settings"]) {
     assert.match(navigation, new RegExp(`href(?::|=)\\s*["']${route}`));
   }
-  assert.doesNotMatch(navigation, /id:\s*["']planning["']/);
-  assert.doesNotMatch(navigation, /\{\s*id:\s*["']campaigns["']/);
-  assert.doesNotMatch(navigation, /label:\s*["']الحملات والإطلاقات["']/);
+  for (const group of ["التشغيل", "إدارة المحتوى", "العملاء والقياس", "الفريق والمعرفة", "الإدارة"]) {
+    assert.match(navigation, new RegExp(`label: ["']${group}["']`));
+  }
   assert.match(navigation, /label:\s*["']طلبات المحتوى["']/);
-  assert.match(navigation, /allowed\.has\("content"\) \|\| allowed\.has\("planning"\) \|\| allowed\.has\("campaigns"\)/);
-  assert.match(navigation, /campaigns:\s*\{ href:\s*["']\/campaigns["'] \}/);
-  assert.match(contentNavigation, /href:\s*["']\/planning["']/);
-  assert.match(contentNavigation, /href:\s*["']\/content["']/);
-  assert.match(contentNavigation, /id:\s*["']campaigns["'], href:\s*["']\/campaigns["']/);
-  assert.match(contentNavigation, /الإطلاقات — للمدير/);
-  assert.match(contentNavigation, /visibleViews = views\.filter\(\(\{ id \}\) => allowed\.has\(id\)\)/);
-  assert.match(shell, /<ContentSectionNav allowedSections=\{allowedSections\}/);
-  assert.match(shell, /requestedSection === "campaigns"/);
+  assert.match(navigation, /visibleItems = group\.items\.filter\(\(\{ id \}\) => allowed\.has\(id\)\)/);
+  assert.doesNotMatch(shell, /ContentSectionNav/);
+  assert.match(shell, /<header className="topbar">/);
+  assert.match(shell, /<SidebarNav allowedSections=\{allowedSections\}/);
   assert.match(access, /\{ id: "planning", label: "الخطة وتقويم المحتوى", href: "\/planning" \}/);
   assert.match(access, /\{ id: "content", label: "طلبات التنفيذ", href: "\/content" \}/);
   assert.match(access, /\{ id: "campaigns", label: "الحملات والإطلاقات", href: "\/campaigns" \}/);
@@ -727,7 +721,7 @@ test("quarterly planning, readiness, and deadline reminders are database-governe
   assert.match(dashboard, /بوابة حقيقية من البيانات/);
   assert.match(dashboard, /قرار إدخال الفريق يعتمد على البيانات أعلاه/);
   assert.match(dashboard, /تكامل Exness ليس شرطًا/);
-  assert.doesNotMatch(navigation, /id: "planning"/);
+  assert.match(navigation, /id: "planning", href: "\/planning"/);
   assert.match(contentNavigation, /href: "\/planning"/);
   assert.match(presence, /\["\/planning", "planning"\]/);
   assert.match(packageJson, /"lint": "eslint/);
@@ -1797,18 +1791,17 @@ test("results workspace reports only evidence-backed internal metrics and labels
   assert.match(css, /\.analytics-kpi-grid, \.analytics-source-status > div:last-child \{ grid-template-columns: 1fr;/);
 });
 
-test("task cards remain compact and visually separated without changing the design system", async () => {
+test("task work uses a compact financial-report rhythm instead of floating kanban cards", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const operatingCss = css.slice(css.lastIndexOf("Market Whales OS v72"));
 
-  assert.match(css, /\.kanban-stack \{[^}]*gap: 11px/);
-  assert.match(css, /\.task-card \{[^}]*border: 2px solid #adc4c1[^}]*box-shadow: 0 5px 15px/);
-  assert.match(css, /\.task-card-top \{[^}]*border-bottom: 1px solid var\(--line\)/);
-  assert.match(css, /\.kanban-stack > \.task-card:nth-child\(even\) \{ background: #f8fbfa/);
-  assert.match(css, /\.task-card h3 \{[^}]*background: #eef6f4[^}]*font-weight: 950/);
-  assert.match(css, /\.task-card::before \{[^}]*inset-inline-start: 0/);
-  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(170px, 1fr\)\)/);
-  assert.match(css, /\.task-today-board \.kanban-stack, \.task-archive-board \.kanban-stack \{ grid-template-columns: repeat\(2/);
-  assert.match(css, /\.task-card\.task-closed h3 \{[^}]*text-decoration: line-through/);
+  assert.match(operatingCss, /\.kanban-board, \.task-today-board, \.task-archive-board \{[^}]*display: block[^}]*border: 1px solid var\(--line\)/);
+  assert.match(operatingCss, /\.kanban-column[^}]*\{[^}]*display: block[^}]*border-radius: 0/);
+  assert.match(operatingCss, /\.kanban-stack[^}]*\{ display: block/);
+  assert.match(operatingCss, /\.task-card \{[^}]*border: 0[^}]*border-bottom: 1px solid var\(--line\)[^}]*border-radius: 0[^}]*box-shadow: none/);
+  assert.match(operatingCss, /\.task-card:hover \{ background: rgba\(108, 133, 149, \.035\)/);
+  assert.match(operatingCss, /\.task-card\.task-overdue \{[^}]*box-shadow: inset -3px 0 0 var\(--red-700\)/);
+  assert.match(operatingCss, /\.task-card-actions \{[^}]*border-top: 1px solid var\(--line\)/);
 });
 
 test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {
@@ -1884,7 +1877,7 @@ test("workspace is invite-only, section-scoped, and enforced before rendering or
   assert.match(shell, /\.from\("memberships"\)/);
   assert.match(shell, /\.select\("organization_id, role, status, allowed_sections, onboarding_acknowledgements, onboarding_completed_at"\)/);
   assert.match(shell, /if \(!session\) return <LoginWorkspace/);
-  assert.match(shell, /\{sectionAllowed\s*\?\s*contentSectionOpen/);
+  assert.match(shell, /<div className="page-container">\{sectionAllowed\s*\?\s*children/);
   assert.match(shell, /<SidebarNav allowedSections=\{allowedSections\}/);
   assert.match(navigation, /allowedSections: WorkspaceSection\[\]/);
   assert.match(access, /membership\.role === "owner"/);

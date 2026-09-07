@@ -19,7 +19,6 @@ import { NotificationCenter } from "../auth/NotificationCenter";
 import { Button } from "../ui/Button";
 import { WorkspaceAssistant } from "../assistant/WorkspaceAssistant";
 import { MemberOnboardingGate } from "../team/MemberOnboardingGate";
-import { ContentSectionNav } from "./ContentSectionNav";
 import { SidebarNav } from "./SidebarNav";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -134,37 +133,39 @@ export function AppShell({ children }: { children: ReactNode }) {
   const requestedSection = sectionForPathname(pathname);
   const allowedSections = membershipSections(membership);
   const sectionAllowed = canAccessWorkspaceSection(membership, requestedSection);
-  const contentSectionOpen = requestedSection === "planning" || requestedSection === "content" || requestedSection === "campaigns";
-
   return (
     <div className="app-shell">
       {sectionAllowed ? <PresenceReporter /> : null}
       <button className={`mobile-nav-backdrop ${mobileNavOpen ? "visible" : ""}`} type="button" aria-label="إغلاق قائمة الأقسام" tabIndex={mobileNavOpen ? 0 : -1} onClick={() => setMobileNavOpen(false)} />
-      <aside className={`sidebar ${mobileNavOpen ? "mobile-open" : ""}`} aria-label="قائمة أقسام المنصة">
-        <div className="brand-lockup">
+      <header className="topbar">
+        <div className="brand-lockup" aria-label="Market Whales Operating System">
           <span className="brand-mark" aria-hidden="true">MW</span>
           <span><strong>Market Whales</strong><small>Operating System</small></span>
+        </div>
+        <div className="topbar-start">
+          <button className="mobile-nav-trigger" type="button" aria-label="فتح قائمة الأقسام" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(true)}><Menu size={21} /><span>الأقسام</span></button>
+          <div className="topbar-status"><ShieldCheck size={17} /><span>مساحة تشغيل الفريق</span></div>
+        </div>
+        <div className="topbar-actions">
+          <NotificationCenter />
+          <SessionChip />
+        </div>
+      </header>
+      <aside className={`sidebar ${mobileNavOpen ? "mobile-open" : ""}`} aria-label="قائمة أقسام المنصة">
+        <div className="sidebar-mobile-header">
+          <strong>أقسام المنصة</strong>
           <button className="mobile-nav-close" type="button" aria-label="إغلاق القائمة" onClick={() => setMobileNavOpen(false)}><X size={20} /></button>
         </div>
         <SidebarNav allowedSections={allowedSections} onNavigate={() => setMobileNavOpen(false)} />
         <div className="sidebar-note">
           <span className="signal-dot" aria-hidden="true" />
-          <div><strong>عضوية بالدعوة فقط</strong><small>لا إرسال أو تفعيل تلقائي لأي عضو</small></div>
+          <div><strong>مساحة خاصة</strong><small>الوصول حسب دور وصلاحيات كل عضو</small></div>
         </div>
       </aside>
 
       <div className="workspace">
-        <header className="topbar">
-          <div className="topbar-start"><button className="mobile-nav-trigger" type="button" aria-label="فتح قائمة الأقسام" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(true)}><Menu size={21} /><span>الأقسام</span></button><div className="topbar-status"><ShieldCheck size={17} /><span>وصول خاص محكوم بالصلاحيات</span></div></div>
-          <div className="topbar-actions">
-            <NotificationCenter />
-            <SessionChip />
-          </div>
-        </header>
         <div className="page-container">{sectionAllowed
-          ? contentSectionOpen
-            ? <div className="page-stack"><ContentSectionNav allowedSections={allowedSections} />{children}</div>
-            : children
+          ? children
           : <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><p className="overline">خارج صلاحيات حسابك</p><h2>هذا القسم غير متاح لك</h2><p>مالك المنصة يحدد الأقسام لكل عضو. لو تحتاج هذا القسم اطلب تعديل صلاحيتك.</p></div><Button href={firstAllowedSectionHref(membership)} variant="secondary">العودة لمساحة عملي</Button></section>}</div>
       </div>
       <WorkspaceAssistant />
