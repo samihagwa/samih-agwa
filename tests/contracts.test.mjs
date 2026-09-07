@@ -1407,9 +1407,9 @@ test("task and content workspaces default to focused current work with clear Ara
     readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
-  assert.match(packageJson, /@fontsource-variable\/noto-sans-arabic/);
-  assert.match(layout, /noto-sans-arabic\/wght\.css/);
-  assert.match(css, /Noto Sans Arabic Variable/);
+  assert.match(packageJson, /@fontsource\/ibm-plex-sans-arabic/);
+  assert.match(layout, /ibm-plex-sans-arabic\/400\.css/);
+  assert.match(css, /IBM Plex Sans Arabic/);
   assert.match(taskWorkspace, /شغل مطلوب تنفيذه/);
   assert.match(taskWorkspace, /filter.*active/s);
   assert.match(taskWorkspace, /متأخرة منذ/);
@@ -2045,7 +2045,7 @@ test("CRM customer files save communication results atomically and create the ne
   assert.match(edge, /action === "save_sales_profile"/);
   assert.match(edge, /action === "add_conversation_link"/);
   assert.match(workspace, /expected_version: data\.contact\.version/);
-  assert.match(workspace, /حفظ النتيجة والمتابعة/);
+  assert.match(workspace, /تم حفظ النتيجة وإنشاء متابعة واحدة/);
   assert.match(workspace, /taskDeepLink\(task\.id\)/);
   assert.match(workspace, /ملخص السيلز/);
   assert.match(listWorkspace, /expected_version: contact\.version/);
@@ -2056,9 +2056,10 @@ test("CRM customer files save communication results atomically and create the ne
 });
 
 test("CRM customer directory keeps every source filter permission-scoped and links exact records", async () => {
-  const [migration, directoryMigration, directory, page, nav, crmContract, types, css] = await Promise.all([
+  const [migration, directoryMigration, queueMigration, directory, page, nav, crmContract, types, css] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260823014440_crm_customer_directory_sources.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260831134800_crm_sales_directory_and_schedule.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260907140356_crm_follow_up_queues.sql", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmCustomerDirectory.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/crm/customers/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmSectionNav.tsx", import.meta.url), "utf8"),
@@ -2083,7 +2084,17 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.match(directoryMigration, /target_interest is null or contact\.interest = target_interest/);
   assert.match(directoryMigration, /result_limit is null or result_offset is null/);
   assert.match(directoryMigration, /grant execute on function public\.search_crm_contacts_v4[\s\S]*to authenticated/);
-  assert.match(directory, /rpc\("search_crm_contacts_v4"/);
+  assert.match(queueMigration, /function public\.search_crm_contacts_v5/);
+  for (const queue of ["new", "today", "overdue", "waiting", "interested", "converted", "lost"]) {
+    assert.match(queueMigration, new RegExp(`target_queue = '${queue}'`));
+  }
+  assert.match(queueMigration, /security invoker/);
+  assert.match(queueMigration, /revoke all on function public\.search_crm_contacts_v5[\s\S]*from public, anon/);
+  assert.match(queueMigration, /grant execute on function public\.search_crm_contacts_v5[\s\S]*to authenticated/);
+  assert.match(directory, /rpc\("search_crm_contacts_v5"/);
+  assert.match(directory, /crm-queue-tabs/);
+  assert.match(directory, /const \[queueFilter, setQueueFilter\] = useState<QueueFilter>\("today"\)/);
+  assert.match(directory, /<SegmentedProgress/);
   assert.match(directory, /const PAGE_SIZE = 25/);
   assert.match(directory, /crmContactDeepLink\(contact\.id\)/);
   assert.match(directory, /taskDeepLink\(openTask\.id\)/);
@@ -2091,6 +2102,29 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.match(page, /دليل موحّد لكل العملاء/);
   assert.match(nav, /href: "\/crm\/customers"/);
   assert.match(css, /\.crm-directory-table-wrap \{[^}]+overflow: auto/);
+});
+
+test("operating UI keeps progress, calm finance styling, and outcome-driven CRM follow-up", async () => {
+  const [layout, css, progress, tasks, customer, button] = await Promise.all([
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../components/ui/SegmentedProgress.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmCustomerWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/ui/Button.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(layout, /@fontsource\/ibm-plex-sans-arabic\/400\.css/);
+  assert.match(css, /--yellow-500: #ffd600/);
+  assert.match(css, /font-family: "IBM Plex Sans Arabic"/);
+  assert.match(progress, /role="progressbar"/);
+  assert.match(tasks, /content-workflow-overview/);
+  assert.match(tasks, /content-workflow-details/);
+  assert.match(customer, /بعد ساعة/);
+  assert.match(customer, /بعد ساعتين/);
+  assert.match(customer, /هل يحتاج العميل إلى متابعة أخرى؟/);
+  assert.match(customer, /action: "record_activity"/);
+  assert.match(button, /danger/);
 });
 
 test("production reset starts clean while preserving scripts, customers, publishing, and team access", async () => {

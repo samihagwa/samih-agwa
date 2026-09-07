@@ -5910,6 +5910,25 @@ export type Database = {
           total_count: number
         }[]
       }
+      search_crm_contacts_v5: {
+        Args: {
+          result_limit: number
+          result_offset: number
+          search_query: string
+          target_interest: Database["public"]["Enums"]["crm_interest"] | null
+          target_organization_id: string
+          target_owner_id: string | null
+          target_queue: string
+          target_scope: string
+          target_source: Database["public"]["Enums"]["crm_source"] | null
+          target_stage: Database["public"]["Enums"]["crm_lead_stage"] | null
+          target_view: string
+        }
+        Returns: {
+          contact_id: string
+          total_count: number
+        }[]
+      }
       send_team_chat_message_v2: {
         Args: {
           message_body: string

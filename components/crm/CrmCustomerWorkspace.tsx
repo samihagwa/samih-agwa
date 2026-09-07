@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  allowedCrmTransitions, crmActivityKindConfig, crmConversationChannelConfig,
+  crmActivityKindConfig, crmConversationChannelConfig,
   crmIdentityKindConfig, crmInterestConfig, crmLeadStageConfig, crmSourceConfig,
   type CrmActivityKind, type CrmConversationChannel, type CrmIdentityKind,
   type CrmLeadStage,
@@ -20,6 +20,7 @@ import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-err
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { canManageTasks, taskStatusConfig } from "../../lib/tasks";
 import { Button } from "../ui/Button";
+import { SegmentedProgress, type SegmentedProgressStep } from "../ui/SegmentedProgress";
 import { StatusBadge } from "../ui/StatusBadge";
 
 type Contact = Tables<"crm_contacts">;
@@ -41,6 +42,36 @@ type CustomerData = {
   salesProfile: SalesProfile | null;
 };
 type LeadTemperature = "cold" | "warm" | "hot";
+type ContactOutcome = "no_answer" | "call_later" | "interested" | "qualified" | "converted" | "not_interested" | "invalid_data";
+type FollowUpPreset = "hour" | "two_hours" | "tomorrow" | "two_days" | "next_week" | "custom";
+
+const contactOutcomeConfig: Record<ContactOutcome, { label: string; stage: CrmLeadStage; followUp: boolean }> = {
+  no_answer: { label: "لم يتم الرد", stage: "follow_up", followUp: true },
+  call_later: { label: "طلب التواصل لاحقًا", stage: "follow_up", followUp: true },
+  interested: { label: "مهتم", stage: "follow_up", followUp: true },
+  qualified: { label: "مؤهل للشراء", stage: "qualified", followUp: true },
+  converted: { label: "تم البيع / تقديم الخدمة", stage: "won", followUp: false },
+  not_interested: { label: "غير مهتم", stage: "lost", followUp: false },
+  invalid_data: { label: "بيانات غير صحيحة", stage: "do_not_contact", followUp: false },
+};
+
+const lossReasonConfig = {
+  not_interested: "غير مهتم حاليًا",
+  price: "السعر",
+  no_response: "لا يرد بعد عدة محاولات",
+  mismatch: "الخدمة لا تناسب احتياجه",
+  competitor: "اختار منافسًا",
+  invalid_data: "بيانات التواصل غير صحيحة",
+  other: "سبب آخر",
+} as const;
+
+const customerProgressStages: Array<{ id: CrmLeadStage; label: string }> = [
+  { id: "new", label: "جديد" },
+  { id: "contacted", label: "تواصل" },
+  { id: "follow_up", label: "مهتم" },
+  { id: "qualified", label: "مؤهل" },
+  { id: "won", label: "تحويل" },
+];
 
 const temperatureConfig: Record<LeadTemperature, { label: string; tone: "neutral" | "warning" | "success" }> = {
   cold: { label: "اهتمام منخفض", tone: "neutral" },
@@ -60,6 +91,16 @@ function formatDate(value: string) {
 function toLocalDateTimeInput(date: Date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function followUpDate(preset: Exclude<FollowUpPreset, "custom">) {
+  const date = new Date();
+  if (preset === "hour") date.setHours(date.getHours() + 1);
+  if (preset === "two_hours") date.setHours(date.getHours() + 2);
+  if (preset === "tomorrow") date.setDate(date.getDate() + 1);
+  if (preset === "two_days") date.setDate(date.getDate() + 2);
+  if (preset === "next_week") date.setDate(date.getDate() + 7);
+  return toLocalDateTimeInput(date);
 }
 
 function futureDateIso(value: string) {
@@ -92,11 +133,13 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
   const [working, setWorking] = useState<"activity" | "profile" | "identity" | "link" | null>(null);
   const [error, setError] = useState<string | null>(configured ? null : "لم يتم إعداد اتصال Supabase لهذه النسخة.");
   const [notice, setNotice] = useState<string | null>(null);
-  const [activityStage, setActivityStage] = useState<CrmLeadStage>("new");
+  const [contactOutcome, setContactOutcome] = useState<ContactOutcome>("no_answer");
+  const [needsFollowUp, setNeedsFollowUp] = useState(true);
+  const [followUpPreset, setFollowUpPreset] = useState<FollowUpPreset>("tomorrow");
+  const [nextFollowUpAt, setNextFollowUpAt] = useState(() => followUpDate("tomorrow"));
   const [showIdentityForm, setShowIdentityForm] = useState(false);
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [renderNow] = useState(() => Date.now());
-  const [defaultFollowUp] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 24 * 60 * 60 * 1000)));
 
   const clearWorkspace = useCallback(() => { setWorkspace(null); setData(null); }, []);
   const clearTransientState = useCallback(() => { setError(null); setNotice(null); }, []);
@@ -123,7 +166,10 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
       tasks: tasksResult.data ?? [],
       salesProfile: profileResult.data,
     });
-    setActivityStage(contactResult.data.stage);
+    const suggestedFollowUp = contactResult.data.next_follow_up_at
+      ? toLocalDateTimeInput(new Date(contactResult.data.next_follow_up_at))
+      : followUpDate("tomorrow");
+    setNextFollowUpAt(suggestedFollowUp);
   }, [contactId]);
 
   const loadWorkspace = useCallback(async (activeSession: Session) => {
@@ -201,19 +247,30 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
     if (!data) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const activeStage = crmLeadStageConfig[activityStage].active;
-    const nextFollowUp = activeStage ? futureDateIso(formText(form, "next_follow_up_at")) : null;
-    if (activeStage && !nextFollowUp) { setError("حدد موعد المتابعة التالية في المستقبل."); return; }
+    const outcome = contactOutcomeConfig[contactOutcome];
+    const nextStage: CrmLeadStage = needsFollowUp ? outcome.stage : outcome.stage === "won" || outcome.stage === "do_not_contact" ? outcome.stage : "lost";
+    const nextFollowUp = needsFollowUp ? futureDateIso(nextFollowUpAt) : null;
+    const lossReasonKey = formText(form, "loss_reason") as keyof typeof lossReasonConfig;
+    const note = formText(form, "summary");
+    if (needsFollowUp && !nextFollowUp) { setError("حدد موعد المتابعة التالية في المستقبل."); return; }
+    if (!needsFollowUp && nextStage === "lost" && !lossReasonConfig[lossReasonKey]) { setError("اختر سبب إغلاق العميل كغير محوّل."); return; }
+    const summary = [contactOutcomeConfig[contactOutcome].label, lossReasonConfig[lossReasonKey], note].filter(Boolean).join(" — ");
     const result = await invokeCrm({
       action: "record_activity",
       contact_id: data.contact.id,
       expected_version: data.contact.version,
       kind: formText(form, "kind"),
-      next_stage: activityStage,
-      summary: formText(form, "summary"),
+      next_stage: nextStage,
+      summary,
       next_follow_up_at: nextFollowUp,
-    }, activeStage ? "تم حفظ النتيجة، إغلاق المتابعة السابقة، وإنشاء مهمة المتابعة الجديدة." : "تم حفظ النتيجة وإغلاق المتابعة المفتوحة.", "activity");
-    if (result) formElement.reset();
+    }, needsFollowUp ? "تم حفظ النتيجة وإنشاء متابعة واحدة في الموعد الجديد." : nextStage === "won" ? "تم تحويل العميل وإغلاق المتابعة المفتوحة." : "تم نقل العميل إلى غير المحولين مع حفظ السبب.", "activity");
+    if (result) {
+      formElement.reset();
+      setContactOutcome("no_answer");
+      setNeedsFollowUp(true);
+      setFollowUpPreset("tomorrow");
+      setNextFollowUpAt(followUpDate("tomorrow"));
+    }
   }
 
   async function saveSalesProfile(event: FormEvent<HTMLFormElement>) {
@@ -266,13 +323,21 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
 
   const { contact, identities, activities, conversationLinks, tasks, salesProfile } = data;
   const canAct = canManageTasks(workspace.membership.role) || contact.owner_id === session.user.id;
-  const nextStages = [contact.stage, ...allowedCrmTransitions[contact.stage].filter((stage) => stage !== contact.stage)];
+  const canRecordResult = contact.stage !== "do_not_contact" && contact.stage !== "won";
   const openTask = tasks.find((task) => task.status !== "done");
   const overdue = Boolean(contact.next_follow_up_at && crmLeadStageConfig[contact.stage].active && new Date(contact.next_follow_up_at).getTime() < renderNow);
   const directIdentity = identities.find((identity) => identity.is_primary && identityHref(identity)) ?? identities.find((identity) => identityHref(identity));
   const directLink = conversationLinks.find((link) => link.is_primary) ?? conversationLinks[0];
   const directHref = directLink?.url ?? (directIdentity ? identityHref(directIdentity) : null);
   const remainingKinds = (["phone", "email", "telegram", "tradingview"] as CrmIdentityKind[]).filter((kind) => !identities.some((identity) => identity.kind === kind));
+  const customerStageIndex = customerProgressStages.findIndex((stage) => stage.id === contact.stage);
+  const customerProgress: SegmentedProgressStep[] = customerProgressStages.map((stage, index) => ({
+    id: stage.id,
+    label: stage.label,
+    state: contact.stage === "lost" || contact.stage === "do_not_contact"
+      ? "upcoming"
+      : index < customerStageIndex ? "done" : index === customerStageIndex ? "current" : "upcoming",
+  }));
   return <section className="crm-customer-workspace">
     <div className="crm-customer-toolbar">
       <Button href="/crm" variant="ghost"><ArrowRight size={15} /> العودة للعملاء</Button>
@@ -282,6 +347,7 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
     <section className="panel crm-customer-header">
       <div><p className="overline">{crmSourceConfig[contact.source].label} · {crmInterestConfig[contact.interest].label}</p><h2>{contact.full_name}</h2><p>ملف العميل يجمع التواصل والمتابعة والمهام في مكان واحد.</p></div>
       <div className="crm-customer-header-status"><StatusBadge tone={crmLeadStageConfig[contact.stage].tone}>{crmLeadStageConfig[contact.stage].label}</StatusBadge><span><CircleUserRound size={14} /> {peopleById.get(contact.owner_id)?.name ?? "عضو فريق"}</span></div>
+      <SegmentedProgress steps={customerProgress} ariaLabel={`مستوى تقدم ${contact.full_name}`} />
     </section>
 
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
@@ -313,14 +379,17 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
           {showLinkForm ? <form className="crm-activity-form crm-inline-tool" onSubmit={(event) => void addConversationLink(event)}><label><span>المنصة</span><select name="channel">{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select></label><label><span>لينك المحادثة</span><input name="url" type="url" dir="ltr" required placeholder="https://..." /></label><label><span>اسم اختياري</span><input name="label" maxLength={80} /></label><label className="crm-checkbox"><input name="make_primary" type="checkbox" /><span>لينك أساسي</span></label><Button type="submit" disabled={working !== null}>{working === "link" ? <LoaderCircle className="spin" size={14} /> : <Save size={14} />} حفظ</Button></form> : null}
         </section>
 
-        {canAct && nextStages.length ? <section className="panel crm-customer-section crm-result-section">
-          <div className="section-heading compact"><div><p className="overline">نتيجة التواصل</p><h2>سجّل ما حدث وحدد المتابعة</h2><p>الحفظ يقفل المهمة الحالية ويُنشئ التالية في نفس العملية.</p></div><MessageSquareText size={19} /></div>
-          <form className="crm-customer-result-form" onSubmit={(event) => void recordActivity(event)}>
+        {canAct && canRecordResult ? <section className="panel crm-customer-section crm-result-section">
+          <div className="section-heading compact"><div><p className="overline">نتيجة التواصل</p><h2>ماذا حدث مع العميل؟</h2><p>اختيار واحد ثم موعد واحد. الحفظ يغلق المتابعة الحالية وينشئ التالية معًا.</p></div><MessageSquareText size={19} /></div>
+          <form className="crm-customer-result-form crm-follow-up-flow" onSubmit={(event) => void recordActivity(event)}>
+            <fieldset className="wide crm-outcome-fieldset"><legend>1 — اختر النتيجة</legend><div className="crm-outcome-grid">{(Object.keys(contactOutcomeConfig) as ContactOutcome[]).map((outcome) => <button type="button" className={contactOutcome === outcome ? "active" : ""} aria-pressed={contactOutcome === outcome} onClick={() => { setContactOutcome(outcome); setNeedsFollowUp(contactOutcomeConfig[outcome].followUp); }} key={outcome}>{contactOutcomeConfig[outcome].label}</button>)}</div></fieldset>
             <label><span>طريقة التواصل</span><select name="kind" defaultValue="message">{(Object.keys(crmActivityKindConfig) as Exclude<CrmActivityKind, "created">[]).map((kind) => <option value={kind} key={kind}>{crmActivityKindConfig[kind].label}</option>)}</select></label>
-            <label><span>المرحلة بعد التواصل</span><select value={activityStage} onChange={(event) => setActivityStage(event.target.value as CrmLeadStage)}>{nextStages.map((stage) => <option value={stage} key={stage}>{crmLeadStageConfig[stage].label}</option>)}</select></label>
-            <label className="wide"><span>{["lost", "do_not_contact"].includes(activityStage) ? "سبب الإغلاق" : "نتيجة التواصل والخطوة المتفق عليها"}</span><textarea name="summary" required minLength={3} maxLength={["lost", "do_not_contact"].includes(activityStage) ? 1000 : 4000} rows={4} placeholder="اكتب ما حدث بوضوح عشان أي عضو يفتح الملف يفهم آخر موقف." /></label>
-            {crmLeadStageConfig[activityStage].active ? <label><span>موعد المتابعة التالية</span><input name="next_follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /></label> : <p className="crm-close-note">لن تُنشأ مهمة جديدة لهذه المرحلة.</p>}
-            <div className="form-actions wide"><Button type="submit" disabled={working !== null}>{working === "activity" ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ النتيجة والمتابعة</Button></div>
+            <label className="wide"><span>ملاحظة قصيرة</span><textarea name="summary" required minLength={3} maxLength={1000} rows={3} placeholder="اكتب الاتفاق أو الاعتراض أو سبب عدم إتمام التواصل…" /></label>
+            {contactOutcome !== "converted" && contactOutcome !== "invalid_data" ? <fieldset className="wide crm-follow-up-decision"><legend>2 — هل يحتاج العميل إلى متابعة أخرى؟</legend><div><button type="button" className={needsFollowUp ? "active" : ""} aria-pressed={needsFollowUp} onClick={() => setNeedsFollowUp(true)}>نعم، حدّد الموعد</button><button type="button" className={!needsFollowUp ? "active danger" : ""} aria-pressed={!needsFollowUp} onClick={() => setNeedsFollowUp(false)}>لا، إغلاق كغير محوّل</button></div></fieldset> : null}
+            {needsFollowUp ? <div className="wide crm-follow-up-schedule"><span>3 — موعد المتابعة التالية</span><div className="crm-follow-up-presets">{([
+              ["hour", "بعد ساعة"], ["two_hours", "بعد ساعتين"], ["tomorrow", "غدًا"], ["two_days", "بعد يومين"], ["next_week", "الأسبوع القادم"], ["custom", "تاريخ ووقت"],
+            ] as Array<[FollowUpPreset, string]>).map(([preset, label]) => <button type="button" className={followUpPreset === preset ? "active" : ""} onClick={() => { setFollowUpPreset(preset); if (preset !== "custom") setNextFollowUpAt(followUpDate(preset)); }} key={preset}>{label}</button>)}</div><label><span>التاريخ والوقت</span><input name="next_follow_up_at" type="datetime-local" value={nextFollowUpAt} required onChange={(event) => { setFollowUpPreset("custom"); setNextFollowUpAt(event.target.value); }} /></label></div> : contactOutcome === "converted" ? <div className="wide crm-conversion-note"><CheckCircle2 size={18} /><div><strong>سيُسجّل العميل كمحوّل</strong><small>ستُغلق المتابعة الحالية ولن تُنشأ مهمة جديدة.</small></div></div> : <div className="wide crm-loss-warning" role="alert"><AlertTriangle size={19} /><div><strong>سيُنقل العميل إلى قائمة «غير المحولين»</strong><p>سيؤثر ذلك على معدل التحويل، وسيظل الملف محفوظًا ويمكن للإدارة إعادة فتحه.</p><label><span>سبب عدم التحويل</span><select name="loss_reason" required defaultValue=""><option value="" disabled>اختر السبب</option>{Object.entries(lossReasonConfig).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><button className="text-button" type="button" onClick={() => { setNeedsFollowUp(true); setFollowUpPreset("tomorrow"); setNextFollowUpAt(followUpDate("tomorrow")); }}>جدولة محاولة أخيرة بدل الإغلاق</button></div></div>}
+            <div className="form-actions wide"><Button type="submit" variant={!needsFollowUp && contactOutcome !== "converted" ? "danger" : "primary"} disabled={working !== null}>{working === "activity" ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} {needsFollowUp ? "حفظ وإنشاء المتابعة" : contactOutcome === "converted" ? "تأكيد التحويل" : "إغلاق كغير محوّل"}</Button></div>
           </form>
         </section> : null}
 

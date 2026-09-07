@@ -13,10 +13,10 @@ type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 export const crmLeadStageConfig: Record<CrmLeadStage, { label: string; shortLabel: string; tone: Tone; order: number; active: boolean }> = {
   new: { label: "عميل جديد", shortLabel: "جديد", tone: "info", order: 1, active: true },
   contacted: { label: "تم التواصل", shortLabel: "تواصل", tone: "info", order: 2, active: true },
-  qualified: { label: "مؤهل للشراء", shortLabel: "مؤهل", tone: "warning", order: 3, active: true },
-  follow_up: { label: "متابعة لاحقة", shortLabel: "متابعة", tone: "warning", order: 4, active: true },
+  follow_up: { label: "مهتم ويحتاج متابعة", shortLabel: "مهتم", tone: "warning", order: 3, active: true },
+  qualified: { label: "مؤهل للشراء", shortLabel: "مؤهل", tone: "warning", order: 4, active: true },
   won: { label: "تم التحويل لعميل", shortLabel: "تم البيع", tone: "success", order: 5, active: false },
-  lost: { label: "لم تتم الصفقة", shortLabel: "خسارة", tone: "neutral", order: 6, active: false },
+  lost: { label: "عميل غير محوّل", shortLabel: "غير محوّل", tone: "neutral", order: 6, active: false },
   do_not_contact: { label: "عدم تواصل", shortLabel: "ممنوع تواصل", tone: "danger", order: 7, active: false },
 };
 

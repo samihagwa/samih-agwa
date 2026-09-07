@@ -43,6 +43,7 @@ import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-err
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
 import { CollapsibleText } from "../ui/CollapsibleText";
+import { SegmentedProgress, type SegmentedProgressStep } from "../ui/SegmentedProgress";
 import { StatusBadge } from "../ui/StatusBadge";
 import { TaskScheduleCalendar } from "./TaskScheduleCalendar";
 import { WeeklyContentRoutineForm } from "./WeeklyContentRoutineForm";
@@ -1012,15 +1013,48 @@ export function TasksWorkspace() {
                     const overdueTasks = entry.tasks.filter((task) => isOverdue(task, renderNow));
                     const completedTasks = entry.tasks.filter(taskIsCompleted).length;
                     const progress = Math.round((completedTasks / entry.tasks.length) * 100);
+                    const activeTask = entry.tasks.find((task) => !taskIsClosed(task));
+                    const viewerTask = entry.tasks.find((task) => task.owner_id === session.user.id && !taskIsClosed(task))
+                      ?? entry.tasks.find((task) => task.status === "review" && task.created_by === session.user.id);
+                    const focusTask = viewerTask ?? activeTask ?? entry.tasks.at(-1);
+                    const focusIsAssignee = focusTask?.owner_id === session.user.id;
+                    const focusIsRequester = focusTask?.created_by === session.user.id;
+                    const focusCanReview = Boolean(focusTask?.status === "review" && (focusIsRequester || platformAdmin));
+                    const focusHref = focusTask
+                      ? focusIsAssignee && focusTask.status === "in_progress"
+                        ? taskDeliveryDeepLink(focusTask.id)
+                        : taskDeepLink(focusTask.id)
+                      : `/tasks/content/${entry.contentItemId}`;
+                    const focusLabel = focusTask?.status === "review"
+                      ? focusCanReview ? "راجع التسليم" : "بانتظار المراجعة"
+                      : focusTask?.status === "ready" && focusIsAssignee
+                        ? "ابدأ مهمتك"
+                        : focusTask?.status === "in_progress" && focusIsAssignee
+                          ? focusTask.content_step === "publishing" ? "أكّد النشر" : "سلّم مهمتك"
+                          : focusIsAssignee ? "فتح مهمتك" : "فتح المرحلة الحالية";
+                    const progressSteps: SegmentedProgressStep[] = entry.tasks.map((task) => ({
+                      id: task.id,
+                      label: task.content_step ? contentStepConfig[task.content_step].label : task.title,
+                      state: taskIsCompleted(task)
+                        ? "done"
+                        : task.status === "blocked"
+                          ? "blocked"
+                          : task.id === activeTask?.id || task.status === "in_progress" || task.status === "review"
+                            ? "current"
+                            : "upcoming",
+                    }));
                     return <article className={`task-card content-workflow-group ${overdueTasks.length ? "task-overdue" : ""} ${completedTasks === entry.tasks.length ? "task-closed" : ""}`} data-state={lane.id} key={entry.id}>
                       <div className="task-card-top"><span className="workflow-task-label"><Film size={12} /> طلب محتوى · {entry.tasks.length} مراحل</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل" : lane.label}</StatusBadge></div>
                       <div className="content-workflow-heading"><h3><a href={`/tasks/content/${entry.contentItemId}`}>{contentGroupTitle(entry.tasks[0])}</a></h3><a className="task-production-link" href={`/tasks/content/${entry.contentItemId}`}><FileText size={12} /> فتح ملف المحتوى</a></div>
-                      <div className="content-workflow-progress">
-                        <div><span>التقدم</span><strong>{progress}%</strong></div>
-                        <span className="content-workflow-progress-track" role="progressbar" aria-label="نسبة تقدم ملف المحتوى" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></span>
+                      <div className="content-workflow-progress content-workflow-overview">
+                        <div className="content-workflow-count"><span>التقدم</span><strong>{completedTasks} من {entry.tasks.length}</strong><small>{progress}%</small></div>
+                        <SegmentedProgress steps={progressSteps} compact ariaLabel="مراحل تنفيذ طلب المحتوى" />
                       </div>
                       {overdueTasks.length ? <span className="overdue-label"><AlertTriangle size={14} /> {overdueTasks.length} خطوة متأخرة — الأقدم منذ {formatOverdueDuration(overdueTasks.sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0], renderNow)}</span> : null}
-                      <div className="content-workflow-subtasks">{entry.tasks.map((task, index) => {
+                      {focusTask ? <div className="content-workflow-focus"><div><span>{focusIsAssignee ? "مهمتك الآن" : "المرحلة الحالية"}</span><strong>{focusTask.content_step ? contentStepConfig[focusTask.content_step].label : focusTask.title}</strong><small>{peopleById.get(focusTask.owner_id)?.name ?? "عضو فريق"} · <bdi dir="ltr">{formatDateTime(focusTask.due_at)}</bdi></small></div>{focusTask.status === "review" && !focusCanReview ? <span className="content-workflow-waiting">بانتظار طالب المهمة</span> : <a className="button button-primary" href={focusHref}>{focusLabel}</a>}</div> : null}
+                      <details className="content-workflow-details" open={Boolean(linkedTaskId && entry.tasks.some((task) => task.id === linkedTaskId)) || undefined}>
+                        <summary><span>عرض المراحل</span><small>{completedTasks}/{entry.tasks.length}</small></summary>
+                        <div className="content-workflow-subtasks">{entry.tasks.map((task, index) => {
                         const owner = peopleById.get(task.owner_id);
                         const completed = taskIsCompleted(task);
                         const closed = taskIsClosed(task);
@@ -1061,7 +1095,8 @@ export function TasksWorkspace() {
                             {canRequestRevisionShortcut ? <a className="content-subtask-revision" href={`${taskDeepLink(task.id)}?action=revise#revision`}><MessageSquareText size={12} /> طلب تعديل</a> : null}
                           </div>
                         </section>;
-                      })}</div>
+                        })}</div>
+                      </details>
                     </article>;
                   }
                   const task = entry.tasks[0];

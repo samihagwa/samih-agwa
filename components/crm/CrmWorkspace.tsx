@@ -227,7 +227,7 @@ export function CrmWorkspace() {
     setCrmLoading(true);
     try {
       const [searchResult, performanceResult, summaryResult, batchesResult, intakeHealthResult, routingResult, leadRoutingResult] = await Promise.all([
-        supabase.rpc("search_crm_contacts_v4", {
+        supabase.rpc("search_crm_contacts_v5", {
           target_organization_id: organizationId,
           search_query: searchQuery,
           target_owner_id: (ownerFilter || null) as unknown as string,
@@ -236,6 +236,7 @@ export function CrmWorkspace() {
           target_interest: (interestFilter || null) as unknown as CrmInterest,
           target_scope: filter,
           target_view: boardView,
+          target_queue: "all",
           result_limit: PAGE_SIZE,
           result_offset: page * PAGE_SIZE,
         }),

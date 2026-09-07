@@ -4,8 +4,8 @@ import { usePathname } from "next/navigation";
 import { LayoutList, SquareKanban } from "lucide-react";
 
 const items = [
-  { href: "/crm", label: "لوحة المتابعة", icon: SquareKanban },
-  { href: "/crm/customers", label: "دليل العملاء", icon: LayoutList },
+  { href: "/crm", label: "إدارة المتابعات", icon: SquareKanban },
+  { href: "/crm/customers", label: "كل العملاء", icon: LayoutList },
 ];
 
 export function CrmSectionNav() {
