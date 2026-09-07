@@ -2,6 +2,14 @@ import { createSupabaseContext } from "npm:@supabase/server@1.4.1";
 import { corsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
 
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+const allowedOrigins = new Set([
+  "https://os.samihagwa.com",
+  "https://market-whales-os.samihsmaih1234.chatgpt.site",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:4173",
+  "http://localhost:3000",
+  "http://localhost:4173",
+]);
 const allowedRoles = new Set(["admin", "manager", "member", "viewer"]);
 const allowedMembershipStatuses = new Set(["active", "suspended"]);
 const allowedOnboardingSteps = new Set(["role", "workflow", "brand"]);
@@ -47,6 +55,9 @@ function safeErrorMessage(message: string, fallback: string) {
     "Team membership was not found", "workspace owner access cannot",
     "Reassign or close", "Reassign or archive", "Active organization membership",
     "Unknown onboarding step", "Choose at least one valid workspace section",
+    "Access request was not found", "Only the active organization owner can approve",
+    "Only the active organization owner can reject", "Approved access must be suspended",
+    "Only the active organization owner can create recovery links",
   ];
   return known.some((part) => message.includes(part)) ? message : fallback;
 }
@@ -70,6 +81,71 @@ export default {
 
     const action = cleanString(body.action);
     const organizationId = cleanString(body.organization_id);
+
+    if (action === "approve_access_request") {
+      const requestId = cleanString(body.request_id);
+      const role = cleanString(body.role);
+      const sections = cleanSections(body.allowed_sections);
+      if (!requestId || !allowedRoles.has(role) || !sections.length) {
+        return jsonResponse({ message: "اختر الدور وقسمًا واحدًا على الأقل قبل الموافقة." }, 400);
+      }
+      const { data, error } = await context.supabaseAdmin.rpc("approve_workspace_access_request", {
+        target_actor_id: actorId,
+        target_request_id: requestId,
+        target_role: role,
+        target_allowed_sections: sections,
+      });
+      if (error) return jsonResponse({ message: safeErrorMessage(error.message, "تعذّرت الموافقة على طلب الانضمام.") }, 400);
+      return jsonResponse({ user_id: data });
+    }
+
+    if (action === "reject_access_request") {
+      const requestId = cleanString(body.request_id);
+      if (!requestId) return jsonResponse({ message: "حدد طلب الانضمام." }, 400);
+      const { data, error } = await context.supabaseAdmin.rpc("reject_workspace_access_request", {
+        target_actor_id: actorId,
+        target_request_id: requestId,
+      });
+      if (error) return jsonResponse({ message: safeErrorMessage(error.message, "تعذّر رفض طلب الانضمام.") }, 400);
+      return jsonResponse({ rejected: data });
+    }
+
+    if (action === "create_password_recovery_link") {
+      const requestId = cleanString(body.request_id);
+      if (!requestId) return jsonResponse({ message: "حدد طلب استعادة كلمة المرور." }, 400);
+      const { data: recoveryRows, error: prepareError } = await context.supabaseAdmin.rpc("prepare_workspace_password_recovery", {
+        target_actor_id: actorId,
+        target_request_id: requestId,
+      });
+      const recovery = Array.isArray(recoveryRows) ? recoveryRows[0] : null;
+      if (prepareError || !recovery?.email) {
+        return jsonResponse({ message: safeErrorMessage(prepareError?.message ?? "", "طلب الاستعادة غير موجود أو غير مسموح لك.") }, 400);
+      }
+      const suppliedOrigin = request.headers.get("origin")?.trim();
+      const origin = suppliedOrigin && allowedOrigins.has(suppliedOrigin) ? suppliedOrigin : "https://os.samihagwa.com";
+      const { data: recoveryLink, error: linkError } = await context.supabaseAdmin.auth.admin.generateLink({
+        type: "recovery",
+        email: recovery.email,
+        options: { redirectTo: `${origin}/reset-password` },
+      });
+      if (linkError || !recoveryLink.properties?.action_link) {
+        return jsonResponse({ message: "تعذّر إنشاء رابط الاستعادة الآمن." }, 503);
+      }
+      const { error: markError } = await context.supabaseAdmin.rpc("mark_workspace_password_recovery_link_created", {
+        target_actor_id: actorId,
+        target_request_id: requestId,
+      });
+      if (markError) return jsonResponse({ message: safeErrorMessage(markError.message, "تعذّر تسجيل إنشاء رابط الاستعادة.") }, 400);
+      return jsonResponse({ recovery_link: recoveryLink.properties.action_link });
+    }
+
+    if (action === "complete_password_recovery") {
+      const { data, error } = await context.supabaseAdmin.rpc("complete_workspace_password_recovery", {
+        target_actor_id: actorId,
+      });
+      if (error) return jsonResponse({ message: "تم تغيير كلمة المرور لكن تعذّر تحديث حالة طلب الاستعادة." }, 400);
+      return jsonResponse({ completed: data });
+    }
 
     if (action === "create_invitation") {
       const email = cleanString(body.email).toLowerCase();

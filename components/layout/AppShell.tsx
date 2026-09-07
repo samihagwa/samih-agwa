@@ -21,12 +21,19 @@ import { WorkspaceAssistant } from "../assistant/WorkspaceAssistant";
 import { MemberOnboardingGate } from "../team/MemberOnboardingGate";
 import { SidebarNav } from "./SidebarNav";
 
+type AccessRequestState = {
+  status: "pending" | "approved" | "rejected";
+  requested_at: string;
+  reviewed_at: string | null;
+};
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const configured = isSupabaseConfigured();
   const [ready, setReady] = useState(!configured);
   const [session, setSession] = useState<Session | null>(null);
   const [membership, setMembership] = useState<WorkspaceMembership | null>(null);
+  const [accessRequest, setAccessRequest] = useState<AccessRequestState | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(configured ? null : "خدمة الدخول غير متاحة مؤقتًا.");
   const loadedUserId = useRef<string | null>(null);
@@ -39,18 +46,29 @@ export function AppShell({ children }: { children: ReactNode }) {
     setAccessError(null);
     if (!nextSession) {
       setMembership(null);
+      setAccessRequest(null);
       setReady(true);
       return;
     }
 
-    const { data, error } = await getSupabaseBrowserClient()
-      .from("memberships")
-      .select("organization_id, role, status, allowed_sections, onboarding_acknowledgements, onboarding_completed_at")
-      .eq("user_id", nextSession.user.id)
-      .limit(1)
-      .maybeSingle();
-    if (error) setAccessError("تعذّر التحقق من صلاحية الحساب. أعد تحميل الصفحة.");
-    else setMembership(data);
+    const supabase = getSupabaseBrowserClient();
+    const [membershipResult, requestResult] = await Promise.all([
+      supabase.from("memberships")
+        .select("organization_id, role, status, allowed_sections, onboarding_acknowledgements, onboarding_completed_at")
+        .eq("user_id", nextSession.user.id)
+        .limit(1)
+        .maybeSingle(),
+      supabase.from("account_access_requests")
+        .select("status, requested_at, reviewed_at")
+        .eq("user_id", nextSession.user.id)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    if (membershipResult.error || requestResult.error) setAccessError("تعذّر التحقق من صلاحية الحساب. أعد تحميل الصفحة.");
+    else {
+      setMembership(membershipResult.data);
+      setAccessRequest(requestResult.data as AccessRequestState | null);
+    }
     setReady(true);
   }, []);
 
@@ -84,6 +102,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [configured, loadAccess, session]);
 
   useEffect(() => {
+    if (!configured || !session || membership?.status === "active") return;
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase.channel(`shell-access-request:${session.user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "account_access_requests", filter: `user_id=eq.${session.user.id}` }, () => void loadAccess(session))
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [configured, loadAccess, membership?.status, session]);
+
+  useEffect(() => {
     if (ready && session && membership?.status === "active" && pathname === "/login") {
       window.location.replace(firstAllowedSectionHref(membership));
     }
@@ -103,7 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [mobileNavOpen]);
 
-  const publicJoinRoute = pathname.startsWith("/join");
+  const publicJoinRoute = pathname.startsWith("/join") || pathname.startsWith("/reset-password");
   if (publicJoinRoute) return <div className="public-access-shell"><div className="public-access-container">{children}</div></div>;
   if (!ready && pathname === "/login") return <LoginWorkspace />;
   if (!ready) return <main className="secure-login-page secure-loading"><LoaderCircle className="spin" size={28} /><h1>جارٍ التحقق من الوصول</h1><p>لن نعرض مساحة العمل قبل اعتماد الحساب.</p></main>;
@@ -114,10 +141,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!membership || membership.status !== "active") return <main className="secure-login-page">
     <section className="secure-login-card">
       <LockKeyhole size={29} />
-      <p className="overline">وصول مرفوض</p>
-      <h1>هذا الحساب غير مضاف للفريق</h1>
-      <p>تم التحقق من البريد، لكنه لا يملك عضوية فعالة. اطلب من مالك المنصة إضافته وتحديد دوره والأقسام المسموحة.</p>
+      <p className="overline">{accessRequest?.status === "pending" ? "بانتظار اعتماد المالك" : "الوصول غير مفعّل"}</p>
+      <h1>{accessRequest?.status === "pending" ? "طلبك وصل بنجاح" : accessRequest?.status === "rejected" ? "لم تتم الموافقة على الطلب" : "هذا الحساب غير مضاف للفريق"}</h1>
+      <p>{accessRequest?.status === "pending"
+        ? "لا تحتاج تعمل أي خطوة أخرى. عندما يوافق المالك ويحدد دورك وأقسامك، ستفتح المنصة تلقائيًا."
+        : accessRequest?.status === "rejected"
+          ? "تواصل مع مالك المنصة لو تعتقد أن البريد أو الاسم يحتاج تصحيحًا."
+          : "الحساب موجود لكنه لا يملك عضوية فعالة. اطلب من مالك المنصة مراجعة الوصول."}</p>
       <strong dir="ltr">{session.user.email}</strong>
+      {accessRequest?.status === "pending" ? <span className="auth-pending-indicator"><LoaderCircle className="spin" size={15} /> جارٍ انتظار الموافقة</span> : null}
       <Button type="button" variant="secondary" onClick={() => void getSupabaseBrowserClient().auth.signOut()}><LogOut size={16} /> تسجيل الخروج</Button>
     </section>
   </main>;

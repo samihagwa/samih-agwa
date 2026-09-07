@@ -51,8 +51,17 @@ test("login is the only public workspace page and renders no sidebar", async () 
   const response = await render("/login");
   const html = await response.text();
   assert.equal(response.status, 200);
-  assert.match(html, /تسجيل دخول الفريق/);
-  assert.match(html, /منصة داخلية بالدعوة فقط/);
+  assert.match(html, /ادخل بحسابك/);
+  assert.match(html, /إنشاء حساب/);
+  assert.match(html, /بدون انتظار رسالة/);
+  assert.doesNotMatch(html, /<aside class="sidebar"/);
+});
+
+test("password recovery page remains public without exposing the workspace shell", async () => {
+  const response = await render("/reset-password");
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(html, /جارٍ التحقق من رابط الاستعادة/);
   assert.doesNotMatch(html, /<aside class="sidebar"/);
 });
 

@@ -14,6 +14,73 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_access_requests: {
+        Row: {
+          approved_role: Database["public"]["Enums"]["app_role"] | null
+          approved_sections: string[] | null
+          email: string
+          full_name: string
+          id: string
+          organization_id: string
+          requested_at: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approved_role?: Database["public"]["Enums"]["app_role"] | null
+          approved_sections?: string[] | null
+          email: string
+          full_name: string
+          id?: string
+          organization_id: string
+          requested_at?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approved_role?: Database["public"]["Enums"]["app_role"] | null
+          approved_sections?: string[] | null
+          email?: string
+          full_name?: string
+          id?: string
+          organization_id?: string
+          requested_at?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_access_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_access_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_access_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_providers: {
         Row: {
           base_url: string
@@ -2569,6 +2636,64 @@ export type Database = {
         }
         Relationships: []
       }
+      password_recovery_requests: {
+        Row: {
+          handled_by: string | null
+          id: string
+          link_generated_at: string | null
+          organization_id: string
+          requested_at: string
+          resolved_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          handled_by?: string | null
+          id?: string
+          link_generated_at?: string | null
+          organization_id: string
+          requested_at?: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          handled_by?: string | null
+          id?: string
+          link_generated_at?: string | null
+          organization_id?: string
+          requested_at?: string
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "password_recovery_requests_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "password_recovery_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "password_recovery_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -4478,6 +4603,43 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_workspace_access_request: {
+        Args: {
+          target_actor_id: string
+          target_allowed_sections: string[]
+          target_request_id: string
+          target_role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: string
+      }
+      complete_workspace_password_recovery: {
+        Args: { target_actor_id: string }
+        Returns: boolean
+      }
+      consume_workspace_auth_rate_limit: {
+        Args: {
+          target_email_hash: string
+          target_fingerprint_hash: string
+          target_scope: string
+        }
+        Returns: boolean
+      }
+      mark_workspace_password_recovery_link_created: {
+        Args: { target_actor_id: string; target_request_id: string }
+        Returns: boolean
+      }
+      prepare_workspace_password_recovery: {
+        Args: { target_actor_id: string; target_request_id: string }
+        Returns: { email: string; request_id: string; user_id: string }[]
+      }
+      reject_workspace_access_request: {
+        Args: { target_actor_id: string; target_request_id: string }
+        Returns: boolean
+      }
+      request_workspace_password_recovery: {
+        Args: { target_email: string }
+        Returns: string
+      }
       check_team_member_capacity: {
         Args: {
           excluded_task_id?: string | null

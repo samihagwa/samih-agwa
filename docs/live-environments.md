@@ -50,12 +50,14 @@ Deployed Edge Functions:
 7. `team-commands` v1: JWT-protected invitation-link creation/revocation, exact-email acceptance, member role/status changes, and onboarding acknowledgements. It sends no email, Telegram message, or external request.
 8. `team-commands` v2: keeps the manual invitation-link flow and atomically stores each invited or existing member's selected dashboard sections with role/status changes.
 9. `request-access-link` v1: public, enumeration-resistant login entrypoint. It sends a magic link only for an active member or an exact valid invitation and allows Auth user creation only for the invitation path.
+10. `account-access` v1: public, origin-checked, and rate-limited registration/recovery entrypoint. It creates a confirmed password account marked for owner approval without creating a membership, and records enumeration-resistant recovery requests without sending email.
+11. `team-commands` v5: keeps the owner-controlled team tools and adds audited access approval/rejection plus owner-only creation of one-time password recovery links.
 
 Verification on 2026-08-17:
 
 - Project status: `ACTIVE_HEALTHY`.
-- Security advisor: no schema or RLS findings. A project-level warning remains for leaked-password protection; the current application uses passwordless one-time email links and does not expose password sign-in.
-- RLS: enabled on all twenty-two public application tables.
+- Security advisor after the password-auth migration: no finding targets the new access-request tables or new approval/recovery functions. Existing project-level legacy advisories remain documented separately.
+- RLS: enabled on every exposed public application table. The two new account workflow tables are readable only by the requesting user or the active owner and are not browser-writable.
 - `anon`: no table read grant.
 - `authenticated`: explicit reads, column-scoped task writes, and one validated workflow command; all access is filtered by RLS and database rules.
 - Performance advisor: only unused-index informational notices, expected while the personally tested database has almost no operational volume.
@@ -80,5 +82,13 @@ Additional verification on 2026-08-22:
 - The owner email is an active `owner` with all twelve sections. Unknown-email login resolution returns no access, while the signup hook returns `403`; the owner's existing login resolves successfully.
 - Nine publishing-table triggers fence legacy SECURITY DEFINER mutations by the caller's `publishing` section, and presence cannot be recorded for a hidden section.
 - No invitation, Telegram send, customer import, or external analytics action was triggered by this release.
+
+Additional verification on 2026-09-07:
+
+- Password-first registration was transaction-tested before the production migration was applied. Normal login now uses `signInWithPassword` and does not wait for an email.
+- Creating an account creates no membership or section access. The signed-in applicant sees only a waiting/rejected surface until the active owner approves the exact role and sections.
+- Approval and rejection database functions are executable only by `service_role`; the JWT-protected team function passes the verified actor and the database independently requires the active owner.
+- Password recovery records only an owner-visible request. A fresh Supabase recovery action link is generated on demand, returned once to the owner for private delivery, and never stored in application tables.
+- Production verification confirmed zero access/recovery test rows were created during release checks; no fake member was added.
 
 Never commit `.env.local`, secret keys, legacy service-role keys, or production customer data.

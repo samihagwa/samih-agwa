@@ -36,18 +36,18 @@ The identity, owner-controlled team onboarding, task-management, deadline-remind
 ## First owner setup
 
 1. Open `/login` on the deployed site.
-2. Request a one-time sign-in link using the owner's email.
-3. After the verified session returns, choose **Create Market Whales workspace** once.
+2. Sign in with the owner's email and password. If the existing owner does not know the password, request recovery from the same page while keeping one current owner session open to create the private recovery link.
+3. After the verified session returns, choose **Create Market Whales workspace** once when bootstrapping a fresh project.
 4. During personal testing, create only clearly labeled test tasks and reel workflows. Team invitations are created manually from `/team` and never sent automatically.
 
-The bootstrap endpoint is authenticated and can create only the first organization. The team flow creates a one-time claim link bound to a specific email; it never sends email or a Telegram message. The member must authenticate with that same email and explicitly accept. Unknown emails cannot receive a login link or create an Auth user. Suspending access is blocked while the member owns open tasks, scripts, or leads.
+The bootstrap endpoint is authenticated and can create only the first organization. New people create their own account with a password, then see only a waiting screen until the owner approves or rejects the request and chooses the exact role and sections. Login does not depend on email delivery. Password recovery creates an owner-visible request so the owner can privately share a one-time Supabase recovery link. The older email-bound invitation link remains available only as an optional fallback. Suspending access is blocked while the member owns open tasks, scripts, or leads.
 
 ## Controlled team onboarding test
 
-1. Sign in as the owner and open `/team`. Public visitors see only the login page; the dashboard and sidebar are withheld until membership verification.
-2. Use an email account you control, choose the least-privileged role, select only the required sections, and select **Create link only**. Nothing is sent.
-3. Copy the one-time link and open it in a private browser window. Request the magic link using the exact invited email, then explicitly activate the membership.
-4. Complete the three onboarding acknowledgements, confirm **My tasks** shows only accountable work, and submit one clearly labeled test result.
+1. Sign out or open a private browser, visit `/login`, and create an account with a name, email, and password. Public visitors never see the dashboard or sidebar.
+2. Confirm the new account sees only **waiting for owner approval** and cannot open a direct operational URL.
+3. In the owner's active session, open `/team`, review the request, select the least-privileged role and only the required sections, then approve it.
+4. Sign in with the approved account from any device using the same password, complete the three onboarding acknowledgements, confirm **My tasks** shows only accountable work, and submit one clearly labeled test result.
 5. Back in the owner account, verify that hidden sections stay absent, direct deep links are refused, presence and notifications are scoped, and suspension is refused until open work is reassigned or closed.
 
 ## Personal Telegram notifications

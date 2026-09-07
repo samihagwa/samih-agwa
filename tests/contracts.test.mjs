@@ -1864,10 +1864,11 @@ test("team onboarding is owner-controlled, email-bound, auditable, and sends not
   assert.match(readme, /never sent automatically|never sends email/i);
 });
 
-test("workspace is invite-only, section-scoped, and enforced before rendering or direct API access", async () => {
-  const [migration, functionFence, access, shell, navigation, login, join, tasks, loginFunction, teamCommands, teamWorkspace, config, types] = await Promise.all([
+test("workspace access is owner-approved, password-based, section-scoped, and enforced before rendering or direct API access", async () => {
+  const [migration, functionFence, passwordMigration, access, shell, navigation, login, join, tasks, loginFunction, accountAccess, resetPassword, teamCommands, teamWorkspace, config, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822012237_invite_only_section_access.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260822014445_section_scope_function_writes.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260907170004_owner_approved_password_auth.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/access.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
@@ -1875,6 +1876,8 @@ test("workspace is invite-only, section-scoped, and enforced before rendering or
     readFile(new URL("../components/team/JoinWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/request-access-link/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/account-access/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/auth/ResetPasswordWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/team-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/team/TeamWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
@@ -1889,8 +1892,10 @@ test("workspace is invite-only, section-scoped, and enforced before rendering or
   assert.match(navigation, /allowedSections: WorkspaceSection\[\]/);
   assert.match(access, /membership\.role === "owner"/);
   assert.match(access, /membership\.allowed_sections\.includes\(section\)/);
-  assert.match(login, /request-access-link/);
-  assert.match(login, /أي بريد غير معتمد لن يستلم شيئًا/);
+  assert.match(login, /signInWithPassword/);
+  assert.match(login, /account-access/);
+  assert.match(login, /request_password_recovery/);
+  assert.match(login, /إنشاء الحساب وإرسال الطلب/);
   assert.doesNotMatch(`${login}\n${join}\n${tasks}`, /signInWithOtp/);
   assert.match(loginFunction, /resolve_workspace_login/);
   assert.match(loginFunction, /auth\.signInWithOtp/);
@@ -1921,12 +1926,35 @@ test("workspace is invite-only, section-scoped, and enforced before rendering or
   }
   assert.match(functionFence, /array\[target_section\]::text\[\]/);
   assert.match(functionFence, /Workspace section access is required/);
+  assert.match(passwordMigration, /create table public\.account_access_requests/);
+  assert.match(passwordMigration, /create table public\.password_recovery_requests/);
+  assert.match(passwordMigration, /account_access_requests_select_self_or_owner/);
+  assert.match(passwordMigration, /password_recovery_requests_select_self_or_owner/);
+  assert.match(passwordMigration, /registration_flow/);
+  assert.match(passwordMigration, /owner_approval_request/);
+  assert.match(passwordMigration, /function public\.approve_workspace_access_request/);
+  assert.match(passwordMigration, /function public\.reject_workspace_access_request/);
+  assert.match(passwordMigration, /team\.access_request_approved/);
+  assert.match(accountAccess, /auth\.admin\.createUser/);
+  assert.match(accountAccess, /email_confirm: true/);
+  assert.match(accountAccess, /registration_flow: "owner_approval_request"/);
+  assert.match(accountAccess, /consume_workspace_auth_rate_limit/);
+  assert.doesNotMatch(accountAccess, /console\.(?:log|error)\([^\n]*,\s*password(?:\W|$)/i);
+  assert.match(resetPassword, /auth\.updateUser\(\{ password \}\)/);
+  assert.match(resetPassword, /complete_password_recovery/);
   assert.match(teamCommands, /create_team_invitation_with_sections/);
   assert.match(teamCommands, /manage_team_membership_access/);
+  assert.match(teamCommands, /approve_access_request/);
+  assert.match(teamCommands, /reject_access_request/);
+  assert.match(teamCommands, /auth\.admin\.generateLink/);
+  assert.match(teamCommands, /complete_workspace_password_recovery/);
   assert.match(teamWorkspace, /الأقسام المسموحة/);
+  assert.match(teamWorkspace, /طلبات انضمام جديدة/);
+  assert.match(teamWorkspace, /طلبات استعادة كلمة المرور/);
   assert.match(teamWorkspace, /مالك \+ مدير المنصة/);
   assert.match(types, /allowed_sections: string\[\]/);
   assert.match(config, /\[functions\.request-access-link\][\s\S]*verify_jwt = false/);
+  assert.match(config, /\[functions\.account-access\][\s\S]*verify_jwt = false/);
 });
 
 test("team invitations accept any owner-approved valid email including public providers", async () => {

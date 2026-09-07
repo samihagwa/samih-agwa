@@ -3,8 +3,8 @@
 import type { Session } from "@supabase/supabase-js";
 import {
   Activity, Ban, BookOpenCheck, CalendarDays, CheckCircle2, ClipboardCheck,
-  Clock3, Copy, Link2, LoaderCircle, LockKeyhole, RefreshCw, RotateCcw,
-  ShieldCheck, UserCog, UserPlus, UsersRound,
+  Clock3, Copy, KeyRound, Link2, LoaderCircle, LockKeyhole, RefreshCw, RotateCcw,
+  ShieldCheck, UserCheck, UserCog, UserPlus, UserX, UsersRound,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentUuidDeepLink } from "../../lib/deep-links";
@@ -26,6 +26,8 @@ type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
 type Presence = Tables<"member_presence">;
 type Invitation = Tables<"team_invitations">;
+type AccessRequest = Tables<"account_access_requests">;
+type PasswordRecoveryRequest = Tables<"password_recovery_requests">;
 type TeamReport = Database["public"]["Functions"]["get_team_task_performance"]["Returns"][number];
 type Person = {
   id: string;
@@ -37,7 +39,14 @@ type Person = {
   onboardingCompletedAt: string | null;
   allowedSections: WorkspaceSection[];
 };
-type Workspace = { organization: Organization; membership: Membership; people: Person[]; invitations: Invitation[] };
+type Workspace = {
+  organization: Organization;
+  membership: Membership;
+  people: Person[];
+  invitations: Invitation[];
+  accessRequests: AccessRequest[];
+  recoveryRequests: PasswordRecoveryRequest[];
+};
 type RangePreset = "week" | "month" | "custom";
 type OnboardingStep = "role" | "workflow" | "brand";
 
@@ -106,6 +115,22 @@ function MemberSectionEditor({ person, working, onSave }: { person: Person; work
   </details>;
 }
 
+function AccessRequestApproval({ request, working, onApprove, onReject }: {
+  request: AccessRequest;
+  working: boolean;
+  onApprove: (request: AccessRequest, role: Exclude<Membership["role"], "owner">, sections: WorkspaceSection[]) => Promise<void>;
+  onReject: (request: AccessRequest) => Promise<void>;
+}) {
+  const [role, setRole] = useState<Exclude<Membership["role"], "owner">>("member");
+  const [sections, setSections] = useState<WorkspaceSection[]>(defaultSectionsByRole.member);
+  return <article className="access-request-row">
+    <div className="access-request-identity"><span><UserPlus size={17} /></span><div><strong>{request.full_name}</strong><small dir="ltr">{request.email}</small><small>طلب {formatDate(request.requested_at)}</small></div></div>
+    <label><span>الدور</span><select value={role} disabled={working} onChange={(event) => { const nextRole = event.target.value as Exclude<Membership["role"], "owner">; setRole(nextRole); setSections(defaultSectionsByRole[nextRole]); }}>{manageableRoles.map((item) => <option key={item} value={item}>{roleLabel(item)}</option>)}</select></label>
+    <SectionPicker value={sections} onChange={setSections} disabled={working} />
+    <div className="access-request-actions"><Button type="button" disabled={working || !sections.length} onClick={() => void onApprove(request, role, sections)}><UserCheck size={15} /> موافقة وتفعيل</Button>{request.status === "pending" ? <Button type="button" variant="ghost" disabled={working} onClick={() => void onReject(request)}><UserX size={15} /> رفض</Button> : null}</div>
+  </article>;
+}
+
 export function TeamWorkspace() {
   const configured = isSupabaseConfigured();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -117,6 +142,7 @@ export function TeamWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [invitationLink, setInvitationLink] = useState<string | null>(null);
+  const [recoveryLink, setRecoveryLink] = useState<string | null>(null);
   const [inviteRole, setInviteRole] = useState<Exclude<Membership["role"], "owner">>("member");
   const [inviteSections, setInviteSections] = useState<WorkspaceSection[]>(defaultSectionsByRole.member);
   const [preset, setPreset] = useState<RangePreset>("week");
@@ -165,16 +191,24 @@ export function TeamWorkspace() {
       if (!membership) { clearWorkspace(); return; }
 
       const membershipQuery = supabase.from("memberships").select("*").eq("organization_id", membership.organization_id);
-      const [organizationResult, membershipResult, invitationResult] = await Promise.all([
+      const [organizationResult, membershipResult, invitationResult, accessRequestResult, recoveryRequestResult] = await Promise.all([
         supabase.from("organizations").select("*").eq("id", membership.organization_id).single(),
         membership.role === "owner" ? membershipQuery.order("created_at") : membershipQuery.eq("status", "active").order("created_at"),
         membership.role === "owner"
           ? supabase.from("team_invitations").select("*").eq("organization_id", membership.organization_id).eq("status", "pending").order("created_at", { ascending: false })
           : Promise.resolve({ data: [] as Invitation[], error: null }),
+        membership.role === "owner"
+          ? supabase.from("account_access_requests").select("*").eq("organization_id", membership.organization_id).in("status", ["pending", "rejected"]).order("requested_at", { ascending: false })
+          : Promise.resolve({ data: [] as AccessRequest[], error: null }),
+        membership.role === "owner"
+          ? supabase.from("password_recovery_requests").select("*").eq("organization_id", membership.organization_id).in("status", ["pending", "link_generated"]).order("requested_at", { ascending: false })
+          : Promise.resolve({ data: [] as PasswordRecoveryRequest[], error: null }),
       ]);
       if (organizationResult.error) throw organizationResult.error;
       if (membershipResult.error) throw membershipResult.error;
       if (invitationResult.error) throw invitationResult.error;
+      if (accessRequestResult.error) throw accessRequestResult.error;
+      if (recoveryRequestResult.error) throw recoveryRequestResult.error;
       const memberIds = (membershipResult.data ?? []).map((row) => row.user_id);
       const { data: profiles, error: profilesError } = memberIds.length
         ? await supabase.from("profiles").select("id, full_name").in("id", memberIds)
@@ -192,7 +226,14 @@ export function TeamWorkspace() {
           ?? (row.user_id === activeSession.user.id ? activeSession.user.email : null)
           ?? "عضو فريق",
       }));
-      setWorkspace({ organization: organizationResult.data, membership, people, invitations: invitationResult.data ?? [] });
+      setWorkspace({
+        organization: organizationResult.data,
+        membership,
+        people,
+        invitations: invitationResult.data ?? [],
+        accessRequests: accessRequestResult.data ?? [],
+        recoveryRequests: recoveryRequestResult.data ?? [],
+      });
       await refreshPresence(membership.organization_id);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "تعذّر تحميل بيانات الفريق.");
@@ -227,6 +268,15 @@ export function TeamWorkspace() {
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [refreshPresence, workspace]);
+  useEffect(() => {
+    if (!workspace || !session || workspace.membership.role !== "owner") return;
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase.channel(`team-access-requests:${workspace.organization.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "account_access_requests", filter: `organization_id=eq.${workspace.organization.id}` }, () => void loadWorkspace(session))
+      .on("postgres_changes", { event: "*", schema: "public", table: "password_recovery_requests", filter: `organization_id=eq.${workspace.organization.id}` }, () => void loadWorkspace(session))
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [loadWorkspace, session, workspace]);
 
   async function runTeamCommand(body: Record<string, unknown>, fallback: string) {
     setWorking(true);
@@ -258,6 +308,31 @@ export function TeamWorkspace() {
     formElement.reset();
     setInviteRole("member");
     setInviteSections(defaultSectionsByRole.member);
+    await loadWorkspace(session);
+  }
+
+  async function approveAccessRequest(request: AccessRequest, role: Exclude<Membership["role"], "owner">, sections: WorkspaceSection[]) {
+    if (!workspace || !session) return;
+    const result = await runTeamCommand({ action: "approve_access_request", request_id: request.id, role, allowed_sections: sections }, "تعذّرت الموافقة على طلب الانضمام.");
+    if (!result) return;
+    setNotice(`تم تفعيل حساب ${request.full_name} وتحديد صلاحياته.`);
+    await loadWorkspace(session);
+  }
+
+  async function rejectAccessRequest(request: AccessRequest) {
+    if (!session || !window.confirm(`رفض طلب انضمام ${request.full_name}؟`)) return;
+    const result = await runTeamCommand({ action: "reject_access_request", request_id: request.id }, "تعذّر رفض طلب الانضمام.");
+    if (!result) return;
+    setNotice("تم رفض الطلب، ولن يحصل الحساب على أي صلاحية.");
+    await loadWorkspace(session);
+  }
+
+  async function createRecoveryLink(request: PasswordRecoveryRequest) {
+    if (!session) return;
+    const result = await runTeamCommand({ action: "create_password_recovery_link", request_id: request.id }, "تعذّر إنشاء رابط الاستعادة.");
+    if (!result || typeof result.recovery_link !== "string") return;
+    setRecoveryLink(result.recovery_link);
+    setNotice("تم إنشاء رابط استعادة يستخدمه العضو لتعيين كلمة مرور جديدة.");
     await loadWorkspace(session);
   }
 
@@ -318,8 +393,23 @@ export function TeamWorkspace() {
       </div>
     </section> : null}
 
+    {owner ? <section className="panel team-access-requests-panel">
+      <div className="section-heading"><div><p className="overline">إنشاء الحساب لا يمنح صلاحية</p><h2>طلبات الانضمام</h2><p>راجع الاسم والبريد، ثم اختر الدور والأقسام قبل تفعيل الحساب.</p></div><StatusBadge tone={workspace.accessRequests.some((request) => request.status === "pending") ? "warning" : "neutral"}>{workspace.accessRequests.filter((request) => request.status === "pending").length} بانتظارك</StatusBadge></div>
+      {workspace.accessRequests.filter((request) => request.status === "pending").length ? <div className="access-request-list">{workspace.accessRequests.filter((request) => request.status === "pending").map((request) => <AccessRequestApproval key={request.id} request={request} working={working} onApprove={approveAccessRequest} onReject={rejectAccessRequest} />)}</div> : <p className="empty-proof"><CheckCircle2 size={15} /> لا توجد طلبات انضمام جديدة.</p>}
+      {workspace.accessRequests.some((request) => request.status === "rejected") ? <details className="rejected-access-requests"><summary>طلبات مرفوضة ({workspace.accessRequests.filter((request) => request.status === "rejected").length})</summary><div className="access-request-list">{workspace.accessRequests.filter((request) => request.status === "rejected").map((request) => <AccessRequestApproval key={request.id} request={request} working={working} onApprove={approveAccessRequest} onReject={rejectAccessRequest} />)}</div></details> : null}
+    </section> : null}
+
+    {owner && workspace.recoveryRequests.length ? <section className="panel password-recovery-panel">
+      <div className="section-heading"><div><p className="overline">بديل موثوق عن البريد</p><h2>طلبات استعادة كلمة المرور</h2><p>أنشئ الرابط وابعثه لصاحب الحساب في محادثتكم الخاصة. الرابط نفسه لا يُحفظ داخل الموقع.</p></div><StatusBadge tone="warning">{workspace.recoveryRequests.length} طلب</StatusBadge></div>
+      <div className="password-recovery-list">{workspace.recoveryRequests.map((request) => {
+        const person = workspace.people.find((item) => item.id === request.user_id);
+        return <article key={request.id}><div><strong>{person?.name ?? "عضو فريق"}</strong><small>طلب {formatDate(request.requested_at)}</small><small>{request.status === "link_generated" ? "تم إنشاء رابط سابقًا ويمكن إصدار رابط جديد" : "بانتظار إنشاء الرابط"}</small></div><Button type="button" disabled={working} onClick={() => void createRecoveryLink(request)}><KeyRound size={15} /> إنشاء رابط الاستعادة</Button></article>;
+      })}</div>
+      {recoveryLink ? <div className="generated-invite-link"><div><strong>رابط الاستعادة جاهز</strong><small>انسخه وابعثه للعضو نفسه فقط.</small></div><code dir="ltr">{recoveryLink}</code><Button type="button" variant="secondary" onClick={() => void navigator.clipboard.writeText(recoveryLink)}><Copy size={15} /> نسخ الرابط</Button></div> : null}
+    </section> : null}
+
     {owner ? <section className="panel team-access-panel">
-      <div className="section-heading"><div><p className="overline">دخول محكوم من المالك</p><h2>جهّز رابط عضو جديد بدون إرسال أي دعوة</h2><p>ننشئ رابطًا يستخدم مرة واحدة ومربوطًا ببريد محدد. أنت الذي تنسخه وترسله يدويًا عندما تقرر بدء الفريق.</p></div><StatusBadge tone="success">لا إرسال تلقائي</StatusBadge></div>
+      <details className="legacy-invitation-flow"><summary>إضافة عضو مسبقًا برابط دعوة</summary><div className="section-heading"><div><p className="overline">مسار احتياطي</p><h2>جهّز رابط عضو قبل تسجيله</h2><p>المسار الأساسي الآن أن يسجل العضو بنفسه ثم توافق عليه. استخدم الرابط فقط عند الحاجة.</p></div><StatusBadge tone="neutral">اختياري</StatusBadge></div>
       <form className="team-invite-form" onSubmit={createInvitation}>
         <label><span>اسم العضو</span><input name="full_name" minLength={2} maxLength={120} required placeholder="الاسم الذي سيظهر للفريق" /></label>
         <label><span>البريد</span><input name="email" type="email" required placeholder="name@company.com" /></label>
@@ -332,7 +422,7 @@ export function TeamWorkspace() {
       {workspace.invitations.length ? <div className="pending-invitations"><h3>روابط في انتظار الاستخدام</h3>{workspace.invitations.map((invitation) => {
         const expired = new Date(invitation.expires_at).getTime() <= now;
         return <article key={invitation.id}><div><strong>{invitation.full_name}</strong><small>{invitation.email} · {roleLabel(invitation.role)}</small><small>{normalizeWorkspaceSections(invitation.allowed_sections).map((section) => sectionLabels[section]).join(" · ")}</small></div><StatusBadge tone={expired ? "danger" : "warning"}>{expired ? "منتهي" : `ينتهي ${formatDate(invitation.expires_at)}`}</StatusBadge><button type="button" className="text-button danger-text" disabled={working} onClick={() => void revokeInvitation(invitation)}><Ban size={14} /> إلغاء</button></article>;
-      })}</div> : null}
+      })}</div> : null}</details>
     </section> : null}
 
     {owner ? <section className="panel team-members-panel">
