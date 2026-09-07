@@ -43,6 +43,9 @@ export const crmSourceConfig: Record<CrmSource, { label: string }> = {
   telegram: { label: "Telegram" },
   meta: { label: "Meta" },
   facebook: { label: "Facebook" },
+  instagram: { label: "Instagram" },
+  tiktok: { label: "TikTok" },
+  meta_business: { label: "Meta Business Suite" },
   whatsapp: { label: "WhatsApp" },
   email: { label: "Email" },
   market_whales_app: { label: "تطبيق Market Whales" },
@@ -69,6 +72,9 @@ export const crmConversationChannelConfig: Record<CrmConversationChannel, { labe
   instagram: { label: "Instagram", placeholder: "https://instagram.com/username" },
   facebook: { label: "Facebook", placeholder: "https://facebook.com/username" },
   messenger: { label: "Messenger", placeholder: "https://m.me/username" },
+  tiktok: { label: "TikTok", placeholder: "https://www.tiktok.com/@username" },
+  meta_business: { label: "Meta Business Suite", placeholder: "https://business.facebook.com/latest/inbox/…" },
+  email: { label: "Email", placeholder: "https://mail.google.com/…" },
   other: { label: "منصة أخرى", placeholder: "https://…" },
 };
 

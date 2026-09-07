@@ -5546,6 +5546,25 @@ export type Database = {
           won_in_period: number
         }[]
       }
+      get_crm_owner_performance_v2: {
+        Args: { target_organization_id: string; target_range_days: number }
+        Returns: {
+          active_contacts: number
+          activities_in_period: number
+          assigned_in_period: number
+          average_first_response_minutes: number | null
+          completed_follow_ups: number
+          last_activity_at: string | null
+          lost_contacts: number
+          new_contacts: number
+          on_time_follow_ups: number
+          overdue_contacts: number
+          owner_id: string
+          total_contacts: number
+          won_contacts: number
+          won_in_period: number
+        }[]
+      }
       get_crm_summary: {
         Args: { target_organization_id: string }
         Returns: {
@@ -6091,6 +6110,28 @@ export type Database = {
           total_count: number
         }[]
       }
+      search_crm_contacts_v6: {
+        Args: {
+          result_limit: number
+          result_offset: number
+          search_query: string
+          target_interest: Database["public"]["Enums"]["crm_interest"] | null
+          target_organization_id: string
+          target_owner_id: string | null
+          target_priority: string
+          target_queue: string
+          target_scope: string
+          target_source: Database["public"]["Enums"]["crm_source"] | null
+          target_stage: Database["public"]["Enums"]["crm_lead_stage"] | null
+          target_view: string
+        }
+        Returns: {
+          contact_id: string
+          priority_reason: string
+          priority_score: number
+          total_count: number
+        }[]
+      }
       send_team_chat_message_v2: {
         Args: {
           message_body: string
@@ -6332,6 +6373,9 @@ export type Database = {
         | "instagram"
         | "facebook"
         | "messenger"
+        | "tiktok"
+        | "meta_business"
+        | "email"
         | "other"
       crm_identity_kind: "phone" | "email" | "telegram" | "tradingview"
       crm_interest:
@@ -6360,6 +6404,9 @@ export type Database = {
         | "telegram"
         | "meta"
         | "facebook"
+        | "instagram"
+        | "tiktok"
+        | "meta_business"
         | "whatsapp"
         | "email"
         | "market_whales_app"
@@ -6643,6 +6690,9 @@ export const Constants = {
         "instagram",
         "facebook",
         "messenger",
+        "tiktok",
+        "meta_business",
+        "email",
         "other",
       ],
       crm_identity_kind: ["phone", "email", "telegram", "tradingview"],
@@ -6674,6 +6724,9 @@ export const Constants = {
         "telegram",
         "meta",
         "facebook",
+        "instagram",
+        "tiktok",
+        "meta_business",
         "whatsapp",
         "email",
         "market_whales_app",

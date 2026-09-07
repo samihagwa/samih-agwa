@@ -4,18 +4,20 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const sources = new Set([
   "manual", "whales_zone", "samihagwa_site", "market_whales_dashboard",
-  "harmonic_book", "telegram", "meta", "facebook", "whatsapp", "email",
+  "harmonic_book", "telegram", "meta", "facebook", "instagram", "tiktok", "meta_business", "whatsapp", "email",
   "market_whales_app", "exness", "tickmill", "referral", "other",
 ]);
 const interests = new Set(["indicator", "signals_gold", "signals_fx", "course", "brokerage", "book", "service", "other"]);
 const identityKinds = new Set(["phone", "email", "telegram", "tradingview"]);
-const conversationChannels = new Set(["telegram", "whatsapp", "instagram", "facebook", "messenger", "other"]);
+const conversationChannels = new Set(["telegram", "whatsapp", "instagram", "facebook", "messenger", "tiktok", "meta_business", "email", "other"]);
 const consentStatuses = new Set(["unknown", "granted", "denied"]);
 const activityKinds = new Set(["call", "message", "email", "note"]);
 const leadStages = new Set(["new", "contacted", "qualified", "follow_up", "won", "lost", "do_not_contact"]);
 const activeStages = new Set(["new", "contacted", "qualified", "follow_up"]);
 const leadTemperatures = new Set(["cold", "warm", "hot"]);
-const preferredContactMethods = new Set(["phone", "email", "telegram", "whatsapp", "instagram", "facebook", "messenger", "other"]);
+const preferredContactMethods = new Set(["phone", "email", "telegram", "whatsapp", "instagram", "facebook", "messenger", "tiktok", "meta_business", "other"]);
+const leadershipRoles = new Set(["owner", "admin", "manager"]);
+const socialSources = new Set(["telegram", "meta", "facebook", "instagram", "tiktok", "meta_business", "whatsapp"]);
 
 type Context = Awaited<ReturnType<typeof createSupabaseContext>>["data"];
 type ContactIdentity = { kind: string; value: string; is_primary: boolean };
@@ -53,6 +55,8 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/CRM contact changed/i, "بيانات العميل اتغيرت من عضو آخر. حدّث الملف ثم أعد المحاولة."],
     [/CRM sales profile changed/i, "ملخص السيلز اتغير من عضو آخر. حدّث الملف ثم أعد المحاولة."],
     [/Conversation link must be/i, "لينك المحادثة غير صحيح. استخدم رابطًا يبدأ بـ http أو https."],
+    [/Invalid CRM stage transition from lost to/i, "العميل موجود في قائمة غير المحولين. استخدم زر «إعادة فتح العميل» وحدد موعد متابعة جديدًا أولًا."],
+    [/Invalid CRM stage transition/i, "الانتقال المطلوب غير متاح من المرحلة الحالية. حدّث ملف العميل واختر الخطوة التالية الظاهرة لك."],
   ];
   const translated = friendlyMessages.find(([pattern]) => pattern.test(error.message))?.[1];
   if (translated) return jsonResponse({ message: translated }, 400);
@@ -143,6 +147,9 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   if (Boolean(conversationChannel) !== Boolean(conversationUrl)) {
     return jsonResponse({ message: "اختر منصة المحادثة وأضف لينك الشات معها." }, 400);
   }
+  if (socialSources.has(source) && (!conversationChannel || !conversationUrl)) {
+    return jsonResponse({ message: "مصدر العميل من منصة تواصل، لذلك اختر المنصة والصق لينك المحادثة للوصول إليه بسرعة." }, 400);
+  }
   if (conversationChannel && !conversationChannels.has(conversationChannel)) {
     return jsonResponse({ message: "منصة المحادثة غير صالحة." }, 400);
   }
@@ -154,6 +161,23 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   }
   if (!followUpAt) return jsonResponse({ message: "حدد موعد متابعة صحيحًا في المستقبل." }, 400);
   if (text(body.notes).length > 5000) return jsonResponse({ message: "ملاحظات العميل أطول من الحد المسموح." }, 400);
+
+  const actorId = text(context?.userClaims?.id);
+  const [membershipResult, ownerRouteResult, actorRouteResult] = await Promise.all([
+    context!.supabaseAdmin.from("memberships").select("role").eq("organization_id", organizationId).eq("user_id", actorId).eq("status", "active").maybeSingle(),
+    context!.supabaseAdmin.from("crm_lead_routing_members").select("user_id").eq("organization_id", organizationId).eq("user_id", ownerId).maybeSingle(),
+    context!.supabaseAdmin.from("crm_lead_routing_members").select("user_id").eq("organization_id", organizationId).eq("user_id", actorId).maybeSingle(),
+  ]);
+  if (membershipResult.error || ownerRouteResult.error || actorRouteResult.error) {
+    return jsonResponse({ message: "تعذّر التحقق من فريق السيلز. حاول مرة أخرى." }, 503);
+  }
+  const leadership = leadershipRoles.has(text(membershipResult.data?.role));
+  if (!ownerRouteResult.data) {
+    return jsonResponse({ message: "مسؤول العميل يجب أن يكون ضمن فريق السيلز المحدد." }, 400);
+  }
+  if (!leadership && (ownerId !== actorId || !actorRouteResult.data)) {
+    return jsonResponse({ message: "عضو السيلز يستطيع إضافة العميل لنفسه فقط." }, 403);
+  }
 
   const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v3", {
     target_user_id: context!.userClaims!.id,

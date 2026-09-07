@@ -49,6 +49,17 @@ function crmQuestionTerms(question: string) {
     .filter((word) => word.length >= 3 && !ignored.has(word));
   return [...new Set([...explicit, ...words])].sort((first, second) => second.length - first.length).slice(0, 4);
 }
+function crmPriorityQuestion(question: string) {
+  const normalized = normalizeArabic(question);
+  return /(مين|من).{0,18}(اكلم|اتواصل)|اهم.{0,18}(عميل|العملاء)|اولوية.{0,18}(عميل|التواصل)|عملاء.{0,18}(دلوقتي|الان|اليوم)/.test(normalized);
+}
+function redactExternalQuestion(question: string) {
+  return question
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[بريد محجوب]")
+    .replace(/(?:\+?\d[\d\s().-]{5,}\d)/g, "[رقم محجوب]")
+    .replace(/https?:\/\/\S+/gi, "[رابط محجوب]")
+    .slice(0, 1500);
+}
 function collectAllowedLinks(value: unknown, output = new Map<string, string>()) {
   if (typeof value === "string" && value.startsWith("/")) {
     output.set(value, linkLabel(value));
@@ -250,8 +261,116 @@ export default {
       },
     };
 
+    async function databaseAnswer(answer: string, links: AssistantLink[], scope: string) {
+      const sourceLabel = "قاعدة العملاء · مباشر وآمن";
+      await context.supabaseAdmin.from("audit_events").insert({
+        organization_id: organizationId, actor_id: actorId, action: "assistant.request_started",
+        entity_type: "workspace_assistant", after_data: { question_length: question.length, source: "database", scope },
+      });
+      const { data: exchangeRows, error: exchangeError } = await context.supabaseAdmin.rpc("append_assistant_exchange", {
+        target_user_id: actorId,
+        target_organization_id: organizationId,
+        target_conversation_id: conversationId,
+        user_question: question,
+        assistant_answer: answer,
+        assistant_provider_label: sourceLabel,
+        assistant_links: links,
+      });
+      if (exchangeError) return jsonResponse({ message: "تم تجهيز الإجابة لكن تعذّر حفظها بأمان؛ لم نعرض ردًا مؤقتًا." }, 503);
+      const exchange = Array.isArray(exchangeRows) ? exchangeRows[0] as Record<string, unknown> | undefined : undefined;
+      await context.supabaseAdmin.from("audit_events").insert({
+        organization_id: organizationId, actor_id: actorId, action: "assistant.response_returned",
+        entity_type: "workspace_assistant", after_data: { answer_length: answer.length, source: "database", scope },
+      });
+      return jsonResponse({
+        answer, links, conversation_id: conversationId,
+        message_ids: { user: exchange?.user_message_id, assistant: exchange?.assistant_message_id },
+        source: { label: sourceLabel },
+      });
+    }
+
+    const fastPersonalIntent = personalQuestionIntent(question);
+    if (fastPersonalIntent) {
+      if (!hasSection(role, sections, "tasks")) {
+        return databaseAnswer("قسم المهام مش ضمن صلاحيات حسابك، لذلك مش هعرض أي بيانات منه. اطلب من المالك إضافة القسم لو دورك محتاجه.", [], "personal_tasks");
+      }
+      const { data: taskRows, error: taskError } = await context.supabaseAdmin.from("tasks")
+        .select("id, title, status, due_at")
+        .eq("organization_id", organizationId).eq("owner_id", actorId)
+        .not("status", "in", "(done,cancelled)")
+        .order("due_at", { ascending: true, nullsFirst: false }).limit(30);
+      if (taskError) return jsonResponse({ message: "تعذّر قراءة مهامك الآن. حاول مرة أخرى." }, 503);
+      const summaries = (taskRows ?? []).map((task) => taskSummary(task));
+      return databaseAnswer(
+        personalAnswer(fastPersonalIntent, summaries, question),
+        summaries.slice(0, 10).map((task) => ({ label: task.title, url: task.url })),
+        "personal_tasks",
+      );
+    }
+
+    if (hasSection(role, sections, "crm") && crmPriorityQuestion(question)) {
+      let contactsQuery = context.supabaseAdmin.from("crm_contacts")
+        .select("id, full_name, stage, owner_id, next_follow_up_at, last_contacted_at")
+        .eq("organization_id", organizationId)
+        .in("stage", ["new", "contacted", "qualified", "follow_up"])
+        .order("next_follow_up_at", { ascending: true, nullsFirst: false })
+        .limit(80);
+      if (!leadership) contactsQuery = contactsQuery.eq("owner_id", actorId);
+      const { data: contacts, error: contactsError } = await contactsQuery;
+      if (contactsError) return jsonResponse({ message: "تعذّر ترتيب قائمة التواصل الآن. حاول مرة أخرى." }, 503);
+      const ids = (contacts ?? []).map((contact) => text(contact.id));
+      const { data: profiles, error: profilesError } = ids.length
+        ? await context.supabaseAdmin.from("crm_sales_profiles").select("contact_id, lead_temperature, next_action").in("contact_id", ids)
+        : { data: [], error: null };
+      if (profilesError) return jsonResponse({ message: "تعذّر قراءة سجل المتابعة الآن. حاول مرة أخرى." }, 503);
+      const profileByContact = new Map((profiles ?? []).map((profile) => [text(profile.contact_id), profile]));
+      const now = Date.now();
+      const ranked = (contacts ?? []).map((contact) => {
+        const profile = profileByContact.get(text(contact.id));
+        const followUp = contact.next_follow_up_at ? new Date(contact.next_follow_up_at).getTime() : null;
+        const overdue = followUp !== null && followUp < now;
+        const dueToday = followUp !== null && cairoDateKey(new Date(followUp)) === cairoDateKey(new Date(now));
+        const stageScore = contact.stage === "qualified" ? 30 : contact.stage === "follow_up" ? 18 : contact.stage === "new" ? 14 : 10;
+        const temperatureScore = profile?.lead_temperature === "hot" ? 25 : profile?.lead_temperature === "warm" ? 12 : 0;
+        const score = (overdue ? 45 : dueToday ? 30 : 0) + stageScore + temperatureScore + (contact.last_contacted_at ? 0 : 8);
+        const reason = overdue ? "متابعة متأخرة" : profile?.lead_temperature === "hot" ? "اهتمام مرتفع مسجل" : contact.stage === "qualified" ? "مؤهل للشراء" : dueToday ? "موعد متابعته اليوم" : "الأعلى حسب المرحلة وسجل المتابعة";
+        return { id: text(contact.id), name: text(contact.full_name) || "عميل", score, reason, nextAction: text(profile?.next_action) };
+      }).sort((first, second) => second.score - first.score).slice(0, 5);
+      if (!ranked.length) return databaseAnswer("مفيش عملاء نشطين مطلوب التواصل معاهم ضمن صلاحية حسابك حاليًا.", [], "crm_priority");
+      const answer = `دول أهم ${ranked.length.toLocaleString("ar-EG")} عملاء للتواصل دلوقتي حسب الموعد والمرحلة وسجل المتابعة:\n\n${ranked.map((contact, index) => `${index + 1}. ${contact.name} — ${contact.reason}${contact.nextAction ? `\nالخطوة المسجلة: ${contact.nextAction}` : ""}`).join("\n\n")}\n\nالترتيب اقتراح تشغيلي من بيانات CRM الحالية، مش حكم نهائي على العميل.`;
+      return databaseAnswer(answer, ranked.map((contact) => ({ label: `فتح ${contact.name}`, url: `/crm/${contact.id}` })), "crm_priority");
+    }
+
+    const crmTerms = hasSection(role, sections, "crm") ? crmQuestionTerms(question) : [];
+    if (crmTerms.length) {
+      const matchingIds = new Set<string>();
+      for (const term of crmTerms) {
+        const [namesResult, identitiesResult] = await Promise.all([
+          context.supabaseAdmin.from("crm_contacts").select("id").eq("organization_id", organizationId).ilike("full_name", `%${term}%`).limit(10),
+          context.supabaseAdmin.from("crm_identities").select("contact_id").eq("organization_id", organizationId).ilike("normalized_value", `%${term.replace(/^@/, "")}%`).limit(10),
+        ]);
+        if (namesResult.error || identitiesResult.error) return jsonResponse({ message: "تعذّر البحث في العملاء الآن. حاول مرة أخرى." }, 503);
+        for (const row of namesResult.data ?? []) matchingIds.add(text(row.id));
+        for (const row of identitiesResult.data ?? []) matchingIds.add(text(row.contact_id));
+      }
+      let matchQuery = context.supabaseAdmin.from("crm_contacts")
+        .select("id, full_name, stage, owner_id, next_follow_up_at")
+        .eq("organization_id", organizationId).in("id", [...matchingIds]).limit(8);
+      if (!leadership) matchQuery = matchQuery.eq("owner_id", actorId);
+      const { data: matches, error: matchesError } = matchingIds.size ? await matchQuery : { data: [], error: null };
+      if (matchesError) return jsonResponse({ message: "تعذّر فتح نتائج العملاء الآن. حاول مرة أخرى." }, 503);
+      if (!matches?.length) return databaseAnswer("ملقتش عميلاً مطابقًا في الجزء المسموح لحسابك. جرّب الاسم الكامل أو الهاتف أو البريد أو حساب TradingView.", [], "crm_lookup");
+      const answer = `لقيت ${matches.length.toLocaleString("ar-EG")} نتيجة مطابقة:\n\n${matches.map((contact, index) => `${index + 1}. ${contact.full_name} — ${contact.stage === "won" ? "تم التحويل" : contact.stage === "lost" ? "غير محوّل" : "متابعة نشطة"}`).join("\n")}`;
+      return databaseAnswer(answer, matches.map((contact) => ({ label: `فتح ${text(contact.full_name) || "ملف العميل"}`, url: `/crm/${contact.id}` })), "crm_lookup");
+    }
+
     const queries: Promise<void>[] = [];
     let myOpenTasks: TaskSummary[] = [];
+    // Generic provider answers only need the public navigation map. Operational
+    // questions return above from deterministic, permission-scoped DB paths, so
+    // do not spend time collecting private workspace context for the provider.
+    const providerNeedsPrivateContext = false;
+    if (providerNeedsPrivateContext) {
     if (hasSection(role, sections, "tasks")) queries.push((async () => {
       const taskQuery = context.supabaseAdmin.from("tasks")
         .select("id, title, description, status, priority, owner_id, due_at, acceptance_criteria, content_item_id, launch_deliverable_id, crm_contact_id")
@@ -408,6 +527,7 @@ export default {
     })());
 
     await Promise.all(queries);
+    }
     const allowedLinks = collectAllowedLinks(workspaceContext);
     const personalIntent = personalQuestionIntent(question);
     if (personalIntent) {
@@ -451,7 +571,7 @@ export default {
 
     const { error: auditError } = await context.supabaseAdmin.from("audit_events").insert({
       organization_id: organizationId, actor_id: actorId, action: "assistant.request_started",
-      entity_type: "workspace_assistant", after_data: { question_length: question.length, provider_id: provider.id, context_sections: Object.keys(workspaceContext) },
+      entity_type: "workspace_assistant", after_data: { question_length: question.length, provider_id: provider.id, context_sections: ["public_navigation_only"] },
     });
     if (auditError) return jsonResponse({ message: "تعذّر تسجيل طلب المساعد، فأوقفناه قبل استهلاك الرصيد." }, 503);
 
@@ -459,7 +579,7 @@ export default {
     try {
       providerResult = await fetchProviderJson(
         provider,
-        providerBody(provider, workspaceContext, question, memorySummary, recentConversation),
+        providerBody(provider, { navigation: workspaceContext.navigation }, redactExternalQuestion(question), "", []),
         60_000,
       );
     }

@@ -1,27 +1,16 @@
 "use client";
 
 import { Bot, ExternalLink, LoaderCircle, Send, Sparkles, X } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
 
 type AssistantLink = { label: string; url: string };
 type AssistantMessage = { id: string; role: "user" | "assistant"; text: string; provider?: string; links: AssistantLink[] };
-const starters = ["إيه المهام اللي عليّا النهارده؟", "إيه أقرب موعد تسليم عندي؟", "هل في ضغط زائد في تقويم الفريق؟", "أوصل للقسم اللي محتاجه إزاي؟"];
+const starters = ["مين أهم عملاء أتواصل معاهم دلوقتي؟", "إيه المهام اللي عليّا النهارده؟", "افتحلي ملف عميل بالاسم أو الرقم", "إيه أقرب موعد تسليم عندي؟"];
 
 function AnswerText({ value }: { value: string }) {
-  const pattern = /\[([^\]]+)\]\((\/[A-Za-z0-9/_?#=&.%:-]+)\)|(\/[A-Za-z0-9/_?#=&.%:-]+)/g;
-  const parts: ReactNode[] = [];
-  let cursor = 0;
-  for (const match of value.matchAll(pattern)) {
-    const index = match.index ?? 0;
-    if (index > cursor) parts.push(value.slice(cursor, index));
-    const url = match[2] || match[3];
-    parts.push(<a href={url} key={`${url}-${index}`}>{match[1] || url}</a>);
-    cursor = index + match[0].length;
-  }
-  if (cursor < value.length) parts.push(value.slice(cursor));
-  return <p>{parts}</p>;
+  return <p>{value}</p>;
 }
 
 function parseLinks(value: unknown): AssistantLink[] {
@@ -44,6 +33,7 @@ export function WorkspaceAssistant() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [retryQuestion, setRetryQuestion] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (open) endRef.current?.scrollIntoView({ block: "end" }); }, [messages, open, working]);
@@ -53,17 +43,19 @@ export function WorkspaceAssistant() {
     void (async () => {
       setHistoryLoading(true);
       const supabase = getSupabaseBrowserClient();
-      const { data: authData } = await supabase.auth.getUser();
+      const { data: authData, error: authError } = await supabase.auth.getUser();
       const userId = authData.user?.id;
-      if (!userId || cancelled) { setHistoryLoading(false); setHistoryLoaded(true); return; }
-      const { data: conversation } = await supabase.from("assistant_conversations")
+      if (authError || !userId || cancelled) { if (authError) setError("تعذّر تحميل جلسة المساعد. جرّب فتحه مرة أخرى."); setHistoryLoading(false); setHistoryLoaded(true); return; }
+      const { data: conversation, error: conversationError } = await supabase.from("assistant_conversations")
         .select("id").eq("user_id", userId).maybeSingle();
+      if (conversationError) { if (!cancelled) setError("تعذّر تحميل ذاكرة المحادثة. اضغط إعادة المحاولة."); setHistoryLoading(false); setHistoryLoaded(true); return; }
       if (!conversation || cancelled) { setHistoryLoading(false); setHistoryLoaded(true); return; }
-      const { data: rows } = await supabase.from("assistant_messages")
+      const { data: rows, error: rowsError } = await supabase.from("assistant_messages")
         .select("id, role, body, provider_label, links, created_at")
         .eq("conversation_id", conversation.id)
         .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100);
       if (cancelled) return;
+      if (rowsError) { setError("تعذّر تحميل الرسائل السابقة. محادثتك لم تُحذف."); setHistoryLoading(false); setHistoryLoaded(true); return; }
       setConversationId(conversation.id);
       setMessages((rows ?? []).reverse().flatMap((row) => row.role === "user" || row.role === "assistant" ? [{
         id: String(row.id), role: row.role, text: row.body,
@@ -95,6 +87,7 @@ export function WorkspaceAssistant() {
     if (!cleanQuestion || working) return;
     const userMessage: AssistantMessage = { id: crypto.randomUUID(), role: "user", text: cleanQuestion, links: [] };
     setMessages((current) => [...current, userMessage]); setDraft(""); setWorking(true); setError(null);
+    setRetryQuestion(cleanQuestion);
     const result = await getSupabaseBrowserClient().functions.invoke("workspace-assistant", { body: { question: cleanQuestion, conversation_id: conversationId } });
     setWorking(false);
     if (result.error) {
@@ -112,6 +105,7 @@ export function WorkspaceAssistant() {
       id: typeof payload.message_ids?.assistant === "number" ? String(payload.message_ids.assistant) : crypto.randomUUID(),
       role: "assistant", text: answer, provider, links: parseLinks(payload.links),
     }]);
+    setRetryQuestion("");
   }
 
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); void ask(draft); }
@@ -122,14 +116,14 @@ export function WorkspaceAssistant() {
     </button>
     <button className={`assistant-backdrop ${open ? "visible" : ""}`} type="button" aria-label="إغلاق المساعد" tabIndex={open ? 0 : -1} onClick={() => setOpen(false)} />
     <aside className={`workspace-assistant ${open ? "open" : ""}`} aria-label="مساعد تشغيل Market Whales" aria-hidden={!open}>
-      <header><div><span><Bot size={21} /></span><div><strong>مساعد Market Whales</strong><small>يقرأ المسموح لحسابك فقط</small></div></div><button type="button" aria-label="إغلاق" onClick={() => setOpen(false)}><X size={20} /></button></header>
+      <header><div><span><Bot size={21} /></span><div><strong>مساعد الفريق</strong><small>مهام، عملاء، وروابط مباشرة حسب صلاحيتك</small></div></div><button type="button" aria-label="إغلاق" onClick={() => setOpen(false)}><X size={20} /></button></header>
       <div className="assistant-trust-note"><Sparkles size={15} /><p>يساعدك تفهم شغلك وتوصل للمعلومة. لا يغيّر أي بيانات أو ينفذ مهمة من نفسه.</p></div>
       <div className="assistant-messages" role="log" aria-live="polite">
         {historyLoading ? <section className="assistant-welcome"><LoaderCircle className="spin" size={24} /><p>برجع محادثتك السابقة…</p></section> : null}
         {!historyLoading && !messages.length ? <section className="assistant-welcome"><Bot size={28} /><h2>تحب تعرف إيه؟</h2><p>اسأل عن مهامك، مواعيدك، مكان أي خطوة، أو معلومة موجودة في الأقسام المتاحة لك.</p><div>{starters.map((starter) => <button type="button" key={starter} onClick={() => void ask(starter)}>{starter}</button>)}</div></section> : null}
         {messages.map((message) => <article key={message.id} className={`assistant-message ${message.role}`}><strong>{message.role === "assistant" ? "المساعد" : "أنت"}</strong><AnswerText value={message.text} />{message.links.length ? <div className="assistant-message-links">{message.links.map((link) => <a href={link.url} key={link.url}><ExternalLink size={13} />{link.label}</a>)}</div> : null}{message.provider ? <small>{message.provider}</small> : null}</article>)}
         {working ? <article className="assistant-message assistant thinking"><LoaderCircle className="spin" size={16} /><span>براجع البيانات المسموحة لحسابك…</span></article> : null}
-        {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+        {error ? <div className="assistant-error" role="alert"><p>{error}</p>{retryQuestion ? <button type="button" disabled={working} onClick={() => void ask(retryQuestion)}>إعادة المحاولة</button> : null}</div> : null}
         <div ref={endRef} />
       </div>
       <form className="assistant-composer" onSubmit={submit}><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={2} maxLength={1500} placeholder="اسأل عن شغلك أو أي قسم…" disabled={working || historyLoading} /><button type="submit" aria-label="إرسال السؤال" disabled={working || historyLoading || !draft.trim()}>{working ? <LoaderCircle className="spin" size={18} /> : <Send size={18} />}</button></form>

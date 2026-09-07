@@ -81,7 +81,8 @@ const temperatureConfig: Record<LeadTemperature, { label: string; tone: "neutral
 
 const preferredMethodLabels: Record<string, string> = {
   phone: "هاتف", email: "بريد إلكتروني", telegram: "Telegram", whatsapp: "WhatsApp",
-  instagram: "Instagram", facebook: "Facebook", messenger: "Messenger", other: "أخرى",
+  instagram: "Instagram", facebook: "Facebook", messenger: "Messenger", tiktok: "TikTok",
+  meta_business: "Meta Business", other: "أخرى",
 };
 
 function formatDate(value: string) {
@@ -273,6 +274,26 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
     }
   }
 
+  async function reopenCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!data) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const nextFollowUp = futureDateIso(nextFollowUpAt);
+    if (!nextFollowUp) { setError("حدد موعد متابعة جديدًا في المستقبل."); return; }
+    const note = formText(form, "summary");
+    const result = await invokeCrm({
+      action: "record_activity",
+      contact_id: data.contact.id,
+      expected_version: data.contact.version,
+      kind: "note",
+      next_stage: "follow_up",
+      summary: `إعادة فتح العميل — ${note}`,
+      next_follow_up_at: nextFollowUp,
+    }, "تمت إعادة فتح العميل وإنشاء مهمة متابعة واحدة في الموعد الجديد.", "activity");
+    if (result) formElement.reset();
+  }
+
   async function saveSalesProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!data) return;
@@ -323,7 +344,7 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
 
   const { contact, identities, activities, conversationLinks, tasks, salesProfile } = data;
   const canAct = canManageTasks(workspace.membership.role) || contact.owner_id === session.user.id;
-  const canRecordResult = contact.stage !== "do_not_contact" && contact.stage !== "won";
+  const canRecordResult = !["do_not_contact", "won", "lost"].includes(contact.stage);
   const openTask = tasks.find((task) => task.status !== "done");
   const overdue = Boolean(contact.next_follow_up_at && crmLeadStageConfig[contact.stage].active && new Date(contact.next_follow_up_at).getTime() < renderNow);
   const directIdentity = identities.find((identity) => identity.is_primary && identityHref(identity)) ?? identities.find((identity) => identityHref(identity));
@@ -378,6 +399,17 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
           {showIdentityForm && remainingKinds.length ? <form className="crm-activity-form crm-inline-tool" onSubmit={(event) => void addIdentity(event)}><label><span>نوع الوسيلة</span><select name="identity_kind">{remainingKinds.map((kind) => <option value={kind} key={kind}>{crmIdentityKindConfig[kind].label}</option>)}</select></label><label><span>القيمة</span><input name="identity_value" dir="ltr" required minLength={3} maxLength={320} /></label><label className="crm-checkbox"><input name="make_primary" type="checkbox" /><span>وسيلة أساسية</span></label><Button type="submit" disabled={working !== null}>{working === "identity" ? <LoaderCircle className="spin" size={14} /> : <Save size={14} />} حفظ</Button></form> : null}
           {showLinkForm ? <form className="crm-activity-form crm-inline-tool" onSubmit={(event) => void addConversationLink(event)}><label><span>المنصة</span><select name="channel">{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select></label><label><span>لينك المحادثة</span><input name="url" type="url" dir="ltr" required placeholder="https://..." /></label><label><span>اسم اختياري</span><input name="label" maxLength={80} /></label><label className="crm-checkbox"><input name="make_primary" type="checkbox" /><span>لينك أساسي</span></label><Button type="submit" disabled={working !== null}>{working === "link" ? <LoaderCircle className="spin" size={14} /> : <Save size={14} />} حفظ</Button></form> : null}
         </section>
+
+        {canAct && contact.stage === "lost" ? <section className="panel crm-customer-section crm-reopen-section">
+          <div className="section-heading compact"><div><p className="overline">الملف في غير المحولين</p><h2>إعادة فتح العميل</h2><p>الرجوع يبدأ بمتابعة جديدة؛ بعدها تقدر تسجل نتيجة التواصل والتأهيل بشكل طبيعي.</p></div><History size={19} /></div>
+          <form className="crm-customer-result-form crm-follow-up-flow" onSubmit={(event) => void reopenCustomer(event)}>
+            <label className="wide"><span>سبب إعادة الفتح</span><textarea name="summary" required minLength={3} maxLength={1000} rows={3} placeholder="مثال: العميل تواصل من جديد أو طلب تفاصيل الخدمة…" /></label>
+            <div className="wide crm-follow-up-schedule"><span>موعد المتابعة الجديدة</span><div className="crm-follow-up-presets">{([
+              ["hour", "بعد ساعة"], ["two_hours", "بعد ساعتين"], ["tomorrow", "غدًا"], ["two_days", "بعد يومين"], ["next_week", "الأسبوع القادم"], ["custom", "تاريخ ووقت"],
+            ] as Array<[FollowUpPreset, string]>).map(([preset, label]) => <button type="button" className={followUpPreset === preset ? "active" : ""} onClick={() => { setFollowUpPreset(preset); if (preset !== "custom") setNextFollowUpAt(followUpDate(preset)); }} key={preset}>{label}</button>)}</div><label><span>التاريخ والوقت</span><input type="datetime-local" value={nextFollowUpAt} required onChange={(event) => { setFollowUpPreset("custom"); setNextFollowUpAt(event.target.value); }} /></label></div>
+            <div className="form-actions wide"><Button type="submit" disabled={working !== null}>{working === "activity" ? <LoaderCircle className="spin" size={14} /> : <History size={14} />} إعادة فتح وإنشاء المتابعة</Button></div>
+          </form>
+        </section> : null}
 
         {canAct && canRecordResult ? <section className="panel crm-customer-section crm-result-section">
           <div className="section-heading compact"><div><p className="overline">نتيجة التواصل</p><h2>ماذا حدث مع العميل؟</h2><p>اختيار واحد ثم موعد واحد. الحفظ يغلق المتابعة الحالية وينشئ التالية معًا.</p></div><MessageSquareText size={19} /></div>

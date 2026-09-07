@@ -2074,6 +2074,9 @@ test("CRM customer files save communication results atomically and create the ne
   assert.match(edge, /action === "add_conversation_link"/);
   assert.match(workspace, /expected_version: data\.contact\.version/);
   assert.match(workspace, /تم حفظ النتيجة وإنشاء متابعة واحدة/);
+  assert.match(workspace, /إعادة فتح العميل/);
+  assert.match(workspace, /next_stage: "follow_up"/);
+  assert.match(edge, /Invalid CRM stage transition from lost to/);
   assert.match(workspace, /taskDeepLink\(task\.id\)/);
   assert.match(workspace, /ملخص السيلز/);
   assert.match(listWorkspace, /expected_version: contact\.version/);
@@ -2084,10 +2087,12 @@ test("CRM customer files save communication results atomically and create the ne
 });
 
 test("CRM customer directory keeps every source filter permission-scoped and links exact records", async () => {
-  const [migration, directoryMigration, queueMigration, directory, page, mainPage, operationsPage, nav, crmContract, types, css] = await Promise.all([
+  const [migration, directoryMigration, queueMigration, priorityMigration, socialMigration, directory, page, mainPage, operationsPage, nav, crmContract, types, css] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260823014440_crm_customer_directory_sources.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260831134800_crm_sales_directory_and_schedule.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260907140356_crm_follow_up_queues.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260907195600_crm_priority_and_sales_metrics.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260907195500_crm_social_channels.sql", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmCustomerDirectory.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/crm/customers/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/crm/page.tsx", import.meta.url), "utf8"),
@@ -2121,7 +2126,15 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.match(queueMigration, /security invoker/);
   assert.match(queueMigration, /revoke all on function public\.search_crm_contacts_v5[\s\S]*from public, anon/);
   assert.match(queueMigration, /grant execute on function public\.search_crm_contacts_v5[\s\S]*to authenticated/);
-  assert.match(directory, /rpc\("search_crm_contacts_v5"/);
+  assert.match(priorityMigration, /function public\.search_crm_contacts_v6/);
+  assert.match(priorityMigration, /target_priority = 'all' or score >= 55/);
+  assert.match(priorityMigration, /function public\.get_crm_owner_performance_v2/);
+  assert.match(priorityMigration, /average_first_response_minutes/);
+  for (const source of ["instagram", "tiktok", "meta_business"]) assert.match(socialMigration, new RegExp(`'${source}'`));
+  assert.match(directory, /rpc\("search_crm_contacts_v6"/);
+  assert.match(directory, /الأعلى للتواصل الآن/);
+  assert.match(directory, /عميل جديد/);
+  assert.match(directory, /get_crm_owner_performance_v2/);
   assert.match(directory, /crm-queue-tabs/);
   assert.match(directory, /const \[queueFilter, setQueueFilter\] = useState<QueueFilter>\("all"\)/);
   assert.match(directory, /<SegmentedProgress/);
@@ -2139,6 +2152,21 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.match(nav, /href: "\/crm"/);
   assert.match(nav, /href: "\/crm\/operations"/);
   assert.match(css, /\.crm-directory-table-wrap \{[^}]+overflow: auto/);
+});
+
+test("workspace assistant ranks CRM follow-ups without sending PII to the AI provider", async () => {
+  const [edge, component] = await Promise.all([
+    readFile(new URL("../supabase/functions/workspace-assistant/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/assistant/WorkspaceAssistant.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(edge, /function crmPriorityQuestion/);
+  assert.match(edge, /قاعدة العملاء · مباشر وآمن/);
+  assert.match(edge, /databaseAnswer\(answer,[^;]+"crm_priority"\)/);
+  assert.match(edge, /url: `\/crm\/\$\{contact\.id\}`/);
+  assert.match(component, /مين أهم عملاء أتواصل معاهم دلوقتي؟/);
+  assert.match(component, /return <p>\{value\}<\/p>/);
+  assert.doesNotMatch(component, /matchAll\(pattern\)/);
+  assert.match(component, /إعادة المحاولة/);
 });
 
 test("operating UI keeps progress, calm finance styling, and outcome-driven CRM follow-up", async () => {

@@ -66,7 +66,7 @@ type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
 type ImportBatch = Tables<"crm_import_batches">;
 type ImportRow = Tables<"crm_import_rows">;
-type OwnerPerformance = Database["public"]["Functions"]["get_crm_owner_performance"]["Returns"][number];
+type OwnerPerformance = Database["public"]["Functions"]["get_crm_owner_performance_v2"]["Returns"][number];
 type CrmSummary = Database["public"]["Functions"]["get_crm_summary"]["Returns"][number];
 type BrokerLookupResult = Database["public"]["Functions"]["lookup_exness_account"]["Returns"][number];
 type TeamPerson = { id: string; name: string; role: Membership["role"] };
@@ -241,7 +241,7 @@ export function CrmWorkspace() {
           result_offset: page * PAGE_SIZE,
         }),
         manager
-          ? supabase.rpc("get_crm_owner_performance", { target_organization_id: organizationId, target_range_days: performanceRange })
+          ? supabase.rpc("get_crm_owner_performance_v2", { target_organization_id: organizationId, target_range_days: performanceRange })
           : Promise.resolve({ data: [] as OwnerPerformance[], error: null }),
         supabase.rpc("get_crm_summary", { target_organization_id: organizationId }),
         platformAdmin
@@ -398,6 +398,10 @@ export function CrmWorkspace() {
   }, [searchInput]);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("add") === "1") setShowCreate(true);
+  }, []);
+
+  useEffect(() => {
     if (!workspace) return;
     const timeout = window.setTimeout(() => void refreshSafely(workspace.organization.id), 0);
     return () => window.clearTimeout(timeout);
@@ -527,6 +531,10 @@ export function CrmWorkspace() {
     if (!identities.length) return setError("أضف وسيلة تواصل واحدة على الأقل: هاتف أو بريد أو Telegram أو TradingView.");
     if (!identities.some((identity) => identity.kind === primaryIdentityKind)) {
       return setError(`املأ ${crmIdentityKindConfig[primaryIdentityKind].label} أو اختر وسيلة أخرى كأساسية.`);
+    }
+    const socialSources = new Set<CrmSource>(["facebook", "instagram", "tiktok", "meta", "meta_business", "telegram", "whatsapp"]);
+    if (socialSources.has(source) && (!formText(form, "conversation_channel") || !formText(form, "conversation_url"))) {
+      return setError("مصدر العميل منصة تواصل؛ اختر المنصة والصق لينك الشات عشان المسؤول يوصله مباشرة.");
     }
     const created = await invokeCrm({
       action: "create_lead",
@@ -809,7 +817,7 @@ export function CrmWorkspace() {
         const needsAttention = Number(metric.overdue_contacts) > 0 || (Number(metric.active_contacts) > 0 && Number(metric.activities_in_period) === 0);
         return <article className={needsAttention ? "needs-attention" : ""} key={metric.owner_id}>
           <header><div><CircleUserRound size={17} /><strong>{person?.name ?? "عضو فريق"}</strong></div><span>{needsAttention ? "يحتاج مراجعة" : "متابع بانتظام"}</span></header>
-          <dl><div><dt>ملفات نشطة</dt><dd>{metric.active_contacts}</dd></div><div><dt>صفقات خلال الفترة</dt><dd>{metric.won_in_period}</dd></div><div><dt>أنشطة مسجلة</dt><dd>{metric.activities_in_period}</dd></div><div><dt>متابعات مكتملة</dt><dd>{completed}</dd></div><div><dt>في الموعد</dt><dd>{onTimeRate === null ? "—" : `${onTimeRate}%`}</dd></div><div><dt>متأخر الآن</dt><dd>{metric.overdue_contacts}</dd></div></dl>
+          <dl><div><dt>إجمالي العملاء</dt><dd>{metric.total_contacts}</dd></div><div><dt>مسند خلال الفترة</dt><dd>{metric.assigned_in_period}</dd></div><div><dt>تم التحويل</dt><dd>{metric.won_in_period}</dd></div><div><dt>غير محولين</dt><dd>{metric.lost_contacts}</dd></div><div><dt>التزام المتابعة</dt><dd>{onTimeRate === null ? "—" : `${onTimeRate}%`}</dd></div><div><dt>متوسط أول رد</dt><dd>{metric.average_first_response_minutes == null ? "—" : `${Math.round(Number(metric.average_first_response_minutes))} د`}</dd></div><div><dt>أنشطة مسجلة</dt><dd>{metric.activities_in_period}</dd></div><div><dt>متأخر الآن</dt><dd>{metric.overdue_contacts}</dd></div></dl>
           <footer><span>{metric.last_activity_at ? `آخر نشاط ${formatDate(metric.last_activity_at)}` : "لا يوجد نشاط متابعة مسجل"}</span><button type="button" onClick={() => { setOwnerFilter(metric.owner_id); setPage(0); }}>عرض عملائه</button></footer>
         </article>;
       })}</div> : <div className="crm-performance-empty"><UserRoundCheck size={22} /><div><strong>لم يتم اختيار فريق السيلز بعد</strong><p>أضف حسابات السيلز من الإعداد أعلاه. لن يظهر أي عضو هنا لمجرد أنه سجل الدخول.</p></div></div>}
@@ -828,7 +836,7 @@ export function CrmWorkspace() {
         {interest === "other" ? <label><span>سبب التسجيل الجديد</span><input name="interest_detail" minLength={2} maxLength={160} required placeholder="مثال: حضور ويبنار التحليل الفني" /></label> : null}
         <label><span>حالة الموافقة على التواصل</span><select name="consent_status" defaultValue="unknown"><option value="unknown">غير معروفة</option><option value="granted">وافق</option></select><small>إذا رفض لاحقًا، أغلقه بنتيجة «عدم تواصل».</small></label>
         <fieldset className="crm-identities-fieldset full-field"><legend>وسائل التواصل والحسابات — املأ واحدة أو أكثر</legend><div>{crmIdentityKinds.map((kind) => <label key={kind}><span>{crmIdentityKindConfig[kind].label}</span><input name={`identity_${kind}`} type={crmIdentityKindConfig[kind].inputType} dir="ltr" minLength={3} maxLength={kind === "tradingview" ? 100 : 320} placeholder={crmIdentityKindConfig[kind].placeholder} /></label>)}</div><label className="crm-primary-select"><span>وسيلة التواصل الأساسية</span><select value={primaryIdentityKind} onChange={(event) => setPrimaryIdentityKind(event.target.value as CrmIdentityKind)}>{crmIdentityKinds.map((kind) => <option value={kind} key={kind}>{crmIdentityKindConfig[kind].label}</option>)}</select></label><small>الأساسية تظهر أولًا، وجميع القيم—including TradingView—تدخل في البحث ومنع التكرار.</small></fieldset>
-        <label><span>منصة المحادثة المباشرة — اختياري</span><select name="conversation_channel" value={conversationChannel} onChange={(event) => setConversationChannel(event.target.value as CrmConversationChannel | "")}><option value="">بدون لينك حاليًا</option>{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select></label>
+        <label><span>منصة المحادثة المباشرة — مهمة جدًا</span><select name="conversation_channel" value={conversationChannel} onChange={(event) => setConversationChannel(event.target.value as CrmConversationChannel | "")} required={["facebook", "instagram", "tiktok", "meta", "meta_business", "telegram", "whatsapp"].includes(source)}><option value="">بدون لينك حاليًا</option>{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select><small>إجباري عند تسجيل العميل من منصة اجتماعية.</small></label>
         {conversationChannel ? <label><span>لينك شات {crmConversationChannelConfig[conversationChannel].label}</span><input name="conversation_url" type="url" dir="ltr" maxLength={2000} required placeholder={crmConversationChannelConfig[conversationChannel].placeholder} /><small>الصق لينكًا كاملًا يبدأ بـ https://</small></label> : null}
         {manager ? <label><span>مسؤول متابعة السيلز</span><select name="owner_id" defaultValue={salesPeople[0]?.id ?? ""} required><option value="" disabled>{salesPeople.length ? "اختر مسؤول السيلز" : "أضف فريق السيلز أولًا"}</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select><small>{salesPeople.length ? "القائمة تعرض فريق السيلز المختار فقط." : "لن يُسند العميل تلقائيًا لأي عضو خارج فريق السيلز."}</small></label> : <input name="owner_id" type="hidden" value={session.user.id} />}
         <label><span>موعد أول متابعة</span><input name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /></label>
