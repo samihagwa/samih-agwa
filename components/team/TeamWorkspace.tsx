@@ -315,7 +315,9 @@ export function TeamWorkspace() {
     if (!workspace || !session) return;
     const result = await runTeamCommand({ action: "approve_access_request", request_id: request.id, role, allowed_sections: sections }, "تعذّرت الموافقة على طلب الانضمام.");
     if (!result) return;
-    setNotice(`تم تفعيل حساب ${request.full_name} وتحديد صلاحياته.`);
+    setNotice(result.email_sent
+      ? `تم تفعيل حساب ${request.full_name} وإرسال رسالة الدخول إلى بريده.`
+      : `تم تفعيل حساب ${request.full_name}، لكن تعذّر إرسال رسالة البريد. يقدر يدخل مباشرة بالبريد وكلمة المرور التي سجل بها.`);
     await loadWorkspace(session);
   }
 

@@ -36,11 +36,11 @@ The identity, owner-controlled team onboarding, task-management, deadline-remind
 ## First owner setup
 
 1. Open `/login` on the deployed site.
-2. Sign in with the owner's email and password. If the existing owner does not know the password, request recovery from the same page while keeping one current owner session open to create the private recovery link.
+2. Sign in with the owner's email and password. If the existing owner does not know the password, request a recovery email from the same page.
 3. After the verified session returns, choose **Create Market Whales workspace** once when bootstrapping a fresh project.
 4. During personal testing, create only clearly labeled test tasks and reel workflows. Team invitations are created manually from `/team` and never sent automatically.
 
-The bootstrap endpoint is authenticated and can create only the first organization. New people create their own account with a password, then see only a waiting screen until the owner approves or rejects the request and chooses the exact role and sections. Login does not depend on email delivery. Password recovery creates an owner-visible request so the owner can privately share a one-time Supabase recovery link. The older email-bound invitation link remains available only as an optional fallback. Suspending access is blocked while the member owns open tasks, scripts, or leads.
+The bootstrap endpoint is authenticated and can create only the first organization. New people create their own account with a password, then see only a waiting screen until the owner approves or rejects the request and chooses the exact role and sections. Approval sends the member a one-time sign-in email, while password recovery sends a reset link directly through Supabase Auth. Password login remains available even if the optional approval email is delayed. The older email-bound invitation link remains available only as an optional fallback. Suspending access is blocked while the member owns open tasks, scripts, or leads.
 
 ## Controlled team onboarding test
 

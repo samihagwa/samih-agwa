@@ -38,6 +38,13 @@ function cleanSections(value: unknown) {
   return [...new Set(value.map(cleanString).filter((section) => allowedSections.has(section)))];
 }
 
+function requestOrigin(request: Request) {
+  const suppliedOrigin = request.headers.get("origin")?.trim();
+  return suppliedOrigin && allowedOrigins.has(suppliedOrigin)
+    ? suppliedOrigin
+    : "https://os.samihagwa.com";
+}
+
 function randomToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes))
@@ -89,6 +96,14 @@ export default {
       if (!requestId || !allowedRoles.has(role) || !sections.length) {
         return jsonResponse({ message: "اختر الدور وقسمًا واحدًا على الأقل قبل الموافقة." }, 400);
       }
+      const { data: accessRequest, error: requestError } = await context.supabaseAdmin
+        .from("account_access_requests")
+        .select("email")
+        .eq("id", requestId)
+        .maybeSingle();
+      if (requestError || !accessRequest?.email) {
+        return jsonResponse({ message: "طلب الانضمام غير موجود أو غير مسموح لك." }, 400);
+      }
       const { data, error } = await context.supabaseAdmin.rpc("approve_workspace_access_request", {
         target_actor_id: actorId,
         target_request_id: requestId,
@@ -96,7 +111,15 @@ export default {
         target_allowed_sections: sections,
       });
       if (error) return jsonResponse({ message: safeErrorMessage(error.message, "تعذّرت الموافقة على طلب الانضمام.") }, 400);
-      return jsonResponse({ user_id: data });
+      const { error: emailError } = await context.supabaseAdmin.auth.signInWithOtp({
+        email: accessRequest.email,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: `${requestOrigin(request)}/tasks`,
+        },
+      });
+      if (emailError) console.error("approved access email failed", emailError.message);
+      return jsonResponse({ user_id: data, email_sent: !emailError });
     }
 
     if (action === "reject_access_request") {
@@ -121,12 +144,10 @@ export default {
       if (prepareError || !recovery?.email) {
         return jsonResponse({ message: safeErrorMessage(prepareError?.message ?? "", "طلب الاستعادة غير موجود أو غير مسموح لك.") }, 400);
       }
-      const suppliedOrigin = request.headers.get("origin")?.trim();
-      const origin = suppliedOrigin && allowedOrigins.has(suppliedOrigin) ? suppliedOrigin : "https://os.samihagwa.com";
       const { data: recoveryLink, error: linkError } = await context.supabaseAdmin.auth.admin.generateLink({
         type: "recovery",
         email: recovery.email,
-        options: { redirectTo: `${origin}/reset-password` },
+        options: { redirectTo: `${requestOrigin(request)}/reset-password` },
       });
       if (linkError || !recoveryLink.properties?.action_link) {
         return jsonResponse({ message: "تعذّر إنشاء رابط الاستعادة الآمن." }, 503);

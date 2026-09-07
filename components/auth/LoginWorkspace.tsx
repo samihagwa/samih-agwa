@@ -86,15 +86,17 @@ export function LoginWorkspace() {
     if (!configured) return;
     const email = String(new FormData(event.currentTarget).get("email") ?? "").trim().toLowerCase();
     setWorking(true); setError(null); setNotice(null);
-    const { error: requestError } = await getSupabaseBrowserClient().functions.invoke("account-access", {
-      body: { action: "request_password_recovery", email },
+    const { error: requestError } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     setWorking(false);
     if (requestError) {
-      setError(await getSupabaseFunctionErrorMessage(requestError, "تعذّر تسجيل طلب الاستعادة مؤقتًا."));
+      setError(requestError.message.includes("rate limit")
+        ? "تم طلب رسائل كثيرة لهذا البريد. انتظر دقيقة ثم حاول مرة أخرى."
+        : "تعذّر إرسال رابط الاستعادة مؤقتًا. حاول مرة أخرى بعد قليل.");
       return;
     }
-    setNotice("تم تسجيل طلب الاستعادة. لو الحساب عضوًا فعّالًا، سيظهر للمالك ليبعث لك رابطًا خاصًا دون الاعتماد على وصول الإيميل.");
+    setNotice("لو البريد مسجل عندنا، أرسلنا له رابط تغيير كلمة المرور. راجع الوارد والرسائل غير المرغوب فيها.");
   }
 
   return <main className="secure-login-page">
@@ -110,7 +112,7 @@ export function LoginWorkspace() {
         ? "الدخول الآن بالبريد وكلمة المرور من أي جهاز، بدون انتظار رسالة في كل مرة."
         : mode === "register"
           ? "بعد التسجيل سيصل طلبك للمالك. لن يظهر لك أي قسم قبل الموافقة وتحديد صلاحياتك."
-          : "اكتب بريد حسابك. سيصل طلب للمالك ليعطيك رابط استعادة خاصًا وآمنًا."}</p>
+          : "اكتب بريد حسابك وسنرسل لك رابطًا آمنًا لتعيين كلمة مرور جديدة."}</p>
 
       {mode !== "forgot" ? <div className="auth-mode-tabs" role="tablist" aria-label="اختيار طريقة الدخول">
         <button type="button" role="tab" aria-selected={mode === "login"} className={mode === "login" ? "active" : ""} onClick={() => changeMode("login")}><LogIn size={16} /> تسجيل الدخول</button>

@@ -1811,7 +1811,7 @@ test("task work uses a compact financial-report rhythm instead of floating kanba
   assert.match(operatingCss, /\.task-report-row\[open\]/);
 });
 
-test("team onboarding is owner-controlled, email-bound, auditable, and sends nothing automatically", async () => {
+test("team onboarding is owner-controlled, email-bound, auditable, and sends approval email only after owner approval", async () => {
   const [migration, commands, teamWorkspace, onboardingGate, appShell, joinWorkspace, joinPage, config, readme] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821220304_team_onboarding_and_access_control.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/team-commands/index.ts", import.meta.url), "utf8"),
@@ -1846,6 +1846,8 @@ test("team onboarding is owner-controlled, email-bound, auditable, and sends not
   assert.match(commands, /auth: "user"/);
   assert.match(commands, /randomToken/);
   assert.doesNotMatch(commands, /inviteUserByEmail|sendMessage|telegram|smtp|await\s+fetch|globalThis\.fetch/i);
+  assert.match(commands, /auth\.signInWithOtp/);
+  assert.match(commands, /shouldCreateUser:\s*false/);
   assert.match(teamWorkspace, /تم إنشاء رابط آمن فقط/);
   assert.match(teamWorkspace, /لم نرسل بريدًا أو رسالة لأي شخص/);
   assert.match(teamWorkspace, /إيقاف الوصول/);
@@ -1861,7 +1863,7 @@ test("team onboarding is owner-controlled, email-bound, auditable, and sends not
   assert.match(joinWorkspace, /نفس البريد/);
   assert.match(joinPage, /دعوة من المالك/);
   assert.match(config, /\[functions\.team-commands\][\s\S]*verify_jwt = true/);
-  assert.match(readme, /never sent automatically|never sends email/i);
+  assert.match(readme, /Approval sends the member a one-time sign-in email/);
 });
 
 test("workspace access is owner-approved, password-based, section-scoped, and enforced before rendering or direct API access", async () => {
@@ -1894,7 +1896,7 @@ test("workspace access is owner-approved, password-based, section-scoped, and en
   assert.match(access, /membership\.allowed_sections\.includes\(section\)/);
   assert.match(login, /signInWithPassword/);
   assert.match(login, /account-access/);
-  assert.match(login, /request_password_recovery/);
+  assert.match(login, /resetPasswordForEmail/);
   assert.match(login, /إنشاء الحساب وإرسال الطلب/);
   assert.doesNotMatch(`${login}\n${join}\n${tasks}`, /signInWithOtp/);
   assert.match(loginFunction, /resolve_workspace_login/);
@@ -1947,6 +1949,7 @@ test("workspace access is owner-approved, password-based, section-scoped, and en
   assert.match(teamCommands, /approve_access_request/);
   assert.match(teamCommands, /reject_access_request/);
   assert.match(teamCommands, /auth\.admin\.generateLink/);
+  assert.match(teamCommands, /auth\.signInWithOtp/);
   assert.match(teamCommands, /complete_workspace_password_recovery/);
   assert.match(teamWorkspace, /الأقسام المسموحة/);
   assert.match(teamWorkspace, /طلبات انضمام جديدة/);

@@ -42,7 +42,7 @@ export function ResetPasswordWorkspace() {
     const { error: updateError } = await supabase.auth.updateUser({ password });
     if (updateError) {
       setWorking(false);
-      setError(updateError.message.includes("same") ? "اختر كلمة مرور جديدة مختلفة." : "تعذّر تغيير كلمة المرور. اطلب رابطًا جديدًا من المالك.");
+      setError(updateError.message.includes("same") ? "اختر كلمة مرور جديدة مختلفة." : "تعذّر تغيير كلمة المرور. اطلب رابطًا جديدًا من صفحة الدخول.");
       return;
     }
     await supabase.functions.invoke("team-commands", { body: { action: "complete_password_recovery" } });
@@ -69,7 +69,7 @@ export function ResetPasswordWorkspace() {
           <input id="new-password-confirmation" name="password_confirmation" type="password" autoComplete="new-password" minLength={8} maxLength={128} required dir="ltr" />
           <Button type="submit" disabled={working}>{working ? <LoaderCircle className="spin" size={16} /> : <KeyRound size={16} />} حفظ كلمة المرور</Button>
         </form>
-      </> : <><p>الرابط غير صالح أو انتهت صلاحيته. اطلب رابط استعادة جديدًا من صفحة الدخول.</p><Button href="/login?mode=forgot" variant="secondary">طلب رابط جديد</Button></>}
+      </> : <><p>الرابط غير صالح أو انتهت صلاحيته. اطلب رسالة استعادة جديدة من صفحة الدخول.</p><Button href="/login?mode=forgot" variant="secondary">إرسال رسالة جديدة</Button></>}
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
     </section>
   </main>;
