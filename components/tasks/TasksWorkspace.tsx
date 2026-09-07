@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { contentStepConfig, type ContentStep } from "../../lib/content";
+import { formatDateTime, formatDeadlineDistance } from "../../lib/date-time";
 import { currentUuidDeepLink, taskDeepLink, taskDeliveryDeepLink, taskDomId, taskReference } from "../../lib/deep-links";
 import { launchGateConfig } from "../../lib/launches";
 import {
@@ -64,7 +65,7 @@ type Workspace = {
   people: TeamPerson[];
 };
 
-type TaskFilter = "active" | "mine" | "overdue" | "completed" | "archived" | "all";
+type TaskFilter = "active" | "mine" | "overdue" | "waiting" | "requested" | "completed" | "archived" | "all";
 type BoardEntry = { id: string; contentItemId: string | null; tasks: Task[]; sortTasks: Task[]; laneId: string };
 type TaskDateRange = { from: string; to: string };
 type TaskCreateMode = "once" | "weekly";
@@ -107,26 +108,12 @@ function getErrorMessage(error: unknown) {
   return "حدث خطأ غير متوقع.";
 }
 
-function formatDeadline(value: string) {
-  return new Intl.DateTimeFormat("ar-EG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 function isOverdue(task: Task, now: number) {
   return !taskIsClosed(task) && new Date(task.due_at).getTime() < now;
 }
 
 function formatOverdueDuration(task: Task, now: number) {
-  const milliseconds = Math.max(0, now - new Date(task.due_at).getTime());
-  const totalMinutes = Math.floor(milliseconds / 60_000);
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  if (days) return `${days} يوم${hours ? ` و${hours} ساعة` : ""}`;
-  if (hours) return `${hours} ساعة${minutes ? ` و${minutes} دقيقة` : ""}`;
-  return `${Math.max(1, minutes)} دقيقة`;
+  return formatDeadlineDistance(task.due_at, now).label.replace(/^متأخرة\s*/, "");
 }
 
 function taskIsClosed(task: Task) {
@@ -239,6 +226,8 @@ function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string
   if (personalOnly) {
     if (filter === "mine" || filter === "active") return taskNeedsViewerAction(task, currentUserId);
     if (filter === "overdue") return taskNeedsViewerAction(task, currentUserId) && isOverdue(task, now);
+    if (filter === "waiting") return task.owner_id === currentUserId && task.status === "review";
+    if (filter === "requested") return task.created_by === currentUserId && task.owner_id !== currentUserId && !taskIsClosed(task);
     if (filter === "completed") return task.owner_id === currentUserId && taskIsCompleted(task);
     if (filter === "archived") return task.owner_id === currentUserId && taskIsClosed(task);
     return taskBelongsToViewer(task, currentUserId);
@@ -249,6 +238,8 @@ function taskMatchesFilter(task: Task, filter: TaskFilter, currentUserId: string
       && (task.owner_id === currentUserId || (task.status === "review" && task.created_by === currentUserId));
   }
   if (filter === "overdue") return isOverdue(task, now);
+  if (filter === "waiting") return task.status === "review";
+  if (filter === "requested") return task.created_by === currentUserId && task.owner_id !== currentUserId && !taskIsClosed(task);
   if (filter === "completed") return taskIsCompleted(task);
   if (filter === "archived") return taskIsClosed(task);
   return true;
@@ -274,6 +265,8 @@ function contentWorkflowMatchesFilter(tasks: Task[], filter: TaskFilter, current
       && (task.owner_id === currentUserId || (task.status === "review" && task.created_by === currentUserId)));
   }
   if (filter === "overdue") return tasks.some((task) => isOverdue(task, now));
+  if (filter === "waiting") return tasks.some((task) => task.owner_id === currentUserId && task.status === "review");
+  if (filter === "requested") return tasks.some((task) => task.created_by === currentUserId && task.owner_id !== currentUserId && !taskIsClosed(task));
   if (filter === "completed") return tasks.every(taskIsCompleted);
   if (filter === "archived") return tasks.every(taskIsClosed);
   return true;
@@ -487,7 +480,11 @@ export function TasksWorkspace() {
       if (!primaryTask) return [];
       const linkedEntry = Boolean(linkedTaskId && orderedTasks.some((task) => task.id === linkedTaskId));
       const viewerTasks = personalView
-        ? orderedTasks.filter((task) => taskBelongsToViewer(task, session.user.id) || task.id === linkedTaskId)
+        ? orderedTasks.filter((task) => (filter === "requested"
+          ? task.created_by === session.user.id
+          : filter === "waiting"
+            ? task.owner_id === session.user.id && task.status === "review"
+            : taskBelongsToViewer(task, session.user.id)) || task.id === linkedTaskId)
         : orderedTasks;
       if (personalView && !viewerTasks.length && !linkedEntry) return [];
       const matches = linkedEntry || (isContentWorkflow
@@ -838,6 +835,10 @@ export function TasksWorkspace() {
     ? "الأرشيف"
     : filter === "overdue"
       ? "المتأخر عندي"
+      : filter === "waiting"
+        ? "بانتظار المراجعة"
+        : filter === "requested"
+          ? "طلبتها من الفريق"
       : "المطلوب مني الآن";
   const availableLanes = personalView
     ? [{ id: ["completed", "archived"].includes(filter) ? "closed" : "focus", label: personalLaneLabel }]
@@ -850,7 +851,7 @@ export function TasksWorkspace() {
   });
   const filteredTaskCount = boardEntries.reduce((total, entry) => total + entry.tasks.length, 0);
   const myOpenTaskCount = tasks.filter((task) => taskNeedsViewerAction(task, session.user.id)).length;
-  const quickFilters: TaskFilter[] = taskSection === "team" ? ["active", "overdue", "all"] : ["mine", "overdue"];
+  const quickFilters: TaskFilter[] = taskSection === "team" ? ["active", "overdue", "all"] : ["mine", "overdue", "waiting", "requested"];
 
   function openTaskSection(section: TaskSection) {
     setTaskSection(section);
@@ -882,7 +883,7 @@ export function TasksWorkspace() {
       {linkedTask ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح المهمة المطلوبة مباشرة: <strong>{taskReference(linkedTask.id)}</strong> — الكارت المحدد ظاهر بإطار واضح.</p> : linkedTaskId ? <p className="form-notice error" role="alert">المهمة المطلوبة غير موجودة أو ليست ضمن صلاحيات حسابك.</p> : null}
 
       {taskSection !== "schedule" && taskSection !== "archive" ? <div className="task-list-toolbar">
-        <div className="segmented-control" aria-label="تصفية المهام">{quickFilters.map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "mine" ? "المطلوب الآن" : value === "active" ? "المفتوح" : value === "overdue" ? "المتأخر" : "الكل"}</button>)}</div>
+        <div className="segmented-control" aria-label="تصفية المهام">{quickFilters.map((value) => <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "mine" ? "المطلوب الآن" : value === "active" ? "المفتوح" : value === "overdue" ? "المتأخر" : value === "waiting" ? "بانتظار مراجعة" : value === "requested" ? "طلبتها" : "الكل"}</button>)}</div>
         <small role="status">{filteredTaskCount.toLocaleString("ar-EG")} مهمة ظاهرة</small>
       </div> : null}
 
@@ -939,7 +940,7 @@ export function TasksWorkspace() {
             <div className="task-create-review">
               <div><span>عنوان الكارت</span><strong>{taskCreateTitle || "—"}</strong></div>
               <div><span>المسؤول</span><strong>{taskCreateOwner?.name ?? "عضو فريق"}</strong></div>
-              <div><span>الموعد</span><strong>{newTaskDueAt ? formatDeadline(newTaskDueAt) : "غير محدد"}</strong></div>
+              <div><span>الموعد</span><strong dir="ltr">{newTaskDueAt ? formatDateTime(newTaskDueAt) : "غير محدد"}</strong></div>
               <div><span>التكرار</span><strong>{taskCreateMode === "weekly" ? "أسبوعية ثابتة" : "مرة واحدة"}</strong></div>
               <div className="task-create-review-request"><span>ملخص المطلوب</span><CollapsibleText text={newTaskDescription} maxCharacters={260} /></div>
             </div>
@@ -1013,7 +1014,7 @@ export function TasksWorkspace() {
                     const progress = Math.round((completedTasks / entry.tasks.length) * 100);
                     return <article className={`task-card content-workflow-group ${overdueTasks.length ? "task-overdue" : ""} ${completedTasks === entry.tasks.length ? "task-closed" : ""}`} data-state={lane.id} key={entry.id}>
                       <div className="task-card-top"><span className="workflow-task-label"><Film size={12} /> طلب محتوى · {entry.tasks.length} مراحل</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل" : lane.label}</StatusBadge></div>
-                      <div className="content-workflow-heading"><h3>{contentGroupTitle(entry.tasks[0])}</h3>{!personalView ? <a className="task-production-link" href={`/content?content=${entry.contentItemId}#content-${entry.contentItemId}`}><FileText size={12} /> ملف الطلب الكامل</a> : null}</div>
+                      <div className="content-workflow-heading"><h3><a href={`/tasks/content/${entry.contentItemId}`}>{contentGroupTitle(entry.tasks[0])}</a></h3><a className="task-production-link" href={`/tasks/content/${entry.contentItemId}`}><FileText size={12} /> فتح ملف المحتوى</a></div>
                       <div className="content-workflow-progress">
                         <div><span>التقدم</span><strong>{progress}%</strong></div>
                         <span className="content-workflow-progress-track" role="progressbar" aria-label="نسبة تقدم ملف المحتوى" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></span>
@@ -1040,8 +1041,8 @@ export function TasksWorkspace() {
                           : task.status === "cancelled"
                             ? "فتح المهمة الملغاة"
                             : task.content_step === "publishing"
-                            ? "فتح وتأكيد النشر"
-                            : completed ? "فتح التسليم" : "فتح وتنفيذ مرحلتي";
+                            ? isAssignedToViewer ? "فتح وتأكيد النشر" : "عرض مرحلة النشر"
+                            : completed ? "فتح التسليم" : isAssignedToViewer ? "فتح وتنفيذ مرحلتي" : "عرض المرحلة";
                         const actionHref = isAssignedToViewer && task.status === "in_progress"
                           ? taskDeliveryDeepLink(task.id)
                           : taskDeepLink(task.id);
@@ -1050,7 +1051,7 @@ export function TasksWorkspace() {
                         return <section className={className} data-direct-target={directTarget || undefined} id={taskDomId(task.id)} tabIndex={directTarget ? -1 : undefined} key={task.id}>
                           <div className="content-subtask-copy">
                             <span className="content-subtask-marker" aria-label={completed ? "مكتملة" : `الخطوة ${index + 1}`}>{completed ? <CheckCircle2 size={16} /> : index + 1}</span>
-                            <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · {formatDeadline(task.due_at)}{isMine ? <b> · مهمتك الآن</b> : null}</small>{directTarget ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}</div>
+                            <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · <bdi dir="ltr">{formatDateTime(task.due_at)}</bdi>{isMine ? <b> · مهمتك الآن</b> : null}</small>{directTarget ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}</div>
                           </div>
                           <div className="content-subtask-action">
                             <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
@@ -1111,7 +1112,7 @@ export function TasksWorkspace() {
                       {task.launch_deliverable_id ? <a className="task-production-link" href={`/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`}><FileText size={12} /> فتح التفاصيل وتسليم النتيجة</a> : null}
                       {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> CRM · متابعة عميل</span> : null}
                       <h3>{task.title}</h3>
-                      <div className="task-card-summary"><span><CircleUserRound size={13} /> {!personalView ? owner?.name ?? "عضو فريق" : `طلبها ${requester?.name ?? "عضو فريق"}`}</span><span><CalendarClock size={13} /> {formatDeadline(task.due_at)}</span>{task.requires_review ? <span><ShieldCheck size={13} /> بمراجعة</span> : null}</div>
+                      <div className="task-card-summary"><span><CircleUserRound size={13} /> {!personalView ? owner?.name ?? "عضو فريق" : `طلبها ${requester?.name ?? "عضو فريق"}`}</span><span><CalendarClock size={13} /> <bdi dir="ltr">{formatDateTime(task.due_at)}</bdi></span>{task.requires_review ? <span><ShieldCheck size={13} /> بمراجعة</span> : null}</div>
                       {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة منذ {formatOverdueDuration(task, renderNow)}</span> : null}
                       {task.crm_contact_id
                         ? <Button href={`/crm/${task.crm_contact_id}`}><ContactRound size={14} /> فتح العميل وتسجيل النتيجة</Button>

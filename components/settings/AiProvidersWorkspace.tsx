@@ -62,7 +62,7 @@ function blankForm(): ProviderForm {
 
 function formatTestDate(value: string | null) {
   if (!value) return "لم يُختبر بعد";
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("en-GB", {
     dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo",
   }).format(new Date(value));
 }

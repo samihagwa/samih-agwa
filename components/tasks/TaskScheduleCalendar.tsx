@@ -79,7 +79,7 @@ function startOfWorkWeek(value: Date) {
 }
 
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("en-GB", {
     timeZone: "Africa/Cairo",
     hour: "numeric",
     minute: "2-digit",
@@ -87,7 +87,7 @@ function formatTime(value: string) {
 }
 
 function formatDay(value: Date) {
-  return new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "short" }).format(value);
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(value);
 }
 
 function workTimestamp(item: CapacityWork) {
@@ -215,7 +215,7 @@ export function TaskScheduleCalendar({ organizationId, currentUserId, manager, p
     : Array.from({ length: range.end.getDate() }, (_, index) => new Date(range.start.getFullYear(), range.start.getMonth(), index + 1));
   const title = view === "week"
     ? `${formatDay(range.start)} — ${formatDay(range.end)}`
-    : new Intl.DateTimeFormat("ar-EG", { month: "long", year: "numeric" }).format(cursor);
+    : new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(cursor);
 
   return <section className="task-schedule" aria-label="جدول مهام الفريق">
     <header className="task-schedule-toolbar">
@@ -237,7 +237,7 @@ export function TaskScheduleCalendar({ organizationId, currentUserId, manager, p
         const ownerIds = ownerId ? [ownerId] : [...new Set(dayEntries.map((entry) => entry.ownerId))];
         const overload = ownerIds.some((id) => loadByMemberDay.get(`${id}:${dayKey}`)?.overloaded);
         return <article className={dayEntries.length ? "has-work" : ""} data-overloaded={overload || undefined} key={dayKey}>
-          <header><div><strong>{view === "week" ? weekdayLabels[index] : new Intl.DateTimeFormat("ar-EG", { weekday: "short" }).format(day)}</strong><small>{formatDay(day)}</small></div>{overload ? <span><AlertTriangle size={12} /> حمل زائد</span> : <small>{dayEntries.length ? `${dayEntries.length.toLocaleString("ar-EG")} مهمة` : "متاح"}</small>}</header>
+          <header><div><strong>{view === "week" ? weekdayLabels[index] : new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(day)}</strong><small>{formatDay(day)}</small></div>{overload ? <span><AlertTriangle size={12} /> حمل زائد</span> : <small>{dayEntries.length ? `${dayEntries.length.toLocaleString("ar-EG")} مهمة` : "متاح"}</small>}</header>
           <div>{dayEntries.map((entry) => {
             const content = <><span><b>{formatTime(entry.dueAt)}</b>{entry.recurring ? <Repeat2 size={11} /> : <CalendarClock size={11} />}</span><strong>{entry.title}</strong>{manager ? <small><UsersRound size={11} /> {peopleById.get(entry.ownerId) ?? "عضو فريق"}</small> : null}<StatusBadge tone={entry.projected ? "neutral" : taskStatusConfig[entry.status].tone}>{entry.projected ? "موعد أسبوعي قادم" : taskStatusLabel(entry.status)}</StatusBadge></>;
             return entry.taskId ? <a href={taskDeepLink(entry.taskId)} key={entry.key}>{content}<Route size={11} /></a> : <div className="projected" key={entry.key}>{content}</div>;

@@ -80,7 +80,7 @@ function getErrorMessage(error: unknown) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function toLocalDateTimeInput(date: Date) {
@@ -539,6 +539,7 @@ export function ContentWorkspace() {
       {linkedContentId && visibleItems.length ? <p className="direct-link-notice" role="status"><Route size={15} /> تم فتح {linkedRevisionId ? "طلب التعديل" : "ملف المحتوى"} المطلوب مباشرة وإظهار تفاصيله.</p> : linkedContentId ? <p className="form-notice error" role="alert">ملف المحتوى المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
 
       {showQuickIntake && canCreateContentWorkflow ? <QuickIntakeForm
+        organizationId={workspace.organization.id}
         currentUserId={session.user.id}
         defaultOwnerIds={defaultOwnerIds}
         defaultPublish={defaultPublish}

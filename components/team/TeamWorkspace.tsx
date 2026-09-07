@@ -59,7 +59,7 @@ function dateInput(date: Date) {
 
 function formatDate(value: string | null) {
   if (!value) return "لا يوجد نشاط مسجل";
-  return new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo" }).format(new Date(value));
 }
 
 function formatLastSeen(value: string | null, now: number) {

@@ -47,7 +47,7 @@ function errorMessage(error: unknown) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("en-GB", {
     dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo",
   }).format(new Date(value));
 }

@@ -84,7 +84,7 @@ function defaultQuarter() {
 }
 
 function formatDate(value: string, withTime = false) {
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("en-GB", {
     dateStyle: "medium",
     ...(withTime ? { timeStyle: "short" as const } : {}),
     timeZone: "Africa/Cairo",
@@ -607,7 +607,7 @@ export function PlanningWorkspace() {
           const linked = item.content_item_id ? contentById.get(item.content_item_id) : null;
           const availableContent = workspace.contentItems.filter((content) => !linkedContentIds.has(content.id) && contentMatchesPlanKind(content, item.kind));
           return <article className={`planning-calendar-item ${item.status === "cancelled" ? "cancelled" : ""}`} data-direct-target={linkedPlanItemId === item.id || undefined} id={`plan-item-${item.id}`} tabIndex={linkedPlanItemId === item.id ? -1 : undefined} key={item.id}>
-            <div className="planning-date-tile"><CalendarDays size={17} /><strong>{new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</strong><small>{new Intl.DateTimeFormat("ar-EG", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</small></div>
+            <div className="planning-date-tile"><CalendarDays size={17} /><strong>{new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</strong><small>{new Intl.DateTimeFormat("en-GB", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }).format(new Date(item.publish_at))}</small></div>
             <div className="planning-item-copy"><div><span>{contentPlanItemKindConfig[item.kind].label}{item.pillar_id ? ` · ${pillarsById.get(item.pillar_id)?.title ?? "عمود"}` : ""}</span><h3>{item.title}</h3></div><p>{item.objective}</p><small>{peopleById.get(item.owner_id)?.name ?? "عضو فريق"} · {item.platforms.join("، ")} · {item.estimated_minutes.toLocaleString("ar-EG")} دقيقة متوقعة</small></div>
             <div className="planning-item-state"><StatusBadge tone={contentPlanItemStatusConfig[item.status].tone}>{contentPlanItemStatusConfig[item.status].label}</StatusBadge>{linked ? <a href={`/content?content=${linked.id}#content-${linked.id}`}>فتح التنفيذ <ArrowUpLeft size={12} /></a> : null}</div>
             {manager && selectedPlan.status !== "archived" && item.status !== "published" ? <div className="planning-item-actions">{linked ? <button className="text-button" type="button" disabled={working} onClick={() => void linkContent(item, "")}><Link2 size={12} /> فك الربط</button> : <><label><span>ربط بطلب تنفيذ موجود</span><select defaultValue="" disabled={working} onChange={(event) => { if (event.target.value) void linkContent(item, event.target.value); }}><option value="">اختر طلبًا منفذًا</option>{availableContent.map((content) => <option value={content.id} key={content.id}>{content.title}</option>)}</select></label><button className="text-button" type="button" disabled={working} onClick={() => void setItemCancelled(item, item.status !== "cancelled")}>{item.status === "cancelled" ? <RefreshCw size={12} /> : <CircleSlash2 size={12} />} {item.status === "cancelled" ? "إعادة للخطة" : "إلغاء البند"}</button></>}</div> : null}

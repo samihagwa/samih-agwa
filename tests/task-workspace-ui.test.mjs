@@ -3,10 +3,12 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("content requests stay grouped and compact across team and personal task views", async () => {
-  const [board, detail, intake, css] = await Promise.all([
+  const [board, detail, contentFile, intake, scheduleAdvisor, css] = await Promise.all([
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentFileWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/QuickIntakeForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/PublishScheduleAdvisor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
@@ -18,6 +20,9 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.match(board, /const canOpenDetails = isAssignedToViewer \|\| isRequester \|\| platformAdmin/);
   assert.match(board, /const canRequestRevisionShortcut = !isAssignedToViewer[\s\S]*!readOnly[\s\S]*\(isRequester \|\| platformAdmin\)[\s\S]*contentStepsSupportingRevision\.has\(task\.content_step\)[\s\S]*\["review", "done"\]\.includes\(task\.status\)/);
   assert.match(board, /طلب محتوى ·/);
+  assert.match(board, /href=\{`\/tasks\/content\/\$\{entry\.contentItemId\}`\}/);
+  assert.match(board, /isAssignedToViewer \? "فتح وتنفيذ مرحلتي" : "عرض المرحلة"/);
+  assert.match(board, /"waiting", "requested"/);
   assert.match(board, /طلب تعديل/);
   assert.match(board, /boardEntryCompletionTimestamp\(right\) - boardEntryCompletionTimestamp\(left\)/);
   assert.match(board, /function taskIsCompleted\(task: Task\) \{\s*return task\.status === "done";/);
@@ -31,7 +36,7 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.doesNotMatch(board, /filter === "completed"[^\n]+taskIsClosed/);
   assert.doesNotMatch(board, /const completed = taskIsClosed\(task\)/);
 
-  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(145px, 1fr\)\)/);
+  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(170px, 1fr\)\)/);
   assert.match(css, /\.content-workflow-subtasks > section\.completed strong \{[^}]*text-decoration: line-through/);
   assert.match(css, /\.task-card\.task-closed h3 \{[^}]*text-decoration: line-through/);
 
@@ -44,31 +49,29 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.match(intake, /buildContentRequest\(requestText, editingBrief, thumbnailBrief\)\.length > MAX_CONTENT_REQUEST_LENGTH/);
   assert.match(intake, /setEditingBrief\(event\.target\.value\); setStepError\(null\)/);
   assert.match(intake, /setThumbnailBrief\(event\.target\.value\); setStepError\(null\)/);
+  assert.match(intake, /PublishScheduleAdvisor/);
+  assert.match(scheduleAdvisor, /محتوى مجدول/);
+  assert.match(scheduleAdvisor, /cairoDateKey/);
 
   assert.match(detail, /instructionsForTask/);
   assert.match(detail, /roleSpecificInstructions/);
   assert.match(detail, /embeddedBrief && looksLikeLegacyRequestCopy/);
   assert.match(detail, /functions\.invoke\("content-commands"/);
   assert.match(detail, /action: "request_revision"/);
-  assert.match(detail, /action: "update_content_caption"/);
-  assert.match(detail, /caption: captionText/);
-  assert.match(detail, /type CaptionDraft =/);
-  assert.match(detail, /expected_content_version: captionDraft\.baseVersion/);
-  assert.match(detail, /const captionDraftStale = Boolean/);
-  assert.match(detail, /وصل إصدار أحدث أثناء كتابة الكابشن/);
-  assert.match(detail, /value=\{captionDraftMatchesItem \? captionDraft\?\.value/);
-  assert.match(detail, /useLatestCaption/);
-  assert.match(detail, /rebaseCaptionDraft/);
+  assert.doesNotMatch(detail, /task-caption-block/);
+  assert.doesNotMatch(detail, /action: "update_content_caption"/);
   assert.match(detail, /from\("content_revision_requests"\)\.select\("\*"\)\.eq\("task_id", task\.id\)/);
   assert.match(detail, /table: "content_revision_requests", filter: `task_id=eq\.\$\{taskId\}`/);
   assert.match(detail, /const canRequestContentRevision = contentTask[\s\S]*\["review", "done"\]\.includes\(task\.status\)[\s\S]*\(isRequester \|\| platformAdmin\)/);
   assert.match(detail, /const canRequestRevision = canRequestContentRevision \|\| canRequestStandaloneRevision/);
   assert.match(detail, /const revisionTimeline = \[/);
-  assert.match(detail, /سجل التعديلات/);
+  assert.match(detail, /سجل المهمة والتعديلات/);
   assert.match(detail, /المطلوب منك/);
   assert.match(detail, /task-full-request/);
-  assert.match(detail, /task-caption-block/);
   assert.match(detail, /thumbnail: \["brief", "recording", "thumbnail"\]/);
+  assert.match(detail, /task\.content_item_id \? `\/tasks\/content\/\$\{task\.content_item_id\}`/);
+  assert.match(contentFile, /مسار التنفيذ/);
+  assert.match(contentFile, /taskDeepLink\(task\.id\)/);
 });
 
 test("script work filters separate ready-to-publish and keep finished work out of the active queue", async () => {

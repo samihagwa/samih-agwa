@@ -16,7 +16,7 @@ type Workspace = { organization: Organization; membership: Membership; integrati
 
 function formatDate(value: string | null) {
   if (!value) return "لم تتم مزامنة بعد";
-  return new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo" }).format(new Date(value));
 }
 
 export function ExnessIntegrationWorkspace() {

@@ -183,16 +183,16 @@ export function TeamCapacityCalendar({ organizationId }: { organizationId: strin
 
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
     {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
-    {overloads.length ? <div className="capacity-alert" role="status"><AlertTriangle size={17} /><div><strong>{overloads.length.toLocaleString("ar-EG")} يوم عليه حمل زائد</strong><p>{overloads.slice(0, 3).map(({ member, day }) => `${member.name} — ${new Intl.DateTimeFormat("ar-EG", { weekday: "long", day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(day)}`).join(" · ")}</p></div></div> : <div className="capacity-clear"><UsersRound size={16} /><span>لا يوجد حمل زائد ظاهر في هذا الأسبوع.</span></div>}
+    {overloads.length ? <div className="capacity-alert" role="status"><AlertTriangle size={17} /><div><strong>{overloads.length.toLocaleString("ar-EG")} يوم عليه حمل زائد</strong><p>{overloads.slice(0, 3).map(({ member, day }) => `${member.name} — ${new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(day)}`).join(" · ")}</p></div></div> : <div className="capacity-clear"><UsersRound size={16} /><span>لا يوجد حمل زائد ظاهر في هذا الأسبوع.</span></div>}
 
     <div className="capacity-week-toolbar">
       <div><button type="button" aria-label="الأسبوع السابق" onClick={() => setWeekStart((current) => shiftDays(current, -7))}><ChevronRight size={17} /></button><button type="button" onClick={() => setWeekStart(startOfWeek())}>هذا الأسبوع</button><button type="button" aria-label="الأسبوع التالي" onClick={() => setWeekStart((current) => shiftDays(current, 7))}><ChevronLeft size={17} /></button></div>
-      <strong>{new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(days[0])} — {new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Cairo" }).format(days[6])}</strong>
+      <strong>{new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(days[0])} — {new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Cairo" }).format(days[6])}</strong>
     </div>
 
     {loading ? <div className="capacity-loading"><LoaderCircle className="spin" size={20} /> بنجمع حمل الأسبوع…</div> : <div className="capacity-board-wrap">
       <div className="capacity-board" role="table" aria-label="تقويم حمل الفريق الأسبوعي">
-        <div className="capacity-row capacity-header-row" role="row"><div role="columnheader"><UsersRound size={14} /> عضو الفريق</div>{days.map((day) => <div role="columnheader" className={dateKey(day) === dateKey(new Date()) ? "today" : ""} key={dateKey(day)}><strong>{new Intl.DateTimeFormat("ar-EG", { weekday: "short", timeZone: "Africa/Cairo" }).format(day)}</strong><small>{new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(day)}</small></div>)}</div>
+        <div className="capacity-row capacity-header-row" role="row"><div role="columnheader"><UsersRound size={14} /> عضو الفريق</div>{days.map((day) => <div role="columnheader" className={dateKey(day) === dateKey(new Date()) ? "today" : ""} key={dateKey(day)}><strong>{new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "Africa/Cairo" }).format(day)}</strong><small>{new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }).format(day)}</small></div>)}</div>
         {payload.members.map((member) => <div className="capacity-row" role="row" key={member.id}>
           <div className="capacity-member" role="rowheader"><strong>{member.name}</strong><small>{hoursLabel(member.daily_capacity_minutes)} · حتى {member.max_parallel_tasks.toLocaleString("ar-EG")} مهام</small></div>
           {days.map((day) => {

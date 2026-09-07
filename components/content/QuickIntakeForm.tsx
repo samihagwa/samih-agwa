@@ -15,7 +15,9 @@ import {
   UserRoundCheck,
 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { formatDateTime } from "../../lib/date-time";
 import { Button } from "../ui/Button";
+import { PublishScheduleAdvisor } from "./PublishScheduleAdvisor";
 
 type TeamPerson = { id: string; name: string };
 type ApprovedBrandArticle = { id: string; title: string; version: number; categoryLabel: string };
@@ -35,6 +37,7 @@ export type QuickIntakePayload = {
 };
 
 type Props = {
+  organizationId: string;
   currentUserId: string;
   defaultOwnerIds: Record<string, string>;
   defaultPublish: string;
@@ -81,12 +84,6 @@ function isWebUrl(value: string) {
   }
 }
 
-function formatReviewDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "موعد غير صالح";
-  return new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short" }).format(date);
-}
-
 function withoutDuplicateHeadings(value: string, headingsToRemove: Set<string>) {
   const seen = new Set<string>();
   return value.split(/\r?\n/).filter((line) => {
@@ -114,6 +111,7 @@ function buildContentRequest(request: string, editing: string, thumbnail: string
 }
 
 export function QuickIntakeForm({
+  organizationId,
   currentUserId,
   defaultOwnerIds,
   defaultPublish,
@@ -294,6 +292,7 @@ export function QuickIntakeForm({
         {step === 1 ? <>
           <div className="quick-intake-step-heading"><CalendarClock size={20} /><div><p className="overline">موعد واضح</p><h3 id="quick-intake-step-1" ref={stepHeadingRef} tabIndex={-1}>إمتى الريلز ينزل؟</h3><p>ده موعد النشر النهائي، والنظام هيحسب مواعيد التسليم بناءً عليه.</p></div></div>
           <label className="quick-intake-main-field"><span>موعد النشر النهائي</span><input value={publishAt} onChange={(event) => { setPublishAt(event.target.value); setStepError(null); }} type="datetime-local" required /></label>
+          <PublishScheduleAdvisor organizationId={organizationId} value={publishAt} onChange={(nextValue) => { setPublishAt(nextValue); setStepError(null); }} />
         </> : null}
 
         {step === 2 ? <>
@@ -344,7 +343,7 @@ export function QuickIntakeForm({
           <div className="quick-intake-step-heading"><CheckCircle2 size={20} /><div><p className="overline">قبل الإنشاء</p><h3 id="quick-intake-step-7" ref={stepHeadingRef} tabIndex={-1}>راجع الطلب مرة أخيرة</h3><p>لحد اللحظة دي لم يُرسل شيء للفريق. الإنشاء فقط هو الذي يحفظ ويفتح المهام.</p></div></div>
           <div className="quick-intake-review-grid">
             <ReviewItem label="العنوان" value={title} onEdit={() => goToStep(0)} />
-            <ReviewItem label="موعد النشر" value={formatReviewDate(publishAt)} onEdit={() => goToStep(1)} />
+            <ReviewItem label="موعد النشر" value={formatDateTime(publishAt)} onEdit={() => goToStep(1)} />
             <ReviewItem label="المونتاج" value={peopleById.get(editingOwnerId)?.name ?? "غير محدد"} onEdit={() => goToStep(4)} />
             <ReviewItem label="الغلاف" value={peopleById.get(thumbnailOwnerId)?.name ?? "غير محدد"} onEdit={() => goToStep(5)} />
             <ReviewItem label="النشر" value={publishingMode === "self" ? peopleById.get(currentUserId)?.name ?? "بنفسي" : peopleById.get(publishingOwnerId)?.name ?? "غير محدد"} onEdit={() => goToStep(6)} />

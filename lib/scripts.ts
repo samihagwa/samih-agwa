@@ -37,7 +37,7 @@ export function lines(value: string) {
 }
 
 export function formatScriptDate(value: string) {
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("en-GB", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Africa/Cairo",

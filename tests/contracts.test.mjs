@@ -190,7 +190,7 @@ test("task review is optional, requester-gated, and never self-approved", async 
   assert.match(detail, /const canRequestRevision/);
   assert.match(detail, /from\("task_revision_requests"\)\.insert/);
   assert.match(detail, /task_version: workspace\.task\.version/);
-  assert.match(detail, /التنفيذ يخص/);
+  assert.match(detail, /التنفيذ عند/);
   assert.match(deepLinks, /return `\/tasks\/\$\{id\}`/);
   assert.match(types, /task_revision_requests:/);
   assert.match(types, /requires_review: boolean/);
@@ -1655,9 +1655,10 @@ test("reel cover work starts beside editing while publishing keeps all final gat
   assert.match(builder, /\(publishing_task_id, caption_task_id\)/);
   assert.match(detail, /content_assets/);
   assert.match(detail, /content_step_deliveries/);
-  assert.match(detail, /شرح المهمة/);
-  assert.match(detail, /ملفات وروابط التنفيذ/);
+  assert.match(detail, /المطلوب منك/);
+  assert.match(detail, /الروابط التي تحتاجها/);
   assert.match(detail, /تسليم هذه المهمة/);
+  assert.match(detail, /currentDelivery \|\| showDeliveryForm/);
   assert.match(css, /\.task-detail-instructions/);
   assert.match(css, /\.task-resource-list/);
   assert.match(css, /\.task-current-delivery/);
@@ -1805,7 +1806,7 @@ test("task cards remain compact and visually separated without changing the desi
   assert.match(css, /\.kanban-stack > \.task-card:nth-child\(even\) \{ background: #f8fbfa/);
   assert.match(css, /\.task-card h3 \{[^}]*background: #eef6f4[^}]*font-weight: 950/);
   assert.match(css, /\.task-card::before \{[^}]*inset-inline-start: 0/);
-  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(145px, 1fr\)\)/);
+  assert.match(css, /\.content-workflow-subtasks \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(170px, 1fr\)\)/);
   assert.match(css, /\.task-today-board \.kanban-stack, \.task-archive-board \.kanban-stack \{ grid-template-columns: repeat\(2/);
   assert.match(css, /\.task-card\.task-closed h3 \{[^}]*text-decoration: line-through/);
 });

@@ -21,7 +21,7 @@ type Person = { id: string; name: string };
 type Workspace = { organizationId: string; membership: Membership; people: Person[] };
 
 function formatMessageTime(value: string) {
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("en-GB", {
     day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo",
   }).format(new Date(value));
 }

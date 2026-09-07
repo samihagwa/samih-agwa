@@ -6,9 +6,6 @@ import {
   ArrowRight,
   CalendarClock,
   CheckCircle2,
-  CircleUserRound,
-  Clock3,
-  ContactRound,
   ExternalLink,
   FileText,
   History,
@@ -19,16 +16,14 @@ import {
   Paperclip,
   Route,
   Send,
-  ShieldCheck,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { contentAssetKindConfig, contentStepConfig, type ContentStep } from "../../lib/content";
+import { formatDateTime, formatDeadlineDistance } from "../../lib/date-time";
 import { taskReference } from "../../lib/deep-links";
-import { launchGateConfig } from "../../lib/launches";
 import {
   allowedTaskTransitionsForActor,
   canManageAllTaskExecution,
-  taskPriorityConfig,
   taskStatusConfig,
   taskStatusLabel,
   type TaskStatus,
@@ -69,18 +64,6 @@ type Workspace = {
   deliveries: ContentStepDelivery[];
   contentRequest: ContentRequest | null;
 };
-
-type CaptionDraft = {
-  contentItemId: string;
-  baseVersion: number;
-  baseValue: string;
-  value: string;
-};
-
-function formatDate(value: string | null) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
 
 function friendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : typeof error === "object" && error && "message" in error ? String(error.message) : "";
@@ -231,7 +214,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const [showRevisionForm, setShowRevisionForm] = useState(() => typeof window !== "undefined" && new URL(window.location.href).searchParams.get("action") === "revise");
   const [deliveryFormOpen, setDeliveryFormOpen] = useState(() => typeof window !== "undefined" && window.location.hash === "#delivery");
   const [deliverySnapshot, setDeliverySnapshot] = useState<{ taskVersion: number; deliveryVersion: number | null } | null>(null);
-  const [captionDraft, setCaptionDraft] = useState<CaptionDraft | null>(null);
+  const [discussionOpen, setDiscussionOpen] = useState(() => typeof window !== "undefined" && Boolean(new URL(window.location.href).searchParams.get("message")));
   const [discussionDraft, setDiscussionDraft] = useState("");
   const [error, setError] = useState<string | null>(configured ? null : "اتصال تسجيل الدخول غير متاح مؤقتًا.");
   const [notice, setNotice] = useState<string | null>(null);
@@ -244,7 +227,6 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     setWorkspace(null);
     setDeliveryFormOpen(false);
     setDeliverySnapshot(null);
-    setCaptionDraft(null);
   }, []);
   const clearTransientState = useCallback(() => { setError(null); setNotice(null); }, []);
 
@@ -353,26 +335,6 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         assets: assets ?? [],
         deliveries: deliveries ?? [],
         contentRequest,
-      });
-      setCaptionDraft((current) => {
-        if (!contentRequest) return null;
-        const serverValue = contentRequest.caption_brief ?? "";
-        if (!current || current.contentItemId !== contentRequest.id) {
-          return {
-            contentItemId: contentRequest.id,
-            baseVersion: contentRequest.version,
-            baseValue: serverValue,
-            value: serverValue,
-          };
-        }
-        if (current.baseVersion === contentRequest.version) return current;
-        if (current.value !== current.baseValue) return current;
-        return {
-          contentItemId: contentRequest.id,
-          baseVersion: contentRequest.version,
-          baseValue: serverValue,
-          value: serverValue,
-        };
       });
       setError(null);
     } catch (loadError) {
@@ -555,72 +517,6 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     setWorking(false);
   }
 
-  async function saveContentCaption(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!workspace?.contentRequest || !workspace.task.content_item_id || !session || !captionDraft) return;
-    if (captionDraft.contentItemId !== workspace.contentRequest.id
-      || captionDraft.baseVersion !== workspace.contentRequest.version) {
-      setError("وصل إصدار أحدث للكابشن أثناء الكتابة. راجع التعارض الظاهر داخل خانة الكابشن قبل الحفظ.");
-      return;
-    }
-    const captionText = captionDraft.value.trim();
-    if (captionText.length < 3) {
-      setError("اكتب الكابشن من 3 حروف على الأقل.");
-      return;
-    }
-    setWorking(true); setError(null); setNotice(null);
-    const { data: commandData, error: commandError } = await getSupabaseBrowserClient().functions.invoke("content-commands", {
-      body: {
-        action: "update_content_caption",
-        content_item_id: workspace.task.content_item_id,
-        caption: captionText,
-        expected_content_version: captionDraft.baseVersion,
-      },
-    });
-    if (commandError) {
-      setError(await getSupabaseFunctionErrorMessage(commandError, "تعذّر حفظ الكابشن."));
-      await loadTaskData(session, false);
-    } else {
-      const returnedVersion = Number((commandData as { version?: unknown } | null)?.version);
-      setCaptionDraft({
-        contentItemId: workspace.contentRequest.id,
-        baseVersion: Number.isSafeInteger(returnedVersion) && returnedVersion > 0
-          ? returnedVersion
-          : captionDraft.baseVersion,
-        baseValue: captionText,
-        value: captionText,
-      });
-      setNotice("تم حفظ الكابشن داخل طلب المحتوى وسيظهر لمسؤول النشر.");
-      await loadTaskData(session, false);
-    }
-    setWorking(false);
-  }
-
-  function useLatestCaption() {
-    if (!workspace?.contentRequest) return;
-    const value = workspace.contentRequest.caption_brief ?? "";
-    setCaptionDraft({
-      contentItemId: workspace.contentRequest.id,
-      baseVersion: workspace.contentRequest.version,
-      baseValue: value,
-      value,
-    });
-    setError(null);
-    setNotice("تم تحميل أحدث كابشن. مسودتك السابقة لم تعد مستخدمة.");
-  }
-
-  function rebaseCaptionDraft() {
-    if (!workspace?.contentRequest || !captionDraft) return;
-    setCaptionDraft({
-      ...captionDraft,
-      contentItemId: workspace.contentRequest.id,
-      baseVersion: workspace.contentRequest.version,
-      baseValue: workspace.contentRequest.caption_brief ?? "",
-    });
-    setError(null);
-    setNotice("تم الاحتفاظ بمسودتك على أحدث نسخة. راجع الفرق ثم احفظها يدويًا.");
-  }
-
   async function saveTaskDelivery(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!workspace || !session) return;
@@ -748,7 +644,6 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     && (isRequester || platformAdmin);
   const canRequestRevision = canRequestContentRevision || canRequestStandaloneRevision;
   const canDiscuss = !readOnly && (isAssignee || isRequester || platformAdmin);
-  const canEditCaption = contentTask && !readOnly && (isAssignee || isRequester || platformAdmin);
   const owner = peopleById.get(task.owner_id);
   const requester = peopleById.get(task.created_by);
   const currentDelivery = task.content_item_id
@@ -766,13 +661,6 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     || task.description?.trim()
     || "لا يوجد شرح إضافي لهذه المهمة. ارجع لطالب المهمة من قسم السؤال والجواب إذا احتجت توضيحًا.";
   const taskInstructions = instructionsForTask(task, workspace.contentRequest, fullRequest);
-  const captionServerValue = workspace.contentRequest?.caption_brief ?? "";
-  const captionDraftMatchesItem = Boolean(captionDraft && captionDraft.contentItemId === workspace.contentRequest?.id);
-  const captionDraftStale = Boolean(captionDraftMatchesItem
-    && captionDraft
-    && workspace.contentRequest
-    && captionDraft.baseVersion !== workspace.contentRequest.version);
-  const captionDraftDirty = Boolean(captionDraftMatchesItem && captionDraft && captionDraft.value !== captionDraft.baseValue);
   const hasExecutionResources = taskAssets.length > 0 || inputDeliveries.length > 0;
   const canSubmitDelivery = !readOnly && isAssignee
     && (task.status === "in_progress" || (task.status === "done" && !task.requires_review))
@@ -784,8 +672,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const canOpenDelivery = canSubmitDelivery && ["in_progress", "done"].includes(task.status) && !deliveryFormOpen;
   const canApproveTask = !linkedWorkflow && task.status === "review" && actorTransitions.includes("done");
   const showDeliveryForm = canSubmitDelivery && deliveryFormOpen && Boolean(deliverySnapshot);
-  const canOpenContentWorkspace = workspace.membership.role === "owner" || workspace.membership.allowed_sections.includes("content");
-  const linkedHref = task.content_item_id ? canOpenContentWorkspace ? `/content?content=${task.content_item_id}#content-${task.content_item_id}` : null
+  const linkedHref = task.content_item_id ? `/tasks/content/${task.content_item_id}`
     : task.launch_deliverable_id ? `/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`
       : task.launch_id ? `/campaigns?launch=${task.launch_id}#launch-${task.launch_id}`
         : task.crm_contact_id ? `/crm/${task.crm_contact_id}` : null;
@@ -809,9 +696,10 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       instructions: revision.instructions,
       requestedBy: revision.requested_by,
       assignedTo: revision.assigned_to,
-      meta: `${contentRevisionStatusLabels[revision.status]}${revision.resolved_at ? ` · أُغلق ${formatDate(revision.resolved_at)}` : ""}`,
+      meta: `${contentRevisionStatusLabels[revision.status]}${revision.resolved_at ? ` · أُغلق ${formatDateTime(revision.resolved_at)}` : ""}`,
     })),
   ].sort((left, right) => new Date(right.requestedAt).getTime() - new Date(left.requestedAt).getTime());
+  const deadline = formatDeadlineDistance(task.due_at);
 
   return (
     <section className="task-detail-workspace">
@@ -822,9 +710,9 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
 
       <section className="panel task-detail-header">
         <div>
-          <p className="overline">{taskPriorityConfig[task.priority].mark} أولوية {taskPriorityConfig[task.priority].label}</p>
+          <p className="overline">طلبها {requester?.name ?? "عضو فريق"}</p>
           <h2>{task.title}</h2>
-          <p>طلبها {requester?.name ?? "عضو فريق"} ومسندة إلى {owner?.name ?? "عضو فريق"}.</p>
+          <p><CalendarClock size={14} /> <bdi dir="ltr">{formatDateTime(task.due_at)}</bdi> <span className={deadline.overdue ? "deadline-countdown overdue" : "deadline-countdown"}>{deadline.label}</span></p>
         </div>
         <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
       </section>
@@ -834,17 +722,17 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
 
       <div className="task-detail-layout">
         <aside className="panel task-detail-action">
-          <div className="section-heading compact"><div><p className="overline">الإجراء الحالي</p><h2>{isAssignee ? "تنفيذ مهمتك" : isRequester ? "متابعة ما طلبته" : "متابعة المهمة"}</h2></div><ShieldCheck size={19} /></div>
-          {isAssignee ? <p className="task-role-proof"><CircleUserRound size={14} /> أنت المسؤول عن التنفيذ.</p> : <p className="task-role-proof"><CircleUserRound size={14} /> التنفيذ يخص {owner?.name ?? "المسؤول"} فقط.</p>}
+          <strong>{isAssignee ? "الإجراء المطلوب منك" : `التنفيذ عند ${owner?.name ?? "المسؤول"}`}</strong>
           {canStartTask ? <Button type="button" disabled={working} onClick={() => void changeStatus("in_progress")}><CheckCircle2 size={15} /> استلمت وبدأت</Button> : null}
           {canOpenDelivery ? <Button type="button" disabled={working} onClick={openDeliveryForm}><PackageCheck size={15} /> {task.status === "done" ? "تعديل رابط أو ملاحظة التسليم" : "تم تنفيذ المهمة"}</Button> : null}
-          {canBlockTask ? <Button type="button" variant="secondary" disabled={working} onClick={() => void changeStatus("blocked")}><AlertTriangle size={15} /> عندي عائق</Button> : null}
           {canResumeTask ? <Button type="button" disabled={working} onClick={() => void changeStatus("in_progress")}><CheckCircle2 size={15} /> تم حل العائق — أكمل</Button> : null}
           {canApproveTask ? <Button type="button" disabled={working} onClick={() => void changeStatus("done")}><CheckCircle2 size={15} /> اعتماد وإغلاق المهمة</Button> : null}
           {task.status === "review" && isAssignee ? <p className="task-review-waiting">أرسلت المهمة للمراجعة. الاعتماد أو طلب التعديل عند طالب المهمة.</p> : null}
           {canRequestRevision ? <Button type="button" variant="secondary" onClick={() => setShowRevisionForm((value) => !value)}><MessageSquareText size={15} /> طلب تعديل</Button> : null}
+          {canDiscuss ? <Button type="button" variant="secondary" onClick={() => setDiscussionOpen((value) => !value)}><MessageSquareText size={15} /> عندي سؤال أو مشكلة</Button> : null}
           {linkedHref && linkedLabel ? <Button href={linkedHref} variant="secondary"><Route size={15} /> {linkedLabel}</Button> : null}
-          {!canStartTask && !canOpenDelivery && !canBlockTask && !canResumeTask && !canApproveTask && !canRequestRevision && !linkedHref ? <p className="task-action-note">لا يوجد إجراء مطلوب من حسابك في الحالة الحالية.</p> : null}
+          {canBlockTask && discussionOpen ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void changeStatus("blocked")}><AlertTriangle size={14} /> أوقف المهمة لحين حل المشكلة</button> : null}
+          {!canStartTask && !canOpenDelivery && !canResumeTask && !canApproveTask && !canRequestRevision && !canDiscuss && !linkedHref ? <p className="task-action-note">لا يوجد إجراء مطلوب من حسابك في الحالة الحالية.</p> : null}
         </aside>
 
         <div className="task-detail-main">
@@ -857,7 +745,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
           </section> : null}
 
           <section className="panel task-detail-section task-requirements-section">
-            <div className="section-heading compact"><div><p className="overline">المطلوب الآن</p><h2>{isAssignee ? "نفّذ المطلوب بدون بحث أو تخمين" : isRequester ? "الطلب والتسليم في مكان واحد" : "كل المطلوب للتنفيذ"}</h2><p>شرح المهمة أولًا، ثم الملفات والمصادر، وبعدها التسليم النهائي بوضوح.</p></div><FileText size={19} /></div>
+            <div className="section-heading compact"><div><p className="overline">المطلوب منك</p><h2>{task.content_step ? contentStepConfig[task.content_step].label : "تفاصيل المهمة"}</h2></div><FileText size={19} /></div>
             <div className="task-detail-instructions">
               <span><FileText size={14} /> {task.content_step ? `المطلوب منك · ${contentStepConfig[task.content_step].label}` : "كل المطلوب والروابط"}</span>
               <p><LinkifiedText text={taskInstructions} /></p>
@@ -869,33 +757,12 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
               <div><LinkifiedText text={fullRequest} /></div>
             </details> : null}
 
-            {task.content_item_id ? <section className={`task-caption-block${task.content_step === "publishing" ? " publishing-caption" : ""}`}>
-              <header><div><MessageSquareText size={15} /><div><strong>الكابشن داخل نفس الطلب</strong><small>{task.content_step === "publishing" ? "راجع النص النهائي هنا قبل النشر." : "محفوظ مرة واحدة ويصل تلقائيًا لمسؤول النشر."}</small></div></div><StatusBadge tone={workspace.contentRequest?.caption_brief.trim() ? "success" : "neutral"}>{workspace.contentRequest?.caption_brief.trim() ? "محفوظ" : "غير مكتوب"}</StatusBadge></header>
-              {canEditCaption ? <form onSubmit={saveContentCaption}>
-                {captionDraftStale ? <div className="form-notice error" role="alert">
-                  <strong>وصل إصدار أحدث أثناء كتابة الكابشن.</strong>
-                  <p>مسودتك ما زالت محفوظة في الخانة ولم نستبدلها تلقائيًا. قارنها بالنسخة الحالية ثم اختر كيف تكمل.</p>
-                  {captionServerValue ? <details><summary>عرض الكابشن المحفوظ حاليًا</summary><p><LinkifiedText text={captionServerValue} /></p></details> : <small>النسخة الأحدث لا تحتوي كابشنًا.</small>}
-                  <div className="form-actions"><button className="text-button" type="button" onClick={useLatestCaption}>استخدام النسخة الأحدث</button><button className="text-button" type="button" onClick={rebaseCaptionDraft}>الاحتفاظ بمسودتي ومراجعتها</button></div>
-                </div> : null}
-                <label><span>نص الكابشن والهاشتاجات</span><textarea name="caption_text" minLength={3} maxLength={10000} rows={6} required value={captionDraftMatchesItem ? captionDraft?.value ?? "" : captionServerValue} onChange={(event) => {
-                  const value = event.target.value;
-                  const contentRequest = workspace.contentRequest;
-                  if (!contentRequest) return;
-                  setCaptionDraft((current) => current?.contentItemId === contentRequest.id
-                    ? { ...current, value }
-                    : { contentItemId: contentRequest.id, baseVersion: contentRequest.version, baseValue: contentRequest.caption_brief ?? "", value });
-                }} placeholder="اكتب الكابشن النهائي والهاشتاجات هنا…" disabled={working} /></label>
-                <div className="form-actions"><Button type="submit" variant={task.content_step === "publishing" ? "primary" : "secondary"} disabled={working || captionDraftStale || !captionDraftDirty}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} حفظ الكابشن</Button><small>{captionDraftDirty ? "عندك تعديل غير محفوظ. الحفظ لا يغيّر حالة المهمة ولا يعتبرها منشورة." : "الكابشن مطابق للنسخة المحفوظة."}</small></div>
-              </form> : workspace.contentRequest?.caption_brief.trim() ? <p><LinkifiedText text={workspace.contentRequest.caption_brief} /></p> : <p className="task-resource-empty">لم يُكتب الكابشن حتى الآن.</p>}
-            </section> : null}
-
-            {task.content_item_id ? <div className="task-resource-block">
-              <header><div><Paperclip size={15} /><div><strong>ملفات وروابط التنفيذ</strong><small>المصادر والتسليمات السابقة التي تحتاجها في هذه الخطوة.</small></div></div><StatusBadge tone={hasExecutionResources ? "info" : "neutral"}>{hasExecutionResources ? `${taskAssets.length + inputDeliveries.length} مرفق` : "لا يوجد"}</StatusBadge></header>
-              {hasExecutionResources ? <ul className="task-resource-list">
+            {task.content_item_id && hasExecutionResources ? <div className="task-resource-block">
+              <header><div><Paperclip size={15} /><div><strong>الروابط التي تحتاجها</strong><small>المصادر والتسليمات الخاصة بهذه المرحلة فقط.</small></div></div><StatusBadge tone="info">{taskAssets.length + inputDeliveries.length} مرفق</StatusBadge></header>
+              <ul className="task-resource-list">
                 {inputDeliveries.map((delivery) => <li key={`delivery-${delivery.id}`}>
                   <span className="task-resource-mark"><PackageCheck size={15} /></span>
-                  <div><strong>تسليم {contentStepConfig[delivery.step].label}</strong>{delivery.result_note ? <p>{delivery.result_note}</p> : null}<small>سلّمه {peopleById.get(delivery.submitted_by)?.name ?? "عضو فريق"} · {formatDate(delivery.submitted_at)}</small></div>
+                  <div><strong>تسليم {contentStepConfig[delivery.step].label}</strong>{delivery.result_note ? <p>{delivery.result_note}</p> : null}<small>سلّمه {peopleById.get(delivery.submitted_by)?.name ?? "عضو فريق"} · <bdi dir="ltr">{formatDateTime(delivery.submitted_at)}</bdi></small></div>
                   {delivery.result_url ? <a href={delivery.result_url} target="_blank" rel="noreferrer"><span>فتح التسليم<small dir="ltr">{resourceHost(delivery.result_url)}</small></span><ExternalLink size={14} /></a> : null}
                 </li>)}
                 {taskAssets.map((asset) => <li key={asset.id}>
@@ -903,12 +770,12 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
                   <div><strong>{asset.title}</strong><p>{contentAssetKindConfig[asset.kind].label}{asset.notes ? ` · ${asset.notes}` : ""}</p><small>{asset.stage ? `مخصص لخطوة ${contentStepConfig[asset.stage].label}` : "مرجع مشترك"}</small></div>
                   <a href={asset.url} target="_blank" rel="noreferrer"><span>فتح الرابط<small dir="ltr">{resourceHost(asset.url)}</small></span><ExternalLink size={14} /></a>
                 </li>)}
-              </ul> : <p className="task-resource-empty"><Paperclip size={14} /> لم يرفق طالب المهمة ملفات أو روابط لهذه الخطوة حتى الآن.</p>}
+              </ul>
             </div> : null}
 
-            {task.content_item_id || standaloneTask ? <div id="delivery" ref={deliverySection} className={`task-current-delivery${currentDelivery ? " has-delivery" : ""}`} tabIndex={-1}>
-              <header><div><PackageCheck size={16} /><div><strong>تسليم هذه المهمة</strong><small>{currentDelivery ? `إصدار ${currentDelivery.version} · ${formatDate(currentDelivery.submitted_at)}` : "النتيجة النهائية التي سلّمها منفّذ هذه الخطوة"}</small></div></div>{currentDelivery ? <StatusBadge tone="success">تم التسليم</StatusBadge> : <StatusBadge tone="neutral">في الانتظار</StatusBadge>}</header>
-              {currentDelivery ? <div className="task-current-delivery-body"><div>{currentDelivery.result_note ? <p>{currentDelivery.result_note}</p> : <p>تم التسليم بدون ملاحظة مكتوبة.</p>}<small>بواسطة {peopleById.get(currentDelivery.submitted_by)?.name ?? "عضو فريق"}</small></div>{currentDelivery.result_url ? <a href={currentDelivery.result_url} target="_blank" rel="noreferrer"><span>{task.content_step === "publishing" ? "فتح المنشور" : "فتح ملف التسليم"}<small dir="ltr">{resourceHost(currentDelivery.result_url)}</small></span><ExternalLink size={15} /></a> : null}</div> : <p className="task-resource-empty"><PackageCheck size={14} /> {isAssignee ? task.status === "ready" ? "ابدأ المهمة أولًا، وبعدها يظهر لك زر «تم تنفيذ المهمة»." : task.status === "in_progress" ? "اضغط «تم تنفيذ المهمة» من مربع الإجراء الحالي لفتح خانة التسليم." : task.status === "review" ? "التسليم بانتظار مراجعة طالب المهمة." : "لم تسلّم نتيجة هذه المهمة بعد." : "لم يرفع المنفّذ تسليم هذه المهمة حتى الآن."}</p>}
+            {(currentDelivery || showDeliveryForm) && (task.content_item_id || standaloneTask) ? <div id="delivery" ref={deliverySection} className={`task-current-delivery${currentDelivery ? " has-delivery" : ""}`} tabIndex={-1}>
+              <header><div><PackageCheck size={16} /><div><strong>تسليم هذه المهمة</strong><small>{currentDelivery ? <>إصدار {currentDelivery.version} · <bdi dir="ltr">{formatDateTime(currentDelivery.submitted_at)}</bdi></> : "النتيجة النهائية التي سلّمها منفّذ هذه الخطوة"}</small></div></div>{currentDelivery ? <StatusBadge tone="success">تم التسليم</StatusBadge> : <StatusBadge tone="neutral">في الانتظار</StatusBadge>}</header>
+              {currentDelivery ? <div className="task-current-delivery-body"><div>{currentDelivery.result_note ? <p>{currentDelivery.result_note}</p> : <p>تم التسليم بدون ملاحظة مكتوبة.</p>}<small>بواسطة {peopleById.get(currentDelivery.submitted_by)?.name ?? "عضو فريق"}</small></div>{currentDelivery.result_url ? <a href={currentDelivery.result_url} target="_blank" rel="noreferrer"><span>{task.content_step === "publishing" ? "فتح المنشور" : "فتح ملف التسليم"}<small dir="ltr">{resourceHost(currentDelivery.result_url)}</small></span><ExternalLink size={15} /></a> : null}</div> : null}
               {showDeliveryForm ? <form className="task-delivery-compose" key={`delivery-${deliverySnapshot?.taskVersion ?? 0}-${deliverySnapshot?.deliveryVersion ?? 0}`} onSubmit={saveTaskDelivery}>
                 {deliveryDraftStale ? <p className="form-notice error" role="alert">وصل تعديل جديد أثناء الكتابة. اقفل النموذج وراجع أحدث تعليمات أو تسليم قبل الحفظ.</p> : null}
                 <label><span>{task.content_step === "publishing" ? "رابط المنشور" : task.content_step === "recording" ? "رابط المادة الخام" : "رابط ملف التسليم"}</span><input name="result_url" type="url" inputMode="url" dir="ltr" maxLength={2000} required={Boolean(task.content_step && contentStepsRequiringResultUrl.has(task.content_step))} defaultValue={currentDelivery?.result_url ?? ""} placeholder={task.content_step === "publishing" ? "https://instagram.com/p/..." : "https://drive.google.com/..."} disabled={working || deliveryDraftStale} /></label>
@@ -918,21 +785,9 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
             </div> : null}
 
             {task.acceptance_criteria.trim() ? <div className="task-detail-copy acceptance"><strong>معيار القبول — اختياري</strong><p>{task.acceptance_criteria}</p></div> : null}
-            <dl className="task-detail-facts">
-              <div><dt><CircleUserRound size={13} /> المسؤول</dt><dd>{owner?.name ?? "عضو فريق"}</dd></div>
-              <div><dt><CircleUserRound size={13} /> طالب المهمة</dt><dd>{requester?.name ?? "عضو فريق"}</dd></div>
-              <div><dt><CalendarClock size={13} /> الموعد النهائي</dt><dd>{formatDate(task.due_at)}</dd></div>
-              <div><dt><Clock3 size={13} /> تاريخ الطلب</dt><dd>{formatDate(task.created_at)}</dd></div>
-              <div><dt><Clock3 size={13} /> بدأ التنفيذ</dt><dd>{formatDate(task.started_at)}</dd></div>
-              <div><dt><CheckCircle2 size={13} /> اكتملت</dt><dd>{formatDate(task.completed_at)}</dd></div>
-            </dl>
-            {task.requires_review ? <p className="task-review-rule"><ShieldCheck size={13} /> هذه المهمة تحتاج اعتماد طالب المهمة قبل الإغلاق.</p> : <p className="task-direct-close-rule"><CheckCircle2 size={13} /> المسؤول يقدر يغلق المهمة مباشرة بعد التنفيذ.</p>}
-            {task.content_step ? <span className="workflow-task-label"><FileText size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
-            {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}
-            {task.crm_contact_id ? <span className="workflow-task-label crm-task-label"><ContactRound size={12} /> متابعة عميل</span> : null}
           </section>
 
-          <section className="panel task-detail-section task-discussion-section">
+          {discussionOpen ? <section className="panel task-detail-section task-discussion-section">
             <div className="section-heading compact"><div><p className="overline">سؤال وجواب داخل المهمة</p><h2>{isAssignee ? `اسأل ${requester?.name ?? "طالب المهمة"} لو المطلوب مش واضح` : `وضّح المطلوب لـ ${owner?.name ?? "المسؤول"}`}</h2><p>كل سؤال ورد يفضل محفوظًا هنا، والطرف الآخر يصله إشعار يفتح نفس الرسالة مباشرة.</p></div><MessageSquareText size={19} /></div>
             {linkedDiscussionId && discussion.some((message) => message.id === linkedDiscussionId) ? <p className="direct-link-notice"><Route size={14} /> تم فتح الرسالة المطلوبة داخل نقاش المهمة.</p> : null}
             {discussion.length ? <ol className="task-discussion-list">{discussion.map((message) => {
@@ -941,24 +796,22 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
               const directTarget = linkedDiscussionId === message.id;
               return <li id={`discussion-${message.id}`} data-direct-target={directTarget || undefined} tabIndex={directTarget ? -1 : undefined} key={message.id}>
                 <span className="task-discussion-avatar" aria-hidden="true">{(author?.name ?? "ع").trim().charAt(0)}</span>
-                <div><header><strong>{author?.name ?? "عضو فريق"}</strong><small>{authorRole}</small><time dateTime={message.created_at}>{formatDate(message.created_at)}</time></header><p>{message.body}</p></div>
+                <div><header><strong>{author?.name ?? "عضو فريق"}</strong><small>{authorRole}</small><time dateTime={message.created_at} dir="ltr">{formatDateTime(message.created_at)}</time></header><p>{message.body}</p></div>
               </li>;
             })}</ol> : <p className="task-empty-proof"><MessageSquareText size={14} /> لا توجد أسئلة حتى الآن. اكتب هنا بدل ما تضيع التفاصيل في شات خارجي.</p>}
             {canDiscuss ? <form className="task-discussion-compose" onSubmit={sendDiscussionMessage}>
               <label htmlFor="task-discussion-body">{isAssignee ? "سؤالك لطالب المهمة" : "رد أو توضيح للمسؤول"}</label>
               <div><textarea id="task-discussion-body" value={discussionDraft} onChange={(event) => setDiscussionDraft(event.target.value)} minLength={2} maxLength={4000} rows={3} placeholder={isAssignee ? "مثال: هل المقاس المطلوب 1080×1920؟ وأستخدم أي رابط للمادة الخام؟" : "اكتب الرد أو التوضيح هنا، وسيصل للمسؤول إشعار مباشر."} disabled={working} /><Button type="submit" disabled={working || discussionDraft.trim().length < 2}>{working ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />} إرسال</Button></div>
             </form> : null}
-          </section>
+          </section> : null}
 
-          <section className="panel task-detail-section">
-            <div className="section-heading compact"><div><p className="overline">سجل التعديلات</p><h2>كل جولة تعديل مرتبطة بهذه المهمة</h2><p>طلبات تعديل مرحلة المحتوى والتعديلات العامة تظهر هنا بترتيبها الحقيقي.</p></div><StatusBadge tone={revisionTimeline.length ? "warning" : "neutral"}>{revisionTimeline.length}</StatusBadge></div>
-            {revisionTimeline.length ? <ol className="task-revision-list">{revisionTimeline.map((revision) => <li key={revision.id}><span aria-hidden="true" /><div><strong>{revision.title}</strong><p>{revision.instructions}</p><small>طلبه {peopleById.get(revision.requestedBy)?.name ?? "طالب المهمة"} من {peopleById.get(revision.assignedTo)?.name ?? "المسؤول"} · {formatDate(revision.requestedAt)} · {revision.meta}</small></div></li>)}</ol> : <p className="task-empty-proof"><CheckCircle2 size={14} /> لا توجد طلبات تعديل حتى الآن.</p>}
-          </section>
-
-          <section className="panel task-detail-section">
-            <div className="section-heading compact"><div><p className="overline">سجل الحالة</p><h2>من غيّر ماذا ومتى</h2></div><History size={19} /></div>
-            {events.length ? <ol className="task-event-list">{events.map((event) => <li key={event.id}><span aria-hidden="true" /><div><strong>{taskEventTitle(event)}</strong><p>{peopleById.get(event.actor_id ?? "")?.name ?? "النظام"}</p><small>{formatDate(event.occurred_at)}</small></div></li>)}</ol> : <p className="task-empty-proof">لا يوجد نشاط مسجل.</p>}
-          </section>
+          {revisionTimeline.length || events.length ? <details className="panel task-detail-history">
+            <summary><History size={16} /> سجل المهمة والتعديلات</summary>
+            <div className="task-detail-history-body">
+              {revisionTimeline.length ? <ol className="task-revision-list">{revisionTimeline.map((revision) => <li key={revision.id}><span aria-hidden="true" /><div><strong>{revision.title}</strong><p>{revision.instructions}</p><small>طلبه {peopleById.get(revision.requestedBy)?.name ?? "طالب المهمة"} من {peopleById.get(revision.assignedTo)?.name ?? "المسؤول"} · <bdi dir="ltr">{formatDateTime(revision.requestedAt)}</bdi> · {revision.meta}</small></div></li>)}</ol> : null}
+              {events.length ? <ol className="task-event-list">{events.map((event) => <li key={event.id}><span aria-hidden="true" /><div><strong>{taskEventTitle(event)}</strong><p>{peopleById.get(event.actor_id ?? "")?.name ?? "النظام"}</p><small><bdi dir="ltr">{formatDateTime(event.occurred_at)}</bdi></small></div></li>)}</ol> : null}
+            </div>
+          </details> : null}
         </div>
       </div>
     </section>

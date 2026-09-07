@@ -9,7 +9,7 @@ type Notification = Tables<"notifications">;
 type TelegramConnection = Tables<"publishing_admin_connections">;
 
 function formatNotificationTime(value: string) {
-  return new Intl.DateTimeFormat("ar-EG", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 }
 
 export function NotificationCenter() {
