@@ -50,7 +50,7 @@ Deployed Edge Functions:
 7. `team-commands` v1: JWT-protected invitation-link creation/revocation, exact-email acceptance, member role/status changes, and onboarding acknowledgements. It sends no email, Telegram message, or external request.
 8. `team-commands` v2: keeps the manual invitation-link flow and atomically stores each invited or existing member's selected dashboard sections with role/status changes.
 9. `request-access-link` v1: public, enumeration-resistant login entrypoint. It sends a magic link only for an active member or an exact valid invitation and allows Auth user creation only for the invitation path.
-10. `account-access` v1: public, origin-checked, and rate-limited registration/recovery entrypoint. It creates a confirmed password account marked for owner approval without creating a membership, and records enumeration-resistant recovery requests without sending email.
+10. `account-access` v2: public, origin-checked, and rate-limited registration/recovery/invitation-password entrypoint. It creates a confirmed password account, explicitly persists the owner-approval request with compensating rollback on failure, and lets an exact valid invitation prepare an account without sending email.
 11. `team-commands` v5: keeps the owner-controlled team tools and adds audited access approval/rejection plus owner-only creation of one-time password recovery links.
 
 Verification on 2026-08-17:

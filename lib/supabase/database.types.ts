@@ -4624,6 +4624,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      ensure_workspace_access_request: {
+        Args: {
+          target_email: string
+          target_full_name: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       mark_workspace_password_recovery_link_created: {
         Args: { target_actor_id: string; target_request_id: string }
         Returns: boolean

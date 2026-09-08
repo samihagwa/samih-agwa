@@ -62,7 +62,11 @@ export default {
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const scope = action === "register" ? "register" : action === "request_password_recovery" ? "recover" : "";
+    const scope = action === "register" || action === "prepare_invitation_account"
+      ? "register"
+      : action === "request_password_recovery"
+        ? "recover"
+        : "";
     if (!scope) return jsonResponse({ message: "طلب الحساب غير معروف." }, 400);
 
     const [fingerprintHash, emailHash] = await Promise.all([
@@ -90,7 +94,7 @@ export default {
         return jsonResponse({ message: "كلمة المرور يجب أن تكون 8 أحرف على الأقل." }, 400);
       }
 
-      const { error: createError } = await admin.auth.admin.createUser({
+      const { data: createdUser, error: createError } = await admin.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
@@ -106,7 +110,57 @@ export default {
             : "تعذّر إنشاء طلب الانضمام مؤقتًا.",
         }, duplicate ? 409 : 503);
       }
-      return jsonResponse({ created: true, message: "تم إنشاء الحساب وإرسال طلبك للمالك." }, 201);
+
+      const userId = createdUser.user?.id;
+      if (!userId) return jsonResponse({ message: "تعذّر إكمال إنشاء طلب الانضمام." }, 503);
+      const { data: requestId, error: requestError } = await admin.rpc("ensure_workspace_access_request", {
+        target_user_id: userId,
+        target_email: email,
+        target_full_name: fullName,
+      });
+      if (requestError || !requestId) {
+        console.error("workspace access request creation failed", requestError?.message ?? "request id missing");
+        const { error: rollbackError } = await admin.auth.admin.deleteUser(userId);
+        if (rollbackError) console.error("incomplete registration rollback failed", rollbackError.message);
+        return jsonResponse({ message: "لم يكتمل طلب الانضمام؛ لم يتم منح أي صلاحية. حاول مرة أخرى." }, 503);
+      }
+      return jsonResponse({ created: true, request_id: requestId, message: "تم إنشاء الحساب وإرسال طلبك للمالك." }, 201);
+    }
+
+    if (action === "prepare_invitation_account") {
+      const password = cleanString(body.password);
+      const invitationToken = cleanString(body.invitation_token);
+      if (password.length < 8 || password.length > 128) {
+        return jsonResponse({ message: "كلمة المرور يجب أن تكون 8 أحرف على الأقل." }, 400);
+      }
+      if (invitationToken.length < 32 || invitationToken.length > 160) {
+        return jsonResponse({ message: "رابط الدعوة غير صالح أو غير مكتمل." }, 400);
+      }
+
+      const tokenHash = await sha256(invitationToken);
+      const { data: accessMode, error: accessError } = await admin.rpc("resolve_workspace_login", {
+        target_email: email,
+        target_token_hash: tokenHash,
+      });
+      if (accessError) {
+        console.error("invitation password access check failed", accessError.message);
+        return jsonResponse({ message: "تعذّر التحقق من الدعوة مؤقتًا." }, 503);
+      }
+      if (accessMode !== "invitation") {
+        return jsonResponse({ message: "الدعوة غير صالحة لهذا البريد أو انتهت صلاحيتها." }, 400);
+      }
+
+      const { error: createError } = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        app_metadata: { registration_flow: "invitation" },
+      });
+      if (createError && !/already|registered|exists/i.test(createError.message)) {
+        console.error("invitation password account preparation failed", createError.message);
+        return jsonResponse({ message: "تعذّر تجهيز حساب الدعوة مؤقتًا." }, 503);
+      }
+      return jsonResponse({ ready: true, account_exists: Boolean(createError) });
     }
 
     const { error: recoveryError } = await admin.rpc("request_workspace_password_recovery", {

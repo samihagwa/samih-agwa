@@ -1837,7 +1837,7 @@ test("task work uses a compact financial-report rhythm instead of floating kanba
   assert.match(operatingCss, /\.task-report-row\[open\]/);
 });
 
-test("team onboarding is owner-controlled, email-bound, auditable, and sends approval email only after owner approval", async () => {
+test("team onboarding is owner-controlled, email-bound, password-first, and auditable", async () => {
   const [migration, commands, teamWorkspace, onboardingGate, appShell, joinWorkspace, joinPage, config, readme] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260821220304_team_onboarding_and_access_control.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/team-commands/index.ts", import.meta.url), "utf8"),
@@ -1883,20 +1883,22 @@ test("team onboarding is owner-controlled, email-bound, auditable, and sends app
   assert.match(onboardingGate, /لا يغيّر دورك أو صلاحياتك/);
   assert.match(appShell, /!membership\.onboarding_completed_at/);
   assert.match(appShell, /MemberOnboardingGate/);
-  assert.match(joinWorkspace, /request-access-link/);
-  assert.match(joinWorkspace, /invitation_token/);
+  assert.match(joinWorkspace, /account-access/);
+  assert.match(joinWorkspace, /prepare_invitation_account/);
+  assert.match(joinWorkspace, /signInWithPassword/);
   assert.match(joinWorkspace, /accept_invitation/);
-  assert.match(joinWorkspace, /نفس البريد/);
+  assert.match(joinWorkspace, /البريد المحدد/);
   assert.match(joinPage, /دعوة من المالك/);
   assert.match(config, /\[functions\.team-commands\][\s\S]*verify_jwt = true/);
-  assert.match(readme, /Approval sends the member a one-time sign-in email/);
+  assert.match(readme, /Approval may send an optional one-time sign-in email/);
 });
 
 test("workspace access is owner-approved, password-based, section-scoped, and enforced before rendering or direct API access", async () => {
-  const [migration, functionFence, passwordMigration, access, shell, navigation, login, join, tasks, loginFunction, accountAccess, resetPassword, authConfirm, teamCommands, teamWorkspace, config, types] = await Promise.all([
+  const [migration, functionFence, passwordMigration, onboardingRepair, access, shell, navigation, login, join, tasks, loginFunction, accountAccess, resetPassword, authConfirm, teamCommands, teamWorkspace, config, types] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822012237_invite_only_section_access.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260822014445_section_scope_function_writes.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260907170004_owner_approved_password_auth.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260908153008_repair_owner_approved_team_onboarding.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/access.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/AppShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
@@ -1964,10 +1966,19 @@ test("workspace access is owner-approved, password-based, section-scoped, and en
   assert.match(passwordMigration, /function public\.approve_workspace_access_request/);
   assert.match(passwordMigration, /function public\.reject_workspace_access_request/);
   assert.match(passwordMigration, /team\.access_request_approved/);
+  assert.match(onboardingRepair, /function public\.ensure_workspace_access_request/);
+  assert.match(onboardingRepair, /on_auth_user_registration_metadata_changed/);
+  assert.match(onboardingRepair, /after update of raw_app_meta_data, raw_user_meta_data, email on auth\.users/);
+  assert.match(onboardingRepair, /reconcile_team_access_after_membership/);
+  assert.match(onboardingRepair, /team\.access_request_created/);
+  assert.match(onboardingRepair, /where auth_user\.raw_app_meta_data ->> 'registration_flow' = 'owner_approval_request'/);
   assert.match(accountAccess, /auth\.admin\.createUser/);
   assert.match(accountAccess, /email_confirm: true/);
   assert.match(accountAccess, /registration_flow: "owner_approval_request"/);
   assert.match(accountAccess, /consume_workspace_auth_rate_limit/);
+  assert.match(accountAccess, /ensure_workspace_access_request/);
+  assert.match(accountAccess, /auth\.admin\.deleteUser/);
+  assert.match(accountAccess, /prepare_invitation_account/);
   assert.doesNotMatch(accountAccess, /console\.(?:log|error)\([^\n]*,\s*password(?:\W|$)/i);
   assert.match(resetPassword, /auth\.updateUser\(\{ password \}\)/);
   assert.match(resetPassword, /auth\.verifyOtp\(\{ token_hash: tokenHash, type: "recovery" \}\)/);
