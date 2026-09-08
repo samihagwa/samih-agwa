@@ -67,10 +67,10 @@ export function ExnessIntegrationWorkspace() {
 
   const ready = workspace.integration?.status === "ready" && workspace.integration.account_lookup_enabled;
   return <section className="panel exness-integration-panel">
-    <div className="section-heading"><div><p className="overline">Brokerage data — Owner only</p><h2>تكامل وكالة Exness</h2><p>تم ربط منطق اللوحة القديمة بجسر خادمي: المالك يرى الحسابات واللوتات والعمولة، والسيلز يحصل فقط على نتيجة «تحت الوكالة / نشط».</p></div><StatusBadge tone={ready ? "success" : "warning"}>{ready ? "متصل" : "يحتاج إعدادًا مرة واحدة"}</StatusBadge></div>
+    <div className="section-heading"><div><p className="overline">Official Partnership API — Owner only</p><h2>تكامل وكالة Exness</h2><p>اتصال خادمي مباشر بواجهة Exness الرسمية: المالك يرى الحسابات واللوتات والعمولة، والسيلز يحصل فقط على نتيجة «تحت الوكالة / نشط».</p></div><StatusBadge tone={ready ? "success" : "warning"}>{ready ? "متصل" : "يحتاج إعدادًا مرة واحدة"}</StatusBadge></div>
     {error ? <p className="form-notice error">{error}</p> : null}
     <div className="exness-integration-grid">
-      <article><span><Building2 size={18} /></span><div><small>حالة المصدر</small><strong>{workspace.integration?.status === "error" ? "آخر مزامنة فشلت" : ready ? "جاهز للمزامنة" : "غير مربوط"}</strong><p>{workspace.integration?.last_error ?? "بيانات الدخول ومفتاح قراءة الاستجابة محفوظة كأسرار خادم، ولا تُرسل إلى المتصفح."}</p></div></article>
+      <article><span><Building2 size={18} /></span><div><small>حالة المصدر</small><strong>{workspace.integration?.status === "error" ? "آخر مزامنة فشلت" : ready ? "جاهز للمزامنة" : "غير مربوط"}</strong><p>{workspace.integration?.last_error ?? "بيانات دخول حساب الشراكة محفوظة كأسرار خادم، ولا تُرسل إلى المتصفح أو قاعدة البيانات."}</p></div></article>
       <article><span><Database size={18} /></span><div><small>الحسابات المتزامنة</small><strong>{workspace.accountCount}</strong><p>الجدول المالي محمي بصلاحية المالك فقط، ولا يظهر عبر بحث CRM العادي.</p></div></article>
       <article><span><Activity size={18} /></span><div><small>آخر مزامنة</small><strong>{formatDate(workspace.integration?.last_sync_at ?? null)}</strong><p>{workspace.syncRuns.length ? `${workspace.syncRuns.length} عمليات محفوظة في سجل المزامنة الأخير.` : "لا يوجد سجل مزامنة حتى الآن."}</p></div></article>
     </div>
@@ -79,7 +79,7 @@ export function ExnessIntegrationWorkspace() {
       <div><SearchCheck size={17} /><span><strong>Sales بصلاحية CRM</strong><small>بحث برقم الحساب أو معرّف العميل، والنتيجة فقط: موجود/غير موجود + نشط/غير نشط.</small></span></div>
       <div><LockKeyhole size={17} /><span><strong>باقي الفريق</strong><small>لا صفحة ولا أرقام ولا إمكانية بحث، حتى لو عرف رابط القسم.</small></span></div>
     </div>
-    <details className="exness-api-requirements"><summary><KeyRound size={16} /> الإعداد السري المطلوب مرة واحدة</summary><ol><li>حساب إداري مخصص للوحة Market Whales القديمة، وليس كلمة سر حساب Exness الشخصي.</li><li>مفتاح قراءة استجابة الجسر القديم بعد مراجعته أو تدويره مع المبرمج السابق.</li><li>تُحفظ القيم في Supabase Edge Secrets فقط؛ لا تُكتب في قاعدة البيانات أو الواجهة.</li></ol><a href="https://www.exnessaffiliates.com/marketing-tools/" target="_blank" rel="noreferrer"><ExternalLink size={13} /> مرجع Exness Partnership API الرسمي</a></details>
+    <details className="exness-api-requirements"><summary><KeyRound size={16} /> الإعداد السري المطلوب مرة واحدة</summary><ol><li>أضف بريد/رقم دخول حساب Exness Partners في السر <bdi dir="ltr">EXNESS_PARTNER_LOGIN</bdi>.</li><li>أضف كلمة السر في <bdi dir="ltr">EXNESS_PARTNER_PASSWORD</bdi>.</li><li>تُستخدم القيم داخل Edge Function فقط، ولا تُحفظ في قاعدة البيانات أو تظهر لأي عضو.</li></ol><a href="https://get.exness-affiliates.help/hc/en-us/articles/360023817591-The-Exness-Partnership-API" target="_blank" rel="noreferrer"><ExternalLink size={13} /> مرجع Exness Partnership API الرسمي</a></details>
     <aside className="exness-integration-guard"><CheckCircle2 size={17} /><p><strong>المسار جاهز:</strong> المزامنة idempotent، لها مهلة وسجل عمليات، والجداول المالية محمية للمالك. بعد ضبط الأسرار افتح صفحة الوكالة واضغط «مزامنة الآن».</p><Button href="/crm/exness">فتح حسابات الوكالة</Button></aside>
   </section>;
 }

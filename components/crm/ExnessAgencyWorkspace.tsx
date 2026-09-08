@@ -17,7 +17,7 @@ type SyncRun = Tables<"broker_sync_runs">;
 type LookupResult = Database["public"]["Functions"]["lookup_exness_account"]["Returns"][number];
 type AgencySummary = Database["public"]["Functions"]["get_exness_agency_summary"]["Returns"][number];
 type Workspace = { membership: Membership; organization: Organization };
-type InvokePayload = { message?: string; retry_after_seconds?: number; sync?: SyncRun; replayed?: boolean };
+type InvokePayload = { message?: string; retry_after_seconds?: number; sync?: SyncRun & { fetched_clients?: number }; replayed?: boolean };
 
 const PAGE_SIZE = 25;
 const LOOKUP_PATTERN = /^[A-Za-z0-9._-]{3,160}$/;
@@ -186,14 +186,16 @@ export function ExnessAgencyWorkspace() {
     setError(null);
     setNotice(null);
     const { data, error: invokeError } = await getSupabaseBrowserClient().functions.invoke<InvokePayload>("broker-commands", {
-      body: { action: "sync_exness_bridge", organization_id: workspace.organization.id, request_key: crypto.randomUUID() },
+      body: { action: "sync_exness_official", organization_id: workspace.organization.id, request_key: crypto.randomUUID() },
     });
     setSyncing(false);
     if (invokeError) {
       setError(data?.message ?? await getSupabaseFunctionErrorMessage(invokeError, "تعذّرت مزامنة حسابات Exness."));
       return;
     }
-    setNotice(data?.replayed ? "تم استرجاع نتيجة عملية المزامنة السابقة بأمان." : `اكتملت المزامنة: ${data?.sync?.upserted_rows ?? 0} حساب محفوظ.`);
+    setNotice(data?.replayed
+      ? "تم استرجاع نتيجة عملية المزامنة السابقة بأمان."
+      : `اكتملت المزامنة الرسمية: ${data?.sync?.upserted_rows ?? 0} حساب محفوظ أو محدث.`);
     await loadOwnerData(workspace.organization.id);
   }
 
@@ -264,7 +266,7 @@ export function ExnessAgencyWorkspace() {
         </tr>{expanded ? <tr className="exness-account-expanded"><td colSpan={8}><div id={`exness-account-${account.id}`}>
           <dl><div><dt>حساب الشريك</dt><dd dir="ltr">{profileText(clientProfile.partner_account)}</dd></div><div><dt>اسم حساب الشريك</dt><dd>{profileText(clientProfile.partner_account_name)}</dd></div><div><dt>تاريخ التسجيل</dt><dd dir="ltr">{formatDate(account.registered_at)}</dd></div><div><dt>آخر نشاط</dt><dd dir="ltr">{formatDate(account.last_activity_at)}</dd></div><div><dt>حجم USD</dt><dd dir="ltr">{formatNumber(typeof clientProfile.volume_mln_usd === "number" ? clientProfile.volume_mln_usd : 0, 4)}M</dd></div><div><dt>آخر مزامنة</dt><dd dir="ltr">{formatDate(account.last_synced_at)}</dd></div></dl>
         </div></td></tr> : null}</Fragment>;
-      })}</tbody></table></div> : <section className="panel empty-state"><span className="empty-visual"><DatabaseIcon aria-hidden="true" size={20} /></span><div><h2>{ownerLoading ? "جارٍ تحميل الحسابات" : "لا توجد حسابات مطابقة"}</h2><p>{summary?.integration_status === "not_configured" ? "اضغط «مزامنة الآن» بعد ضبط بيانات الجسر الآمنة على الخادم." : "غيّر البحث أو حالة الحساب."}</p></div></section>}
+      })}</tbody></table></div> : <section className="panel empty-state"><span className="empty-visual"><DatabaseIcon aria-hidden="true" size={20} /></span><div><h2>{ownerLoading ? "جارٍ تحميل الحسابات" : "لا توجد حسابات مطابقة"}</h2><p>{summary?.integration_status === "not_configured" ? "اضغط «مزامنة الآن» بعد ضبط بيانات حساب الشراكة في أسرار الخادم." : "غيّر البحث أو حالة الحساب."}</p></div></section>}
 
       {totalCount > PAGE_SIZE ? <nav className="crm-pagination" aria-label="صفحات حسابات الوكالة"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}><ChevronRight aria-hidden="true" size={15} /> السابق</button><span>صفحة {page + 1} من {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)}>التالي <ChevronLeft aria-hidden="true" size={15} /></button></nav> : null}
 

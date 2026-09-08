@@ -675,10 +675,10 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const linkedHref = task.content_item_id ? `/tasks/content/${task.content_item_id}`
     : task.launch_deliverable_id ? `/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`
       : task.launch_id ? `/campaigns?launch=${task.launch_id}#launch-${task.launch_id}`
-        : task.crm_contact_id ? `/crm/${task.crm_contact_id}` : null;
+        : task.crm_contact_id ? `/crm/${task.crm_contact_id}?action=complete-follow-up#follow-up-result` : null;
   const linkedLabel = task.content_item_id ? "فتح ملف المحتوى"
     : task.launch_deliverable_id || task.launch_id ? "فتح ملف الإطلاق"
-      : task.crm_contact_id ? "فتح ملف العميل" : null;
+      : task.crm_contact_id ? "تم تنفيذ المتابعة — سجّل النتيجة" : null;
   const revisionTimeline = [
     ...revisions.map((revision) => ({
       id: `task:${revision.id}`,

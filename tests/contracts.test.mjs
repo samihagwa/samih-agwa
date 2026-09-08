@@ -1261,7 +1261,8 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(workspace, /crm-create-dialog-backdrop/);
   assert.match(workspace, /aria-modal="true"/);
   assert.match(workspace, /functions\.invoke\("crm-commands"/);
-  assert.match(taskWorkspace, /فتح العميل وتسجيل النتيجة/);
+  assert.match(taskWorkspace, /تم تنفيذ المتابعة — سجّل النتيجة/);
+  assert.match(taskWorkspace, /action=complete-follow-up#follow-up-result/);
   assert.doesNotMatch(migration, /'متابعة عميل محتمل[^']*'\s*,\s*contact_full_name/);
   assert.match(contract, /allowedCrmTransitions/);
   assert.match(contract, /tradingview/);
@@ -1317,10 +1318,13 @@ test("Exness agency foundation separates owner financial data from Sales lookup"
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
   assert.match(edgeFunction, /context\.supabaseAdmin\.rpc\("lookup_exness_account"/);
-  assert.match(edgeFunction, /EXNESS_BRIDGE_ADMIN_EMAIL/);
-  assert.match(edgeFunction, /EXNESS_BRIDGE_ADMIN_PASSWORD/);
-  assert.match(edgeFunction, /EXNESS_BRIDGE_RESPONSE_KEY/);
-  assert.match(edgeFunction, /bridgeRequest\("\/user\/login"[\s\S]+}, false\)/);
+  assert.match(edgeFunction, /EXNESS_PARTNER_LOGIN/);
+  assert.match(edgeFunction, /EXNESS_PARTNER_PASSWORD/);
+  assert.match(edgeFunction, /exnessRequest\("\/api\/v2\/auth\/"/);
+  assert.match(edgeFunction, /Authorization: `JWT \$\{token\}`/);
+  assert.match(edgeFunction, /\/api\/reports\/clients\/accounts\//);
+  assert.match(edgeFunction, /\/api\/v2\/reports\/clients\//);
+  assert.doesNotMatch(edgeFunction, /EXNESS_BRIDGE_|CryptoJS|market-whales\.onrender\.com/);
   assert.match(edgeFunction, /PROVIDER_TIMEOUT_MS/);
   assert.match(edgeFunction, /SYNC_COOLDOWN_MS/);
   assert.match(edgeFunction, /onConflict: "integration_id,account_number"/);
@@ -1338,7 +1342,7 @@ test("Exness agency foundation separates owner financial data from Sales lookup"
   assert.match(config, /\[functions\.broker-commands\]\s+verify_jwt = true/);
   assert.match(crmWorkspace, /فحص سريع بدون كشف بيانات الوكالة/);
   assert.match(crmWorkspace, /لا تعتبر الحساب غير موجود قبل إكمال ربط Exness/);
-  assert.match(roadmap, /legacy Exness bridge adapter is implemented/i);
+  assert.match(roadmap, /Direct Exness Partnership API synchronization is implemented/i);
 });
 
 test("Edge Function errors expose safe server messages through one shared parser", async () => {
@@ -2105,6 +2109,8 @@ test("CRM customer files save communication results atomically and create the ne
   assert.match(edge, /action === "add_conversation_link"/);
   assert.match(workspace, /expected_version: data\.contact\.version/);
   assert.match(workspace, /تم حفظ النتيجة وإنشاء متابعة واحدة/);
+  assert.match(workspace, /id="follow-up-result"/);
+  assert.match(workspace, /الحفظ يغلق مهمة المتابعة الحالية ويضيف النشاط لملف العميل وينشئ الموعد التالي معًا/);
   assert.match(workspace, /إعادة فتح العميل/);
   assert.match(workspace, /next_stage: "follow_up"/);
   assert.match(edge, /Invalid CRM stage transition from lost to/);

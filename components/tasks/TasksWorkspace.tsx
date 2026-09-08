@@ -1171,7 +1171,7 @@ export function TasksWorkspace() {
                       <div className="task-card-summary"><span><CircleUserRound size={13} /> {!personalView ? owner?.name ?? "عضو فريق" : `طلبها ${requester?.name ?? "عضو فريق"}`}</span><span><CalendarClock size={13} /> <bdi dir="ltr">{formatDateTime(task.due_at)}</bdi></span>{task.requires_review ? <span><ShieldCheck size={13} /> بمراجعة</span> : null}</div>
                       {isOverdue(task, renderNow) ? <span className="overdue-label"><AlertTriangle size={14} /> متأخرة منذ {formatOverdueDuration(task, renderNow)}</span> : null}
                       {task.crm_contact_id
-                        ? <Button href={`/crm/${task.crm_contact_id}`}><ContactRound size={14} /> فتح العميل وتسجيل النتيجة</Button>
+                        ? <Button href={`/crm/${task.crm_contact_id}?action=complete-follow-up#follow-up-result`}><ContactRound size={14} /> تم تنفيذ المتابعة — سجّل النتيجة</Button>
                         : <>
                           {canDeliverFromTask ? <div className="form-actions task-completion-actions task-card-actions" aria-label="إنهاء المهمة">
                             <Button href={taskDeliveryDeepLink(task.id)}>

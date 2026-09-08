@@ -140,6 +140,7 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
   const [nextFollowUpAt, setNextFollowUpAt] = useState(() => followUpDate("tomorrow"));
   const [showIdentityForm, setShowIdentityForm] = useState(false);
   const [showLinkForm, setShowLinkForm] = useState(false);
+  const [completingFollowUp, setCompletingFollowUp] = useState(false);
   const [renderNow] = useState(() => Date.now());
 
   const clearWorkspace = useCallback(() => { setWorkspace(null); setData(null); }, []);
@@ -209,6 +210,19 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
   }, [clearWorkspace, loadCustomer]);
 
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading, clearTransientState });
+
+  useEffect(() => {
+    if (!data) return;
+    const shouldComplete = new URLSearchParams(window.location.search).get("action") === "complete-follow-up";
+    setCompletingFollowUp(shouldComplete);
+    if (!shouldComplete) return;
+    const timer = window.setTimeout(() => {
+      const resultSection = document.getElementById("follow-up-result");
+      resultSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+      resultSection?.querySelector<HTMLTextAreaElement>('textarea[name="summary"]')?.focus({ preventScroll: true });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [data]);
   const refresh = useCallback(async () => {
     if (!workspace) return;
     try { await loadCustomer(workspace); }
@@ -411,8 +425,8 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
           </form>
         </section> : null}
 
-        {canAct && canRecordResult ? <section className="panel crm-customer-section crm-result-section">
-          <div className="section-heading compact"><div><p className="overline">نتيجة التواصل</p><h2>ماذا حدث مع العميل؟</h2><p>اختيار واحد ثم موعد واحد. الحفظ يغلق المتابعة الحالية وينشئ التالية معًا.</p></div><MessageSquareText size={19} /></div>
+        {canAct && canRecordResult ? <section id="follow-up-result" className={`panel crm-customer-section crm-result-section${completingFollowUp ? " completion-focus" : ""}`}>
+          <div className="section-heading compact"><div><p className="overline">{completingFollowUp ? "إنهاء مهمة المتابعة" : "نتيجة التواصل"}</p><h2>ماذا حدث مع العميل؟</h2><p>سجّل النتيجة؛ الحفظ يغلق مهمة المتابعة الحالية ويضيف النشاط لملف العميل وينشئ الموعد التالي معًا.</p></div><MessageSquareText size={19} /></div>
           <form className="crm-customer-result-form crm-follow-up-flow" onSubmit={(event) => void recordActivity(event)}>
             <fieldset className="wide crm-outcome-fieldset"><legend>1 — اختر النتيجة</legend><div className="crm-outcome-grid">{(Object.keys(contactOutcomeConfig) as ContactOutcome[]).map((outcome) => <button type="button" className={contactOutcome === outcome ? "active" : ""} aria-pressed={contactOutcome === outcome} onClick={() => { setContactOutcome(outcome); setNeedsFollowUp(contactOutcomeConfig[outcome].followUp); }} key={outcome}>{contactOutcomeConfig[outcome].label}</button>)}</div></fieldset>
             <label><span>طريقة التواصل</span><select name="kind" defaultValue="message">{(Object.keys(crmActivityKindConfig) as Exclude<CrmActivityKind, "created">[]).map((kind) => <option value={kind} key={kind}>{crmActivityKindConfig[kind].label}</option>)}</select></label>
@@ -421,7 +435,7 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
             {needsFollowUp ? <div className="wide crm-follow-up-schedule"><span>3 — موعد المتابعة التالية</span><div className="crm-follow-up-presets">{([
               ["hour", "بعد ساعة"], ["two_hours", "بعد ساعتين"], ["tomorrow", "غدًا"], ["two_days", "بعد يومين"], ["next_week", "الأسبوع القادم"], ["custom", "تاريخ ووقت"],
             ] as Array<[FollowUpPreset, string]>).map(([preset, label]) => <button type="button" className={followUpPreset === preset ? "active" : ""} onClick={() => { setFollowUpPreset(preset); if (preset !== "custom") setNextFollowUpAt(followUpDate(preset)); }} key={preset}>{label}</button>)}</div><label><span>التاريخ والوقت</span><input name="next_follow_up_at" type="datetime-local" value={nextFollowUpAt} required onChange={(event) => { setFollowUpPreset("custom"); setNextFollowUpAt(event.target.value); }} /></label></div> : contactOutcome === "converted" ? <div className="wide crm-conversion-note"><CheckCircle2 size={18} /><div><strong>سيُسجّل العميل كمحوّل</strong><small>ستُغلق المتابعة الحالية ولن تُنشأ مهمة جديدة.</small></div></div> : <div className="wide crm-loss-warning" role="alert"><AlertTriangle size={19} /><div><strong>سيُنقل العميل إلى قائمة «غير المحولين»</strong><p>سيؤثر ذلك على معدل التحويل، وسيظل الملف محفوظًا ويمكن للإدارة إعادة فتحه.</p><label><span>سبب عدم التحويل</span><select name="loss_reason" required defaultValue=""><option value="" disabled>اختر السبب</option>{Object.entries(lossReasonConfig).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><button className="text-button" type="button" onClick={() => { setNeedsFollowUp(true); setFollowUpPreset("tomorrow"); setNextFollowUpAt(followUpDate("tomorrow")); }}>جدولة محاولة أخيرة بدل الإغلاق</button></div></div>}
-            <div className="form-actions wide"><Button type="submit" variant={!needsFollowUp && contactOutcome !== "converted" ? "danger" : "primary"} disabled={working !== null}>{working === "activity" ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} {needsFollowUp ? "حفظ وإنشاء المتابعة" : contactOutcome === "converted" ? "تأكيد التحويل" : "إغلاق كغير محوّل"}</Button></div>
+            <div className="form-actions wide"><Button type="submit" variant={!needsFollowUp && contactOutcome !== "converted" ? "danger" : "primary"} disabled={working !== null}>{working === "activity" ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} {needsFollowUp ? "اعتماد التنفيذ وإنشاء المتابعة" : contactOutcome === "converted" ? "اعتماد التنفيذ وتأكيد التحويل" : "اعتماد التنفيذ والإغلاق"}</Button></div>
           </form>
         </section> : null}
 

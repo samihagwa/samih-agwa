@@ -1,7 +1,5 @@
 import { createSupabaseContext } from "npm:@supabase/server@1.4.1";
 import { corsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
-// @ts-types="npm:@types/crypto-js@4.2.2"
-import CryptoJS from "npm:crypto-js@4.2.0";
 
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -9,6 +7,9 @@ const LOOKUP_PATTERN = /^[A-Za-z0-9._-]{3,160}$/;
 const SYNC_COOLDOWN_MS = 5 * 60 * 1000;
 const PROVIDER_TIMEOUT_MS = 45_000;
 const SYNC_BATCH_SIZE = 250;
+const EXNESS_BASE_URL = "https://my.exnessaffiliates.com";
+const EXNESS_PAGE_SIZE = 500;
+const EXNESS_MAX_PAGES = 100;
 
 type JsonRecord = Record<string, unknown>;
 type NormalizedAccount = {
@@ -27,7 +28,7 @@ type NormalizedAccount = {
   source_hash: string;
 };
 
-class BridgeError extends Error {
+class ExnessError extends Error {
   constructor(message: string, readonly publicMessage: string, readonly status = 502) {
     super(message);
   }
@@ -62,99 +63,116 @@ async function sha256(value: string) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function bridgeBaseUrl() {
-  const configured = text(Deno.env.get("EXNESS_BRIDGE_BASE_URL")) || "https://market-whales.onrender.com";
-  let parsed: URL;
-  try {
-    parsed = new URL(configured);
-  } catch {
-    throw new BridgeError("Invalid EXNESS_BRIDGE_BASE_URL", "إعداد عنوان جسر Exness غير صالح.", 500);
-  }
-  if (parsed.protocol !== "https:") throw new BridgeError("Bridge URL must use HTTPS", "يجب أن يعمل جسر Exness عبر اتصال HTTPS آمن.", 500);
-  return parsed.origin;
-}
-
-function unwrapBridgePayload(payload: unknown) {
-  const record = object(payload);
-  const encryptedData = text(record?.encryptedData);
-  if (!encryptedData) return payload;
-  const responseKey = text(Deno.env.get("EXNESS_BRIDGE_RESPONSE_KEY"));
-  if (!responseKey) throw new BridgeError("Missing bridge response key", "مفتاح قراءة بيانات جسر Exness غير مضبوط على الخادم.", 500);
-  try {
-    const clearText = CryptoJS.AES.decrypt(encryptedData, responseKey).toString(CryptoJS.enc.Utf8);
-    if (!clearText) throw new Error("empty payload");
-    return JSON.parse(clearText) as unknown;
-  } catch {
-    throw new BridgeError("Could not decrypt legacy bridge response", "تعذّرت قراءة استجابة جسر Exness. يلزم تحديث مفتاح الربط.");
-  }
-}
-
-async function bridgeRequest(path: string, init: RequestInit = {}, unwrap = true) {
+async function exnessRequest(path: string, init: RequestInit = {}, authenticationRequest = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
   try {
-    const response = await fetch(`${bridgeBaseUrl()}${path}`, { ...init, signal: controller.signal });
+    const response = await fetch(`${EXNESS_BASE_URL}${path}`, { ...init, signal: controller.signal });
     const rawPayload = await response.json().catch(() => null);
-    if (!response.ok) throw new BridgeError(`Bridge ${path} returned ${response.status}`, "تعذّر الاتصال بمصدر Exness القديم الآن.", response.status === 401 ? 502 : response.status);
-    return unwrap ? unwrapBridgePayload(rawPayload) : rawPayload;
+    if (!response.ok) {
+      const providerMessage = text(object(rawPayload)?.message ?? object(rawPayload)?.detail);
+      if (response.status === 401 || response.status === 403) {
+        throw new ExnessError(
+          `Exness ${path} returned ${response.status}: ${providerMessage || "authentication failed"}`,
+          authenticationRequest
+            ? "رفضت Exness بيانات حساب الشراكة. راجع البريد أو رقم الدخول وكلمة السر المحفوظة في أسرار الخادم."
+            : "انتهت جلسة Exness أو لا يملك حساب الشراكة صلاحية قراءة التقارير.",
+          502,
+        );
+      }
+      if (response.status === 429) throw new ExnessError(`Exness ${path} throttled`, "Exness أوقفت الطلبات مؤقتًا بسبب كثرتها. حاول بعد قليل.", 429);
+      throw new ExnessError(`Exness ${path} returned ${response.status}: ${providerMessage}`, "تعذّر الاتصال بواجهة Exness الرسمية الآن.", 502);
+    }
+    return rawPayload;
   } catch (error) {
-    if (error instanceof BridgeError) throw error;
-    if (error instanceof DOMException && error.name === "AbortError") throw new BridgeError(`Bridge ${path} timed out`, "انتهت مهلة مزامنة Exness. حاول مرة أخرى.", 504);
-    throw new BridgeError(`Bridge ${path} request failed`, "تعذّر الوصول إلى مصدر Exness القديم الآن.");
+    if (error instanceof ExnessError) throw error;
+    if (error instanceof DOMException && error.name === "AbortError") throw new ExnessError(`Exness ${path} timed out`, "انتهت مهلة مزامنة Exness. حاول مرة أخرى.", 504);
+    throw new ExnessError(`Exness ${path} request failed`, "تعذّر الوصول إلى واجهة Exness الرسمية الآن.");
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function bridgeToken() {
-  const email = text(Deno.env.get("EXNESS_BRIDGE_ADMIN_EMAIL"));
-  const password = text(Deno.env.get("EXNESS_BRIDGE_ADMIN_PASSWORD"));
-  if (!email || !password) throw new BridgeError("Bridge credentials are missing", "بيانات ربط لوحة Exness القديمة غير مكتملة على الخادم.", 500);
-  const payload = object(await bridgeRequest("/user/login", {
+async function exnessToken() {
+  const login = text(Deno.env.get("EXNESS_PARTNER_LOGIN"));
+  const password = text(Deno.env.get("EXNESS_PARTNER_PASSWORD"));
+  if (!login || !password) throw new ExnessError("Official Exness credentials are missing", "بيانات حساب شراكة Exness غير مكتملة في أسرار الخادم.", 500);
+  const payload = object(await exnessRequest("/api/v2/auth/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  }, false));
+    body: JSON.stringify({ login, password }),
+  }, true));
   const token = text(payload?.token);
-  if (!token || token.split(".").length !== 3) throw new BridgeError("Bridge login did not return a JWT", "تعذّر تسجيل الدخول إلى مصدر Exness القديم.");
+  if (token.length < 20) throw new ExnessError("Exness auth did not return a token", "لم تُرجع Exness جلسة صالحة لحساب الشراكة.");
   return token;
 }
 
 function authorizedHeaders(token: string) {
   return {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-    "X-API-Source": "market-whales-os",
-    "X-Client-Platform": "server",
+    Authorization: `JWT ${token}`,
+    Accept: "application/json",
   };
 }
 
-function extractClients(payload: unknown) {
+function extractRows(payload: unknown) {
   const root = object(payload);
-  const data = object(root?.data);
-  const candidates = data?.clients ?? root?.clients;
-  return Array.isArray(candidates) ? candidates : [];
+  if (Array.isArray(root?.data)) return root.data;
+  if (Array.isArray(root?.results)) return root.results;
+  return [];
 }
 
-async function normalizeAccount(rawValue: unknown, organizationId: string, integrationId: string, syncedAt: string): Promise<NormalizedAccount | null> {
+function extractTotal(payload: unknown) {
+  const root = object(payload);
+  const meta = object(root?.meta);
+  const totals = object(root?.totals);
+  const candidate = meta?.count ?? meta?.total ?? totals?.count ?? root?.count;
+  const parsed = Number(candidate);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+async function fetchExnessPages(path: string, token: string, ordering: string) {
+  const rows: unknown[] = [];
+  for (let page = 0; page < EXNESS_MAX_PAGES; page += 1) {
+    const url = new URL(path, EXNESS_BASE_URL);
+    url.searchParams.set("limit", String(EXNESS_PAGE_SIZE));
+    url.searchParams.set("offset", String(page * EXNESS_PAGE_SIZE));
+    url.searchParams.set("ordering", ordering);
+    const payload = await exnessRequest(`${url.pathname}${url.search}`, { headers: authorizedHeaders(token) });
+    const pageRows = extractRows(payload);
+    rows.push(...pageRows);
+    const total = extractTotal(payload);
+    if (pageRows.length < EXNESS_PAGE_SIZE || (total !== null && rows.length >= total)) return rows;
+  }
+  throw new ExnessError(`Exness pagination exceeded ${EXNESS_MAX_PAGES} pages for ${path}`, "حجم بيانات Exness أكبر من حد المزامنة الآمن. راجع مسؤول النظام.", 502);
+}
+
+async function normalizeAccount(
+  rawValue: unknown,
+  organizationId: string,
+  integrationId: string,
+  syncedAt: string,
+  statusByClient: ReadonlyMap<string, string>,
+): Promise<NormalizedAccount | null> {
   const raw = object(rawValue);
-  const data = object(raw?.data) ?? raw;
-  if (!data) return null;
+  if (!raw) return null;
+  const data = raw;
   const accountNumber = text(data.client_account ?? data.account_number);
   const externalClientId = text(data.client_uid ?? data.external_client_id) || accountNumber;
   if (!LOOKUP_PATTERN.test(accountNumber) || !LOOKUP_PATTERN.test(externalClientId)) return null;
   const currencyCandidate = text(data.currency ?? data.commission_currency).toUpperCase();
   const currency = /^[A-Z]{3,8}$/.test(currencyCandidate) ? currencyCandidate : "USD";
-  const status = text(raw?.status ?? data.status).toLowerCase();
+  const status = (statusByClient.get(externalClientId) || text(data.client_status ?? data.status)).toLowerCase();
   const clientProfile: JsonRecord = {
     account_type: text(data.client_account_type ?? data.account_type) || null,
     partner_account: text(data.partner_account) || null,
     partner_account_name: text(data.partner_account_name) || null,
-    country: text(data.country) || null,
+    country: text(data.client_country ?? data.country) || null,
+    platform: text(data.platform) || null,
+    comment: text(data.comment) || null,
     currency,
     volume_mln_usd: finiteNumber(data.volume_mln_usd),
     reward: finiteNumber(data.reward),
-    source_record_id: text(raw?._id ?? data.id) || null,
+    source_record_id: data.id === null || data.id === undefined ? null : String(data.id),
     source_status: status || null,
   };
   const stablePayload = JSON.stringify({
@@ -164,21 +182,22 @@ async function normalizeAccount(rawValue: unknown, organizationId: string, integ
     status,
     lots: finiteNumber(data.volume_lots ?? data.lots),
     commission: finiteNumber(data.reward_usd ?? data.commission),
-    registeredAt: isoDate(data.reg_date ?? data.registered_at),
-    lastActivityAt: isoDate(data.trade_fn ?? data.last_activity_at),
+    registeredAt: isoDate(data.client_account_created ?? data.reg_date ?? data.registered_at),
+    lastActivityAt: isoDate(data.client_account_last_trade ?? data.trade_fn ?? data.last_activity_at),
   });
+  const activeStatuses = new Set(["active", "enabled", "activated"]);
   return {
     organization_id: organizationId,
     integration_id: integrationId,
     external_client_id: externalClientId,
     account_number: accountNumber,
     client_profile: clientProfile,
-    is_active: status === "active",
+    is_active: activeStatuses.has(status),
     lots: Math.max(0, finiteNumber(data.volume_lots ?? data.lots)),
     commission: finiteNumber(data.reward_usd ?? data.commission),
     commission_currency: currency,
-    registered_at: isoDate(data.reg_date ?? data.registered_at),
-    last_activity_at: isoDate(data.trade_fn ?? data.last_activity_at),
+    registered_at: isoDate(data.client_account_created ?? data.reg_date ?? data.registered_at),
+    last_activity_at: isoDate(data.client_account_last_trade ?? data.trade_fn ?? data.last_activity_at),
     last_synced_at: syncedAt,
     source_hash: await sha256(stablePayload),
   };
@@ -231,7 +250,7 @@ export default {
       return jsonResponse(data?.[0] ?? null);
     }
 
-    if (action !== "sync_exness_bridge") return jsonResponse({ message: "أمر تكامل غير معروف." }, 400);
+    if (action !== "sync_exness_official" && action !== "sync_exness_bridge") return jsonResponse({ message: "أمر تكامل غير معروف." }, 400);
 
     const { data: ownerMembership, error: membershipError } = await context.supabaseAdmin.from("memberships")
       .select("id").eq("organization_id", organizationId).eq("user_id", context.userClaims.id)
@@ -249,7 +268,7 @@ export default {
         provider: "exness",
         display_name: "Exness Agency",
         status: "not_configured",
-        base_url: bridgeBaseUrl(),
+        base_url: EXNESS_BASE_URL,
         account_lookup_enabled: false,
         created_by: context.userClaims.id,
       }).select("*").single();
@@ -280,35 +299,43 @@ export default {
     await context.supabaseAdmin.from("broker_integrations").update({ status: "syncing", last_error: null }).eq("id", integration.id);
 
     try {
-      const token = await bridgeToken();
-      const headers = authorizedHeaders(token);
-      await bridgeRequest("/api/exness/clients/update", { method: "POST", headers, body: "{}" });
-      const payload = await bridgeRequest("/api/exness/clients?page=1&limit=20000&sortBy=last_updated&sortOrder=desc", { headers });
-      const rawClients = extractClients(payload);
-      const normalizedResults = await Promise.all(rawClients.map((raw) => normalizeAccount(raw, organizationId, integration.id, startedAt)));
+      const token = await exnessToken();
+      const [rawAccounts, rawClients] = await Promise.all([
+        fetchExnessPages("/api/reports/clients/accounts/", token, "client_account"),
+        fetchExnessPages("/api/v2/reports/clients/", token, "client_uid"),
+      ]);
+      const statusByClient = new Map<string, string>();
+      for (const rawClient of rawClients) {
+        const client = object(rawClient);
+        const clientId = text(client?.client_uid);
+        const status = text(client?.client_status);
+        if (clientId && status) statusByClient.set(clientId, status);
+      }
+      const normalizedResults = await Promise.all(
+        rawAccounts.map((raw) => normalizeAccount(raw, organizationId, integration.id, startedAt, statusByClient)),
+      );
       const accounts = normalizedResults.filter((account): account is NormalizedAccount => account !== null);
       for (let offset = 0; offset < accounts.length; offset += SYNC_BATCH_SIZE) {
         const batch = accounts.slice(offset, offset + SYNC_BATCH_SIZE);
         const { error: upsertError } = await context.supabaseAdmin.from("broker_client_accounts")
           .upsert(batch, { onConflict: "integration_id,account_number" });
-        if (upsertError) throw new BridgeError(`Account upsert failed: ${upsertError.code}`, "تعذّر حفظ حسابات Exness في النظام الجديد.", 500);
+        if (upsertError) throw new ExnessError(`Account upsert failed: ${upsertError.code}`, "تعذّر حفظ حسابات Exness في النظام الجديد.", 500);
       }
-
       const completedAt = new Date().toISOString();
-      const errorRows = rawClients.length - accounts.length;
+      const errorRows = rawAccounts.length - accounts.length;
       await context.supabaseAdmin.from("broker_sync_runs").update({
         status: "completed",
-        fetched_rows: rawClients.length,
+        fetched_rows: rawAccounts.length,
         upserted_rows: accounts.length,
         error_rows: errorRows,
         completed_at: completedAt,
       }).eq("id", syncRun.id);
       await context.supabaseAdmin.from("broker_integrations").update({
         status: "ready",
-        base_url: bridgeBaseUrl(),
+        base_url: EXNESS_BASE_URL,
         account_lookup_enabled: true,
         last_sync_at: startedAt,
-        last_error: errorRows ? `تم تجاهل ${errorRows} سجل غير صالح.` : null,
+        last_error: errorRows ? `تم تجاهل ${errorRows} سجل حساب غير صالح.` : null,
       }).eq("id", integration.id);
       await context.supabaseAdmin.from("audit_events").insert({
         organization_id: organizationId,
@@ -317,15 +344,31 @@ export default {
         entity_type: "broker_integration",
         entity_id: integration.id,
         request_id: UUID_PATTERN.test(requestKey) ? requestKey : null,
-        after_data: { fetched_rows: rawClients.length, upserted_rows: accounts.length, error_rows: errorRows },
+        after_data: {
+          source: "official_partnership_api",
+          fetched_rows: rawAccounts.length,
+          fetched_clients: rawClients.length,
+          upserted_rows: accounts.length,
+          error_rows: errorRows,
+        },
       });
-      return jsonResponse({ sync: { ...syncRun, status: "completed", fetched_rows: rawClients.length, upserted_rows: accounts.length, error_rows: errorRows, completed_at: completedAt } });
+      return jsonResponse({
+        sync: {
+          ...syncRun,
+          status: "completed",
+          fetched_rows: rawAccounts.length,
+          fetched_clients: rawClients.length,
+          upserted_rows: accounts.length,
+          error_rows: errorRows,
+          completed_at: completedAt,
+        },
+      });
     } catch (error) {
-      const bridgeError = error instanceof BridgeError ? error : new BridgeError("Unexpected sync failure", "تعذّرت مزامنة Exness الآن.", 500);
+      const exnessError = error instanceof ExnessError ? error : new ExnessError("Unexpected sync failure", "تعذّرت مزامنة Exness الآن.", 500);
       const completedAt = new Date().toISOString();
-      await context.supabaseAdmin.from("broker_sync_runs").update({ status: "failed", error_message: bridgeError.publicMessage, completed_at: completedAt }).eq("id", syncRun.id);
-      await context.supabaseAdmin.from("broker_integrations").update({ status: "error", account_lookup_enabled: false, last_error: bridgeError.publicMessage }).eq("id", integration.id);
-      return jsonResponse({ message: bridgeError.publicMessage }, bridgeError.status);
+      await context.supabaseAdmin.from("broker_sync_runs").update({ status: "failed", error_message: exnessError.publicMessage, completed_at: completedAt }).eq("id", syncRun.id);
+      await context.supabaseAdmin.from("broker_integrations").update({ status: "error", account_lookup_enabled: false, last_error: exnessError.publicMessage }).eq("id", integration.id);
+      return jsonResponse({ message: exnessError.publicMessage }, exnessError.status);
     }
   },
 };

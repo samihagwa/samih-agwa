@@ -37,7 +37,7 @@ This file is the implementation memory for ideas that must not disappear between
 - Owner view: client profile, account numbers, activity, lots, and commissions.
 - Sales view: lookup by account/profile id returning only `under agency` and `active/inactive`.
 - No Exness secret or financial payload is exposed to the browser or ordinary team roles.
-- The legacy Exness bridge adapter is implemented against the already working Market Whales dashboard contract. It remains inactive until its dedicated admin login and rotated response key are configured as Supabase Edge secrets; none of those values are accepted by or exposed to the browser. This bridge is an interim migration path and can later be replaced with the private official Partnership API without changing the CRM permission model.
+- Direct Exness Partnership API synchronization is implemented through the server-only `/api/v2/auth/`, client, and account report endpoints. `EXNESS_PARTNER_LOGIN` and `EXNESS_PARTNER_PASSWORD` remain Supabase Edge secrets, the JWT is short-lived in memory, synchronization is non-destructive, and the CRM permission model remains unchanged.
 - Multi-channel social analytics and launch evaluation.
 - Scheduled publishing beyond Telegram after provider approval and platform-specific safeguards.
 

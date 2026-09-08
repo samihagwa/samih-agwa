@@ -1679,6 +1679,7 @@ input:hover, textarea:hover, select:hover { border-color: var(--ink-500) !import
 .crm-next-action { border-top: 4px solid var(--yellow-500); }
 .crm-primary-contact { width: 100%; }
 .crm-result-section { border-top: 4px solid var(--yellow-500); }
+.crm-result-section.completion-focus { border-color: var(--yellow-500); box-shadow: 0 0 0 3px rgb(255 214 0 / 16%); }
 .crm-follow-up-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .crm-outcome-fieldset, .crm-follow-up-decision { margin: 0; padding: 0; border: 0; }
 .crm-outcome-fieldset legend, .crm-follow-up-decision legend, .crm-follow-up-schedule > span { margin-bottom: 8px; color: var(--ink-800); font-size: 10px; font-weight: 600; }
