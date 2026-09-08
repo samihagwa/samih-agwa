@@ -1320,6 +1320,7 @@ test("Exness agency foundation separates owner financial data from Sales lookup"
   assert.match(edgeFunction, /EXNESS_BRIDGE_ADMIN_EMAIL/);
   assert.match(edgeFunction, /EXNESS_BRIDGE_ADMIN_PASSWORD/);
   assert.match(edgeFunction, /EXNESS_BRIDGE_RESPONSE_KEY/);
+  assert.match(edgeFunction, /bridgeRequest\("\/user\/login"[\s\S]+}, false\)/);
   assert.match(edgeFunction, /PROVIDER_TIMEOUT_MS/);
   assert.match(edgeFunction, /SYNC_COOLDOWN_MS/);
   assert.match(edgeFunction, /onConflict: "integration_id,account_number"/);

@@ -89,14 +89,14 @@ function unwrapBridgePayload(payload: unknown) {
   }
 }
 
-async function bridgeRequest(path: string, init: RequestInit = {}) {
+async function bridgeRequest(path: string, init: RequestInit = {}, unwrap = true) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
   try {
     const response = await fetch(`${bridgeBaseUrl()}${path}`, { ...init, signal: controller.signal });
     const rawPayload = await response.json().catch(() => null);
     if (!response.ok) throw new BridgeError(`Bridge ${path} returned ${response.status}`, "تعذّر الاتصال بمصدر Exness القديم الآن.", response.status === 401 ? 502 : response.status);
-    return unwrapBridgePayload(rawPayload);
+    return unwrap ? unwrapBridgePayload(rawPayload) : rawPayload;
   } catch (error) {
     if (error instanceof BridgeError) throw error;
     if (error instanceof DOMException && error.name === "AbortError") throw new BridgeError(`Bridge ${path} timed out`, "انتهت مهلة مزامنة Exness. حاول مرة أخرى.", 504);
@@ -114,7 +114,7 @@ async function bridgeToken() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
-  }));
+  }, false));
   const token = text(payload?.token);
   if (!token || token.split(".").length !== 3) throw new BridgeError("Bridge login did not return a JWT", "تعذّر تسجيل الدخول إلى مصدر Exness القديم.");
   return token;
