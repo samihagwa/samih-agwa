@@ -3643,6 +3643,104 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 .auth-choice-card { display: grid; }
 .auth-mode-tabs { margin: 4px 0 2px; padding: 3px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); }
 .auth-mode-tabs button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 3px; background: transparent; color: var(--ink-600); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+
+/* Market Whales OS v75 — secure Exness agency bridge and owner report. */
+.exness-agency-workspace { min-width: 0; display: grid; gap: 14px; }
+.exness-agency-header { margin: 0; padding: 4px 0 12px; border-bottom: 1px solid var(--line); }
+.exness-agency-header h1 { margin: 2px 0; font-size: 30px; font-weight: 500; }
+.exness-agency-header p:not(.overline) { margin: 0; color: var(--ink-500); font-size: 12px; }
+.exness-lookup-panel { padding: 20px; display: grid; grid-template-columns: minmax(210px, .7fr) minmax(340px, 1fr); align-items: end; gap: 16px 22px; border: 1px solid var(--line); border-top: 4px solid var(--yellow-500); border-radius: 5px; background: var(--paper); }
+.exness-lookup-panel h2 { margin: 3px 0 5px; font-size: 21px; font-weight: 500; }
+.exness-lookup-panel > div > p:not(.overline) { margin: 0; color: var(--ink-500); font-size: 12px; line-height: 1.7; }
+.exness-lookup-panel form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.exness-lookup-panel form label, .exness-report-toolbar > label { min-width: 0; min-height: 44px; padding: 0 11px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--paper); color: var(--ink-500); }
+.exness-lookup-panel form input, .exness-report-toolbar input { width: 100%; min-width: 0; min-height: 40px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink-950); font-size: 14px; }
+.exness-lookup-result { grid-column: 1 / -1; padding: 13px 15px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 4px; }
+.exness-lookup-result > svg { flex: 0 0 auto; }
+.exness-lookup-result strong, .exness-lookup-result p, .exness-lookup-result small { display: block; }
+.exness-lookup-result strong { font-size: 14px; font-weight: 600; }
+.exness-lookup-result p { margin: 3px 0; font-size: 12px; line-height: 1.6; }
+.exness-lookup-result small { font-size: 10px; font-variant-numeric: tabular-nums; }
+.exness-lookup-result.success { border-color: #c6e6d4; background: var(--green-100); color: var(--green-700); }
+.exness-lookup-result.warning { border-color: #f2dc82; background: var(--amber-100); color: var(--amber-700); }
+.exness-lookup-result.danger { border-color: #efc4bf; background: var(--red-100); color: var(--red-700); }
+.exness-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+.exness-summary-grid article { min-width: 0; min-height: 106px; padding: 17px 18px; display: grid; grid-template-columns: 1fr auto; align-content: center; gap: 6px 10px; border-inline-start: 1px solid var(--line); }
+.exness-summary-grid article:first-child { border-inline-start: 0; }
+.exness-summary-grid svg { color: var(--ink-500); }
+.exness-summary-grid span { color: var(--ink-500); font-size: 12px; }
+.exness-summary-grid strong { grid-column: 1 / -1; color: var(--ink-950); font-size: 25px; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.exness-summary-grid small { color: var(--ink-500); font-size: 11px; font-weight: 500; }
+.exness-report-toolbar { padding: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+.exness-report-toolbar > label { min-width: min(100%, 310px); flex: 1 1 390px; }
+.exness-report-toolbar > label button { padding: 4px; border: 0; background: transparent; color: var(--ink-600); font-size: 11px; cursor: pointer; }
+.exness-report-toolbar > div { min-height: 40px; padding: 3px; display: inline-flex; gap: 2px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-soft); }
+.exness-report-toolbar > div button { min-width: 66px; padding: 6px 10px; border: 0; border-radius: 2px; background: transparent; color: var(--ink-600); font: inherit; font-size: 12px; cursor: pointer; }
+.exness-report-toolbar > div button.active { background: var(--paper); color: var(--ink-950); box-shadow: inset 0 -2px 0 var(--yellow-500); }
+.exness-report-toolbar > p { margin: 0 0 0 auto; color: var(--ink-500); font-size: 12px; font-variant-numeric: tabular-nums; }
+.exness-account-table-wrap { min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+.exness-account-table { width: 100%; min-width: 980px; border-collapse: collapse; direction: rtl; }
+.exness-account-table th { height: 48px; padding: 10px 12px; border-bottom: 2px solid var(--ink-950); color: var(--ink-700); background: var(--paper); font-size: 12px; font-weight: 500; text-align: right; white-space: nowrap; }
+.exness-account-table td { height: 62px; padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--ink-700); background: var(--paper); font-size: 13px; text-align: right; }
+.exness-account-table tbody > tr:not(.exness-account-expanded):hover td { background: rgba(108, 133, 149, .04); }
+.exness-account-table tbody > tr.expanded td { background: var(--surface-soft); }
+.exness-account-table td strong { color: var(--ink-950); font-weight: 500; font-variant-numeric: tabular-nums; }
+.exness-account-expanded > td { height: auto; padding: 0; background: var(--surface-soft) !important; }
+.exness-account-expanded > td > div { padding: 20px 24px; border-bottom: 1px solid var(--line-strong); }
+.exness-account-expanded dl { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 24px; }
+.exness-account-expanded dl > div { min-width: 0; display: grid; gap: 4px; }
+.exness-account-expanded dt { color: var(--ink-500); font-size: 11px; }
+.exness-account-expanded dd { margin: 0; color: var(--ink-950); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.exness-sync-history { border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+.exness-sync-history > summary { min-height: 47px; padding: 10px 13px; display: flex; align-items: center; gap: 7px; color: var(--ink-800); font-size: 13px; font-weight: 500; cursor: pointer; list-style: none; }
+.exness-sync-history > summary::-webkit-details-marker { display: none; }
+.exness-sync-history > ul { margin: 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
+.exness-sync-history li { min-height: 52px; padding: 9px 13px; display: grid; grid-template-columns: auto minmax(145px, auto) minmax(160px, 1fr); align-items: center; gap: 8px 12px; border-bottom: 1px solid var(--line); color: var(--ink-600); font-size: 11px; }
+.exness-sync-history li:last-child { border-bottom: 0; }
+.exness-sync-history li > strong { color: var(--ink-800); font-weight: 500; font-variant-numeric: tabular-nums; }
+.exness-sync-history li > small { grid-column: 2 / -1; color: var(--red-700); }
+.exness-sync-history > p { margin: 0; padding: 13px; border-top: 1px solid var(--line); color: var(--ink-500); font-size: 12px; }
+
+@media (max-width: 920px) {
+  .exness-lookup-panel { grid-template-columns: 1fr; align-items: stretch; }
+  .exness-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .exness-summary-grid article:nth-child(3) { border-top: 1px solid var(--line); border-inline-start: 0; }
+  .exness-summary-grid article:nth-child(4) { border-top: 1px solid var(--line); }
+  .exness-account-expanded dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .exness-agency-header { align-items: stretch; }
+  .exness-agency-header h1 { font-size: 24px; }
+  .exness-agency-header .toolbar-actions .button { flex: 1; }
+  .exness-lookup-panel { padding: 15px 12px; }
+  .exness-lookup-panel form { grid-template-columns: 1fr; }
+  .exness-lookup-panel form .button { width: 100%; }
+  .exness-summary-grid { grid-template-columns: 1fr; }
+  .exness-summary-grid article { min-height: 88px; border-top: 1px solid var(--line); border-inline-start: 0; }
+  .exness-summary-grid article:first-child { border-top: 0; }
+  .exness-report-toolbar { align-items: stretch; }
+  .exness-report-toolbar > label, .exness-report-toolbar > div { width: 100%; }
+  .exness-report-toolbar > div { overflow-x: auto; }
+  .exness-report-toolbar > div button { flex: 1; }
+  .exness-report-toolbar > p { width: 100%; margin: 0; }
+  .exness-account-table-wrap { border: 0; overflow: visible; }
+  .exness-account-table, .exness-account-table tbody { min-width: 0; display: grid; gap: 8px; }
+  .exness-account-table thead { display: none; }
+  .exness-account-table tr:not(.exness-account-expanded) { padding: 12px; position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+  .exness-account-table td, .exness-account-table td:first-child { width: auto; min-width: 0; height: auto; padding: 0; display: grid; gap: 3px; border: 0; background: transparent !important; }
+  .exness-account-table td::before { content: attr(data-label); color: var(--ink-400); font-size: 10px; font-weight: 500; }
+  .exness-account-table tr:not(.exness-account-expanded) td[data-label="رقم الحساب"], .exness-account-table tr:not(.exness-account-expanded) td[data-label="Client UID"] { grid-column: 1 / -1; }
+  .exness-account-table tr:not(.exness-account-expanded) td[data-label="التفاصيل"] { position: absolute; inset-block-start: 8px; inset-inline-start: 8px; }
+  .exness-account-table tr:not(.exness-account-expanded) td[data-label="التفاصيل"]::before { display: none; }
+  .exness-account-table tr.exness-account-expanded { margin-top: -9px; display: block; border: 1px solid var(--line); border-top: 0; background: var(--surface-soft); }
+  .exness-account-expanded > td { display: block; }
+  .exness-account-expanded > td::before { display: none; }
+  .exness-account-expanded > td > div { padding: 14px 12px; }
+  .exness-account-expanded dl { grid-template-columns: 1fr; gap: 12px; }
+  .exness-sync-history li { grid-template-columns: auto 1fr; }
+  .exness-sync-history li > span, .exness-sync-history li > small { grid-column: 1 / -1; }
+}
 .auth-mode-tabs button.active { background: var(--paper); color: var(--ink-950); box-shadow: 0 1px 4px rgba(20, 29, 34, .08); }
 .auth-password-form { display: grid; gap: 7px; }
 .auth-password-form label { margin-top: 6px; color: var(--ink-800); font-size: 12px; font-weight: 500; }

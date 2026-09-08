@@ -5722,6 +5722,22 @@ export type Database = {
           under_agency: boolean
         }[]
       }
+      get_exness_agency_summary: {
+        Args: {
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: {
+          active_accounts: number
+          commission_currency: string
+          integration_ready: boolean
+          integration_status: string
+          last_sync_at: string | null
+          total_accounts: number
+          total_commission: number
+          total_lots: number
+        }[]
+      }
       manage_team_membership: {
         Args: {
           target_actor_id: string

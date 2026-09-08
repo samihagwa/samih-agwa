@@ -1291,11 +1291,15 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
 });
 
 test("Exness agency foundation separates owner financial data from Sales lookup", async () => {
-  const [migration, edgeFunction, settingsWorkspace, crmWorkspace, roadmap] = await Promise.all([
+  const [migration, bridgeMigration, edgeFunction, settingsWorkspace, agencyWorkspace, crmWorkspace, crmNav, config, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822182732_exness_agency_integration_foundation.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260908004314_exness_bridge_owner_summary.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/broker-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/settings/ExnessIntegrationWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/ExnessAgencyWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmSectionNav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
     readFile(new URL("../docs/operating-roadmap.md", import.meta.url), "utf8"),
   ]);
 
@@ -1313,10 +1317,27 @@ test("Exness agency foundation separates owner financial data from Sales lookup"
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
   assert.match(edgeFunction, /context\.supabaseAdmin\.rpc\("lookup_exness_account"/);
-  assert.match(settingsWorkspace, /المالك فقط يرى الملف واللوتات والعمولة/);
+  assert.match(edgeFunction, /EXNESS_BRIDGE_ADMIN_EMAIL/);
+  assert.match(edgeFunction, /EXNESS_BRIDGE_ADMIN_PASSWORD/);
+  assert.match(edgeFunction, /EXNESS_BRIDGE_RESPONSE_KEY/);
+  assert.match(edgeFunction, /PROVIDER_TIMEOUT_MS/);
+  assert.match(edgeFunction, /SYNC_COOLDOWN_MS/);
+  assert.match(edgeFunction, /onConflict: "integration_id,account_number"/);
+  assert.match(edgeFunction, /action: "broker\.exness_synced"/);
+  assert.match(bridgeMigration, /function public\.get_exness_agency_summary/);
+  assert.match(bridgeMigration, /membership\.role = 'owner'/);
+  assert.match(bridgeMigration, /grant execute on function public\.get_exness_agency_summary\(uuid, uuid\)\s+to service_role/);
+  assert.doesNotMatch(bridgeMigration, /grant execute on function public\.get_exness_agency_summary[^;]+to authenticated/i);
+  assert.match(settingsWorkspace, /المالك يرى الحسابات واللوتات والعمولة/);
+  assert.match(agencyWorkspace, /هل الحساب تحت وكالتنا؟/);
+  assert.match(agencyWorkspace, /موظف السيلز لن يرى اللوتات أو العمولة/);
+  assert.match(agencyWorkspace, /كل الحسابات/);
+  assert.match(agencyWorkspace, /Client UID/);
+  assert.match(crmNav, /href: "\/crm\/exness"/);
+  assert.match(config, /\[functions\.broker-commands\]\s+verify_jwt = true/);
   assert.match(crmWorkspace, /فحص سريع بدون كشف بيانات الوكالة/);
   assert.match(crmWorkspace, /لا تعتبر الحساب غير موجود قبل إكمال ربط Exness/);
-  assert.match(roadmap, /live Exness adapter remains deliberately unconfigured/i);
+  assert.match(roadmap, /legacy Exness bridge adapter is implemented/i);
 });
 
 test("Edge Function errors expose safe server messages through one shared parser", async () => {
