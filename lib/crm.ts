@@ -16,7 +16,7 @@ export const crmLeadStageConfig: Record<CrmLeadStage, { label: string; shortLabe
   contacted: { label: "تم التواصل", shortLabel: "تواصل", tone: "info", order: 2, active: true },
   follow_up: { label: "مهتم ويحتاج متابعة", shortLabel: "مهتم", tone: "warning", order: 3, active: true },
   qualified: { label: "مؤهل للشراء", shortLabel: "مؤهل", tone: "warning", order: 4, active: true },
-  won: { label: "تم التحويل لعميل", shortLabel: "تم البيع", tone: "success", order: 5, active: false },
+  won: { label: "عميل حالي", shortLabel: "عميل حالي", tone: "success", order: 5, active: false },
   lost: { label: "عميل غير محوّل", shortLabel: "غير محوّل", tone: "neutral", order: 6, active: false },
   do_not_contact: { label: "عدم تواصل", shortLabel: "ممنوع تواصل", tone: "danger", order: 7, active: false },
 };
@@ -64,6 +64,7 @@ export const crmInterestConfig: Record<CrmInterest, { label: string }> = {
   brokerage: { label: "وكالة بروكر" },
   book: { label: "كتاب أو مادة تعليمية" },
   service: { label: "خدمة أخرى" },
+  cashback: { label: "كاش باك" },
   other: { label: "سبب آخر" },
 };
 
@@ -86,9 +87,11 @@ export const crmIdentityKindConfig: Record<CrmIdentityKind, { label: string; pla
   tradingview: { label: "حساب TradingView", placeholder: "TradingView username", inputType: "text" },
   instagram: { label: "اسم مستخدم Instagram", placeholder: "@username", inputType: "text" },
   facebook: { label: "اسم مستخدم Facebook", placeholder: "profile.username", inputType: "text" },
+  exness_account: { label: "رقم حساب Exness", placeholder: "Trading account number", inputType: "text" },
 };
 
 export const crmIdentityKinds = Object.keys(crmIdentityKindConfig) as CrmIdentityKind[];
+export const crmContactIdentityKinds = crmIdentityKinds.filter((kind) => kind !== "exness_account");
 
 export const crmTradingExperienceConfig: Record<CrmTradingExperience, { label: string }> = {
   unknown: { label: "لم تُحدّد بعد" },

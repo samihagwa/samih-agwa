@@ -632,7 +632,7 @@ test("Whales Zone registrations are idempotent, CRM-first, historically importab
   assert.match(workspace, /get_whales_zone_intake_health/);
   assert.match(workspace, /Whales Zone مرتبط بالـCRM/);
   assert.match(workspace, /مسؤول تفعيل المؤشر/);
-  assert.match(workspace, /مسؤول متابعة السيلز/);
+  assert.match(workspace, /مسؤول العميل/);
   assert.match(workspace, /المتابعة بعد التسجيل/);
   assert.match(landing, /functions\/v1\/lead-intake/);
   assert.match(landing, /await fetch/);
@@ -1235,7 +1235,7 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(migration, /from public, anon, authenticated/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
-  assert.match(edgeFunction, /create_crm_lead_v4/);
+  assert.match(edgeFunction, /create_crm_lead_v5/);
   assert.match(edgeFunction, /add_crm_identity/);
   assert.match(contextMigration, /create table public\.crm_conversation_links/);
   assert.match(contextMigration, /alter table public\.crm_conversation_links enable row level security/);
@@ -1251,13 +1251,13 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(scaleMigration, /security invoker/);
   assert.match(scaleMigration, /grant execute on function public\.search_crm_contacts[\s\S]*to authenticated/);
   assert.match(scaleMigration, /grant execute on function public\.create_crm_lead_v3[\s\S]*to service_role/);
-  assert.match(workspace, /لن تُرسل أي رسالة/);
-  assert.match(workspace, /لينك شات/);
-  assert.match(workspace, /اسم المصدر الجديد/);
-  assert.match(workspace, /سبب التسجيل الجديد/);
+  assert.match(workspace, /رقم الهاتف أو البريد أو اسم المستخدم ليست شروطًا للحفظ/);
+  assert.match(workspace, /لينك المحادثة — اختياري/);
+  assert.match(workspace, /بتتكلم معاه فين/);
+  assert.match(workspace, /اكتب سبب التسجيل/);
   assert.match(workspace, /ابحث بالاسم، الهاتف، البريد، TradingView، Telegram/);
   assert.match(workspace, /أداء مسؤولي العملاء/);
-  assert.match(workspace, /وسائل التواصل والحسابات — املأ واحدة أو أكثر/);
+  assert.match(workspace, /بيانات إضافية اختيارية/);
   assert.match(workspace, /crm-create-dialog-backdrop/);
   assert.match(workspace, /aria-modal="true"/);
   assert.match(workspace, /functions\.invoke\("crm-commands"/);
@@ -2135,12 +2135,13 @@ test("CRM customer files save communication results atomically and create the ne
 });
 
 test("CRM customer directory keeps every source filter permission-scoped and links exact records", async () => {
-  const [migration, directoryMigration, queueMigration, priorityMigration, socialMigration, directory, page, mainPage, operationsPage, nav, crmContract, types, css] = await Promise.all([
+  const [migration, directoryMigration, queueMigration, priorityMigration, socialMigration, intakeMigration, directory, page, mainPage, operationsPage, nav, crmContract, types, css] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260823014440_crm_customer_directory_sources.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260831134800_crm_sales_directory_and_schedule.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260907140356_crm_follow_up_queues.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260907195600_crm_priority_and_sales_metrics.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260907195500_crm_social_channels.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260909035602_crm_customer_intake_simplification.sql", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmCustomerDirectory.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/crm/customers/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/crm/page.tsx", import.meta.url), "utf8"),
@@ -2179,12 +2180,15 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.match(priorityMigration, /function public\.get_crm_owner_performance_v2/);
   assert.match(priorityMigration, /average_first_response_minutes/);
   for (const source of ["instagram", "tiktok", "meta_business"]) assert.match(socialMigration, new RegExp(`'${source}'`));
-  assert.match(directory, /rpc\("search_crm_contacts_v7"/);
+  assert.match(intakeMigration, /function public\.search_crm_contacts_v8/);
+  assert.match(intakeMigration, /target_trading_experience is null/);
+  assert.match(directory, /rpc\("search_crm_contacts_v8"/);
   assert.match(directory, /الأعلى للتواصل الآن/);
   assert.match(directory, /عميل جديد/);
   assert.match(directory, /get_crm_owner_performance_v2/);
   assert.match(directory, /crm-queue-tabs/);
-  assert.match(directory, /const \[queueFilter, setQueueFilter\] = useState<QueueFilter>\("all"\)/);
+  assert.match(directory, /const \[primaryView, setPrimaryView\] = useState<PrimaryView>\("new"\)/);
+  assert.match(directory, /عملاء الكاش باك/);
   assert.match(directory, /<SegmentedProgress/);
   assert.match(directory, /const PAGE_SIZE = 25/);
   assert.match(directory, /crmContactDeepLink\(contact\.id\)/);

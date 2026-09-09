@@ -1818,6 +1818,27 @@ input:hover, textarea:hover, select:hover { border-color: var(--ink-500) !import
 .crm-identities-fieldset input, .crm-identities-fieldset select { min-width: 0; }
 .crm-identities-fieldset .crm-primary-select { max-width: 240px; margin-top: 10px; }
 .crm-identities-fieldset > small { display: block; margin-top: 8px; }
+.crm-simple-intake { width: min(820px, 100%); }
+.crm-simple-intake .section-heading p:not(.overline) { margin: 5px 0 0; color: var(--ink-600); font-size: 12px; }
+.crm-customer-kind { margin: 0 0 14px; padding: 0; border: 0; }
+.crm-customer-kind legend { margin-bottom: 7px; color: var(--ink-700); font-size: 11px; font-weight: 800; }
+.crm-customer-kind > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.crm-customer-kind button { min-width: 0; padding: 12px 14px; display: grid; gap: 2px; text-align: start; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--paper); cursor: pointer; }
+.crm-customer-kind button.active { border-color: var(--ink-950); box-shadow: inset 0 -3px 0 var(--yellow-500); }
+.crm-customer-kind button strong { color: var(--ink-950); font-size: 13px; }
+.crm-customer-kind button small { color: var(--ink-600); font-size: 10px; }
+.crm-simple-intake-grid { gap: 12px; }
+.crm-dialog-notice { margin: 0 0 13px; position: relative; z-index: 2; }
+.crm-cashback-account { padding: 10px; border: 1px solid color-mix(in srgb, var(--yellow-500) 55%, var(--line)); border-radius: 7px; background: color-mix(in srgb, var(--yellow-500) 8%, var(--paper)); }
+.crm-current-customer-note { min-height: 72px; padding: 11px 13px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--success-border); border-radius: 7px; background: var(--success-soft); color: var(--success-ink); }
+.crm-current-customer-note span { display: grid; gap: 2px; }
+.crm-current-customer-note small { color: inherit; opacity: .8; font-size: 10px; }
+.crm-optional-contact-details { margin-top: 14px; border-block: 1px solid var(--line); }
+.crm-optional-contact-details > summary { min-height: 46px; padding: 10px 2px; display: flex; align-items: center; gap: 7px; color: var(--ink-800); font-size: 12px; font-weight: 800; cursor: pointer; list-style: none; }
+.crm-optional-contact-details > summary::-webkit-details-marker { display: none; }
+.crm-optional-contact-details[open] > summary { color: var(--ink-950); }
+.crm-optional-contact-details .crm-identities-fieldset { margin-bottom: 13px; }
+.crm-primary-customer-views { position: sticky; top: calc(var(--app-header-height, 0px) + 4px); z-index: 4; box-shadow: 0 5px 18px rgba(20, 29, 34, .04); }
 .crm-pipeline { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(295px, 1fr); gap: 12px; min-width: 0; padding: 2px 2px 14px; overflow-x: auto; scroll-snap-type: x proximity; }
 .crm-stage-column { min-height: 430px; padding: 13px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgba(226,233,232,.55); scroll-snap-align: start; }
 .crm-stage-column > header { padding: 2px 2px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -3609,6 +3630,12 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 
 @media (prefers-reduced-motion: reduce) {
   .crm-row-expand svg, .task-report-chevron svg { transition: none; }
+}
+
+@media (max-width: 760px) {
+  .crm-customer-kind > div { grid-template-columns: 1fr; }
+  .crm-simple-intake .form-grid { grid-template-columns: 1fr; }
+  .crm-primary-customer-views { top: 2px; margin-inline: -12px; padding-inline: 12px; border-inline: 0; border-radius: 0; }
 }
 
 @media (max-width: 920px) {

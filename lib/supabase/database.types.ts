@@ -5054,6 +5054,28 @@ export type Database = {
         }
         Returns: string
       }
+      create_crm_lead_v5: {
+        Args: {
+          contact_consent_status: Database["public"]["Enums"]["crm_consent_status"]
+          contact_full_name: string
+          contact_identities: Json
+          contact_initial_stage: Database["public"]["Enums"]["crm_lead_stage"]
+          contact_interest: Database["public"]["Enums"]["crm_interest"]
+          contact_interest_detail: string
+          contact_owner_id: string
+          contact_source: Database["public"]["Enums"]["crm_source"]
+          contact_source_detail: string
+          contact_trading_experience: Database["public"]["Enums"]["crm_trading_experience"]
+          initial_notes: string
+          target_conversation_channel: Database["public"]["Enums"]["crm_conversation_channel"]
+          target_conversation_label: string
+          target_conversation_url: string
+          target_follow_up_at: string
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       create_launch_deliverable: {
         Args: {
           deliverable_brief: string
@@ -6219,6 +6241,30 @@ export type Database = {
           total_count: number
         }[]
       }
+      search_crm_contacts_v8: {
+        Args: {
+          result_limit: number
+          result_offset: number
+          search_query: string
+          target_interest: Database["public"]["Enums"]["crm_interest"] | null
+          target_organization_id: string
+          target_owner_id: string | null
+          target_priority: string
+          target_queue: string
+          target_scope: string
+          target_segment: string
+          target_source: Database["public"]["Enums"]["crm_source"] | null
+          target_stage: Database["public"]["Enums"]["crm_lead_stage"] | null
+          target_trading_experience: Database["public"]["Enums"]["crm_trading_experience"] | null
+          target_view: string
+        }
+        Returns: {
+          contact_id: string
+          priority_reason: string
+          priority_score: number
+          total_count: number
+        }[]
+      }
       search_exness_agency_clients: {
         Args: {
           result_limit: number
@@ -6493,6 +6539,7 @@ export type Database = {
         | "tradingview"
         | "instagram"
         | "facebook"
+        | "exness_account"
       crm_interest:
         | "indicator"
         | "signals_gold"
@@ -6501,6 +6548,7 @@ export type Database = {
         | "brokerage"
         | "book"
         | "service"
+        | "cashback"
         | "other"
       crm_lead_stage:
         | "new"
@@ -6818,6 +6866,7 @@ export const Constants = {
         "tradingview",
         "instagram",
         "facebook",
+        "exness_account",
       ],
       crm_interest: [
         "indicator",
@@ -6827,6 +6876,7 @@ export const Constants = {
         "brokerage",
         "book",
         "service",
+        "cashback",
         "other",
       ],
       crm_lead_stage: [

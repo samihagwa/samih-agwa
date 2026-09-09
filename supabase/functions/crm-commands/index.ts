@@ -7,8 +7,8 @@ const sources = new Set([
   "harmonic_book", "telegram", "meta", "facebook", "instagram", "tiktok", "meta_business", "whatsapp", "email",
   "market_whales_app", "exness", "tickmill", "referral", "other",
 ]);
-const interests = new Set(["indicator", "signals_gold", "signals_fx", "course", "brokerage", "book", "service", "other"]);
-const identityKinds = new Set(["phone", "email", "telegram", "tradingview", "instagram", "facebook"]);
+const interests = new Set(["indicator", "signals_gold", "signals_fx", "course", "brokerage", "book", "service", "cashback", "other"]);
+const identityKinds = new Set(["phone", "email", "telegram", "tradingview", "instagram", "facebook", "exness_account"]);
 const conversationChannels = new Set(["telegram", "whatsapp", "instagram", "facebook", "messenger", "tiktok", "meta_business", "email", "other"]);
 const consentStatuses = new Set(["unknown", "granted", "denied"]);
 const activityKinds = new Set(["call", "message", "email", "note"]);
@@ -18,7 +18,6 @@ const leadTemperatures = new Set(["cold", "warm", "hot"]);
 const preferredContactMethods = new Set(["phone", "email", "telegram", "whatsapp", "instagram", "facebook", "messenger", "tiktok", "meta_business", "other"]);
 const tradingExperiences = new Set(["unknown", "new", "experienced"]);
 const leadershipRoles = new Set(["owner", "admin", "manager"]);
-const socialSources = new Set(["telegram", "meta", "facebook", "instagram", "tiktok", "meta_business", "whatsapp"]);
 
 type Context = Awaited<ReturnType<typeof createSupabaseContext>>["data"];
 type ContactIdentity = { kind: string; value: string; is_primary: boolean };
@@ -46,11 +45,12 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/Telegram username is invalid/i, "اسم مستخدم Telegram غير صحيح. اكتب اسم المستخدم فقط مثل @username، وضع لينك الشات في خانته المنفصلة."],
     [/TradingView identity is invalid/i, "اسم حساب TradingView غير صحيح."],
     [/Social username is invalid/i, "اسم مستخدم Facebook أو Instagram غير صحيح. اكتب اسم المستخدم فقط بدون رابط."],
+    [/Exness account identity is invalid/i, "رقم حساب Exness غير صحيح. استخدم رقم الحساب كما يظهر في Exness."],
     [/already belongs/i, "وسيلة التواصل هذه مسجلة بالفعل لعميل آخر."],
     [/owner must be an active/i, "مسؤول المتابعة يجب أن يكون عضوًا نشطًا في مساحة العمل."],
-    [/Only an active working member/i, "حسابك لا يملك صلاحية إضافة عميل محتمل."],
+    [/Only an active working member/i, "حسابك لا يملك صلاحية إضافة عميل."],
     [/Team members can create CRM leads for themselves only/i, "عضو الفريق يمكنه إسناد العميل لنفسه فقط."],
-    [/between one and six CRM contact identities/i, "أضف وسيلة واحدة على الأقل، وبحد أقصى وسيلة واحدة من كل نوع."],
+    [/no more than seven CRM contact identities/i, "يمكن حفظ وسيلة واحدة فقط من كل نوع، بحد أقصى سبع بيانات."],
     [/each CRM identity kind only once/i, "يمكن إضافة هاتف واحد وبريد واحد واسم Telegram واحد عند إنشاء الملف."],
     [/exactly one primary CRM identity/i, "اختر وسيلة تواصل أساسية واحدة."],
     [/Only the CRM owner or organization leadership/i, "إضافة وسيلة تواصل متاحة لمسؤول العميل أو إدارة الشركة فقط."],
@@ -72,6 +72,7 @@ function validIdentity(kind: string, value: string) {
   if (kind === "telegram") return /^[a-z0-9_]{5,32}$/i.test(value.replace(/^@/, ""));
   if (kind === "tradingview") return value.trim().length >= 3 && value.trim().length <= 100
     && !Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+  if (kind === "exness_account") return /^[A-Z0-9-]{5,32}$/i.test(value.replace(/\s/g, ""));
   if (kind === "instagram" || kind === "facebook") {
     const username = value.trim().replace(/^@/, "");
     const hasForbiddenCharacter = Array.from(username).some((character) => {
@@ -102,8 +103,8 @@ function parseIdentities(body: Record<string, unknown>): ContactIdentity[] | nul
   }).filter((identity) => identity.kind || identity.value);
   const primaryKind = text(body.primary_identity_kind) || parsed[0]?.kind;
   for (const identity of parsed) identity.is_primary = identity.kind === primaryKind;
-  if (parsed.length < 1 || parsed.length > 6 || new Set(parsed.map((identity) => identity.kind)).size !== parsed.length) return null;
-  if (parsed.filter((identity) => identity.is_primary).length !== 1) return null;
+  if (parsed.length > 7 || new Set(parsed.map((identity) => identity.kind)).size !== parsed.length) return null;
+  if (parsed.length && parsed.filter((identity) => identity.is_primary).length !== 1) return null;
   return parsed;
 }
 
@@ -122,6 +123,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   const conversationUrl = text(body.conversation_url);
   const conversationLabel = text(body.conversation_label);
   const tradingExperience = text(body.trading_experience) || "unknown";
+  const initialStage = text(body.initial_stage) || "new";
 
   if (!organizationId || fullName.length < 2 || fullName.length > 160 || !ownerId) {
     return jsonResponse({ message: "أكمل اسم العميل ومسؤول المتابعة." }, 400);
@@ -133,7 +135,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     return jsonResponse({ message: "حدد هل العميل جديد في التداول أم لديه خبرة." }, 400);
   }
   if (!identities || identities.some((identity) => !identityKinds.has(identity.kind) || identity.value.length < 3 || identity.value.length > 320)) {
-    return jsonResponse({ message: "أضف وسيلة تواصل واحدة على الأقل، مثل الهاتف أو Facebook أو Instagram، بدون تكرار النوع." }, 400);
+    return jsonResponse({ message: "راجع بيانات التواصل أو رقم حساب Exness وتأكد من عدم تكرار النوع." }, 400);
   }
   const invalidIdentity = identities.find((identity) => !validIdentity(identity.kind, identity.value));
   if (invalidIdentity) {
@@ -145,8 +147,13 @@ async function createLead(body: Record<string, unknown>, context: Context) {
           ? "اسم حساب TradingView غير صحيح."
           : invalidIdentity.kind === "instagram" || invalidIdentity.kind === "facebook"
             ? "اسم مستخدم Facebook أو Instagram غير صحيح. اكتب اسم المستخدم فقط بدون رابط."
-            : "رقم الهاتف غير صحيح. استخدم رقمًا من 7 إلى 16 رقمًا ويمكن أن يبدأ بعلامة +.";
+            : invalidIdentity.kind === "exness_account"
+              ? "رقم حساب Exness غير صحيح. استخدم رقم الحساب كما يظهر في Exness."
+              : "رقم الهاتف غير صحيح. استخدم رقمًا من 7 إلى 16 رقمًا ويمكن أن يبدأ بعلامة +.";
     return jsonResponse({ message }, 400);
+  }
+  if (initialStage !== "new" && initialStage !== "won") {
+    return jsonResponse({ message: "اختر هل هذا عميل محتمل أم عميل حالي." }, 400);
   }
   if (source === "other" && (sourceDetail.length < 2 || sourceDetail.length > 160)) {
     return jsonResponse({ message: "اكتب اسم مصدر التسجيل المخصص من حرفين إلى 160 حرفًا." }, 400);
@@ -160,11 +167,8 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   if (interest !== "other" && interestDetail) {
     return jsonResponse({ message: "استخدم السبب المخصص فقط عند اختيار «سبب آخر»." }, 400);
   }
-  if (Boolean(conversationChannel) !== Boolean(conversationUrl)) {
-    return jsonResponse({ message: "اختر منصة المحادثة وأضف لينك الشات معها." }, 400);
-  }
-  if (socialSources.has(source) && (!conversationChannel || !conversationUrl)) {
-    return jsonResponse({ message: "مصدر العميل من منصة تواصل، لذلك اختر المنصة والصق لينك المحادثة للوصول إليه بسرعة." }, 400);
+  if (conversationUrl && !conversationChannel) {
+    return jsonResponse({ message: "اختر منصة المحادثة مع لينك الشات." }, 400);
   }
   if (conversationChannel && !conversationChannels.has(conversationChannel)) {
     return jsonResponse({ message: "منصة المحادثة غير صالحة." }, 400);
@@ -175,7 +179,8 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   if (conversationLabel && (!conversationUrl || conversationLabel.length < 2 || conversationLabel.length > 80)) {
     return jsonResponse({ message: "وصف لينك المحادثة يجب أن يكون بين حرفين و80 حرفًا." }, 400);
   }
-  if (!followUpAt) return jsonResponse({ message: "حدد موعد متابعة صحيحًا في المستقبل." }, 400);
+  if (initialStage === "new" && !followUpAt) return jsonResponse({ message: "حدد موعد متابعة صحيحًا في المستقبل." }, 400);
+  if (initialStage === "won" && text(body.follow_up_at)) return jsonResponse({ message: "العميل الحالي لا يحتاج مهمة متابعة مبيعات عند تسجيله." }, 400);
   if (text(body.notes).length > 5000) return jsonResponse({ message: "ملاحظات العميل أطول من الحد المسموح." }, 400);
 
   const actorId = text(context?.userClaims?.id);
@@ -195,7 +200,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     return jsonResponse({ message: "عضو السيلز يستطيع إضافة العميل لنفسه فقط." }, 403);
   }
 
-  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v4", {
+  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v5", {
     target_user_id: context!.userClaims!.id,
     target_organization_id: organizationId,
     contact_full_name: fullName,
@@ -207,8 +212,9 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     contact_consent_status: consentStatus,
     contact_identities: identities,
     contact_trading_experience: tradingExperience,
+    contact_initial_stage: initialStage,
     initial_notes: text(body.notes),
-    target_follow_up_at: followUpAt,
+    target_follow_up_at: initialStage === "new" ? followUpAt : null,
     target_conversation_channel: conversationChannel || null,
     target_conversation_url: conversationUrl || null,
     target_conversation_label: conversationLabel || null,

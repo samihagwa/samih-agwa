@@ -3,7 +3,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ContactRound, FileClock, Filter, FolderOpen, LoaderCircle, LockKeyhole, Plus, RefreshCw, Route, Search, ShieldCheck, Sparkles, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { crmInterestConfig, crmLeadStageConfig, crmLeadStages, crmSourceConfig, crmTradingExperienceConfig, type CrmInterest, type CrmLeadStage, type CrmSource } from "../../lib/crm";
+import { crmInterestConfig, crmLeadStageConfig, crmLeadStages, crmSourceConfig, crmTradingExperienceConfig, type CrmInterest, type CrmLeadStage, type CrmSource, type CrmTradingExperience } from "../../lib/crm";
 import { crmContactDeepLink, taskDeepLink } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Database, Tables } from "../../lib/supabase/database.types";
@@ -25,7 +25,8 @@ type ScopeFilter = "all" | "mine" | "overdue";
 type ViewFilter = "all" | "current" | "archive";
 type QueueFilter = "all" | "new" | "today" | "overdue" | "waiting" | "interested" | "converted" | "lost";
 type PriorityFilter = "all" | "high";
-type LeadSegment = "all" | "indicator" | "other";
+type LeadSegment = "all" | "indicator" | "cashback" | "other";
+type PrimaryView = "new" | "today" | "current" | "indicator" | "cashback" | "all";
 
 const PAGE_SIZE = 25;
 const crmProgressStages: Array<{ id: CrmLeadStage; label: string }> = [
@@ -33,16 +34,14 @@ const crmProgressStages: Array<{ id: CrmLeadStage; label: string }> = [
   { id: "contacted", label: "تواصل" },
   { id: "follow_up", label: "مهتم" },
   { id: "qualified", label: "مؤهل" },
-  { id: "won", label: "تحويل" },
+  { id: "won", label: "عميل حالي" },
 ];
-const queueOptions: Array<{ id: QueueFilter; label: string }> = [
-  { id: "today", label: "متابعة اليوم" },
-  { id: "overdue", label: "متأخر" },
+const primaryViews: Array<{ id: PrimaryView; label: string }> = [
   { id: "new", label: "عملاء جدد" },
-  { id: "waiting", label: "في انتظار العميل" },
-  { id: "interested", label: "مهتمون" },
-  { id: "converted", label: "تم التحويل" },
-  { id: "lost", label: "غير محولين" },
+  { id: "today", label: "متابعة اليوم" },
+  { id: "current", label: "عملاء حاليون" },
+  { id: "indicator", label: "عملاء المؤشر" },
+  { id: "cashback", label: "عملاء الكاش باك" },
   { id: "all", label: "كل العملاء" },
 ];
 
@@ -70,6 +69,7 @@ export function CrmCustomerDirectory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<CrmSource | "">("");
   const [interestFilter, setInterestFilter] = useState<CrmInterest | "">("");
+  const [tradingExperienceFilter, setTradingExperienceFilter] = useState<CrmTradingExperience | "">("");
   const [stageFilter, setStageFilter] = useState<CrmLeadStage | "">("");
   const [ownerFilter, setOwnerFilter] = useState("");
   const [salesOwnerIds, setSalesOwnerIds] = useState<string[]>([]);
@@ -77,9 +77,8 @@ export function CrmCustomerDirectory() {
   const [priorities, setPriorities] = useState(new Map<string, { score: number; reason: string }>());
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
-  const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const [primaryView, setPrimaryView] = useState<PrimaryView>("new");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
-  const [leadSegment, setLeadSegment] = useState<LeadSegment>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
   const filterCloseRef = useRef<HTMLButtonElement>(null);
@@ -137,19 +136,22 @@ export function CrmCustomerDirectory() {
 
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading });
   const manager = Boolean(workspace && canManageTasks(workspace.membership.role));
+  const queueFilter: QueueFilter = primaryView === "new" ? "new" : primaryView === "today" ? "today" : primaryView === "current" ? "converted" : "all";
+  const leadSegment: LeadSegment = primaryView === "indicator" ? "indicator" : primaryView === "cashback" ? "cashback" : "all";
 
   const refreshDirectory = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
     setDirectoryLoading(true);
     setError(null);
     try {
-      const [searchResult, performanceResult] = await Promise.all([supabase.rpc("search_crm_contacts_v7", {
+      const [searchResult, performanceResult] = await Promise.all([supabase.rpc("search_crm_contacts_v8", {
         target_organization_id: organizationId,
         search_query: searchQuery,
         target_owner_id: (ownerFilter || null) as unknown as string,
         target_stage: (stageFilter || null) as unknown as CrmLeadStage,
         target_source: (sourceFilter || null) as unknown as CrmSource,
         target_interest: (interestFilter || null) as unknown as CrmInterest,
+        target_trading_experience: (tradingExperienceFilter || null) as unknown as CrmTradingExperience,
         target_scope: scopeFilter,
         target_view: viewFilter,
         target_queue: queueFilter,
@@ -190,7 +192,7 @@ export function CrmCustomerDirectory() {
     } finally {
       setDirectoryLoading(false);
     }
-  }, [clearData, interestFilter, leadSegment, manager, ownerFilter, page, priorityFilter, queueFilter, scopeFilter, searchQuery, sourceFilter, stageFilter, viewFilter]);
+  }, [clearData, interestFilter, leadSegment, manager, ownerFilter, page, priorityFilter, queueFilter, scopeFilter, searchQuery, sourceFilter, stageFilter, tradingExperienceFilter, viewFilter]);
 
   useEffect(() => {
     const clean = searchInput.trim();
@@ -251,14 +253,14 @@ export function CrmCustomerDirectory() {
 
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const hasFilters = Boolean(searchQuery || sourceFilter || interestFilter || stageFilter || ownerFilter || scopeFilter !== "all" || viewFilter !== "all" || queueFilter !== "all" || priorityFilter !== "all" || leadSegment !== "all");
+  const hasFilters = Boolean(searchQuery || sourceFilter || interestFilter || tradingExperienceFilter || stageFilter || ownerFilter || scopeFilter !== "all" || viewFilter !== "all" || primaryView !== "new" || priorityFilter !== "all");
   const visibleSalesOwnerIds = new Set([...salesOwnerIds, ...(manager ? [session.user.id] : [])]);
   const salesPeople = workspace.people.filter((person) => visibleSalesOwnerIds.has(person.id));
   const firstVisible = totalCount ? page * PAGE_SIZE + 1 : 0;
   const lastVisible = Math.min(totalCount, page * PAGE_SIZE + contacts.length);
   const visibleStages = crmLeadStages.filter((stage) => viewFilter === "all"
     || (viewFilter === "current" ? crmLeadStageConfig[stage].active : !crmLeadStageConfig[stage].active));
-  const activeFilterCount = [sourceFilter, interestFilter, stageFilter, ownerFilter].filter(Boolean).length
+  const activeFilterCount = [sourceFilter, interestFilter, tradingExperienceFilter, stageFilter, ownerFilter].filter(Boolean).length
     + (scopeFilter !== "all" ? 1 : 0)
     + (viewFilter !== "all" ? 1 : 0)
     + (priorityFilter !== "all" ? 1 : 0);
@@ -266,12 +268,13 @@ export function CrmCustomerDirectory() {
   function resetFilters() {
     setSourceFilter("");
     setInterestFilter("");
+    setTradingExperienceFilter("");
     setStageFilter("");
     setOwnerFilter("");
     setScopeFilter("all");
     setViewFilter("all");
     setPriorityFilter("all");
-    setLeadSegment("all");
+    setPrimaryView("new");
     setPage(0);
   }
 
@@ -282,16 +285,8 @@ export function CrmCustomerDirectory() {
     </div>
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
 
-    <nav className="crm-lead-segments" aria-label="فصل عملاء المؤشر عن باقي العملاء">
-      {([
-        ["all", "كل العملاء"],
-        ["indicator", "عملاء المؤشر"],
-        ["other", "باقي العملاء"],
-      ] as Array<[LeadSegment, string]>).map(([segment, label]) => <button type="button" className={leadSegment === segment ? "active" : ""} aria-current={leadSegment === segment ? "page" : undefined} onClick={() => { setLeadSegment(segment); setInterestFilter(""); setPage(0); }} key={segment}>{label}</button>)}
-    </nav>
-
-    <nav className="crm-queue-tabs" aria-label="قوائم متابعة العملاء">
-      {queueOptions.map((queue) => <button type="button" className={queueFilter === queue.id ? "active" : ""} aria-current={queueFilter === queue.id ? "page" : undefined} onClick={() => { setQueueFilter(queue.id); setPage(0); }} key={queue.id}>{queue.label}{queueFilter === queue.id ? <span>{totalCount.toLocaleString("ar-EG")}</span> : null}</button>)}
+    <nav className="crm-queue-tabs crm-primary-customer-views" aria-label="قوائم العملاء الأساسية">
+      {primaryViews.map((view) => <button type="button" className={primaryView === view.id ? "active" : ""} aria-current={primaryView === view.id ? "page" : undefined} onClick={() => { setPrimaryView(view.id); setInterestFilter(""); setStageFilter(""); setViewFilter("all"); setPage(0); }} key={view.id}>{view.label}{primaryView === view.id ? <span>{totalCount.toLocaleString("ar-EG")}</span> : null}</button>)}
     </nav>
 
     {manager && ownerPerformance.length ? <section className="crm-sales-scoreboard" aria-label="ملخص أداء فريق السيلز">{ownerPerformance.map((metric) => {
@@ -300,13 +295,12 @@ export function CrmCustomerDirectory() {
       const won = Number(metric.won_contacts);
       const completed = Number(metric.completed_follow_ups);
       const onTime = Number(metric.on_time_follow_ups);
-      return <article key={metric.owner_id}><header><strong>{person?.name ?? "مسؤول سيلز"}</strong><button type="button" onClick={() => { setOwnerFilter(metric.owner_id); setPage(0); }}>عرض العملاء</button></header><dl><div><dt>العملاء</dt><dd>{total}</dd></div><div><dt>تم التحويل</dt><dd>{won}</dd></div><div><dt>غير محولين</dt><dd>{metric.lost_contacts}</dd></div><div><dt>التزام المتابعة</dt><dd>{completed ? `${Math.round(onTime / completed * 100)}%` : "—"}</dd></div><div><dt>متوسط أول رد</dt><dd>{metric.average_first_response_minutes == null ? "—" : `${Math.round(Number(metric.average_first_response_minutes))} د`}</dd></div></dl></article>;
+      return <article key={metric.owner_id}><header><strong>{person?.name ?? "مسؤول سيلز"}</strong><button type="button" onClick={() => { setOwnerFilter(metric.owner_id); setPage(0); }}>عرض العملاء</button></header><dl><div><dt>العملاء</dt><dd>{total}</dd></div><div><dt>عملاء حاليون</dt><dd>{won}</dd></div><div><dt>لم يشتروا</dt><dd>{metric.lost_contacts}</dd></div><div><dt>التزام المتابعة</dt><dd>{completed ? `${Math.round(onTime / completed * 100)}%` : "—"}</dd></div><div><dt>متوسط أول رد</dt><dd>{metric.average_first_response_minutes == null ? "—" : `${Math.round(Number(metric.average_first_response_minutes))} د`}</dd></div></dl></article>;
     })}</section> : null}
 
     <section className="crm-report-toolbar" aria-label="البحث وأدوات دليل العملاء">
       <label className="crm-search-field"><Search aria-hidden="true" size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="ابحث بالاسم، الهاتف، البريد، TradingView أو نتيجة التواصل…" aria-label="البحث في دليل العملاء" />{searchInput ? <button type="button" onClick={() => setSearchInput("")}>مسح</button> : null}</label>
       <button className="crm-filter-trigger" type="button" aria-expanded={showFilters} aria-controls="crm-filter-dialog" onClick={() => setShowFilters(true)}><Filter aria-hidden="true" size={16} /> تصفية {activeFilterCount ? <span>{activeFilterCount}</span> : null}</button>
-      <div className="crm-filter-row" role="group" aria-label="نطاق دليل العملاء">{(["all", "mine", ...(viewFilter === "archive" ? [] : ["overdue"])] as ScopeFilter[]).map((scope) => <button className={scopeFilter === scope ? "active" : ""} type="button" key={scope} onClick={() => { setScopeFilter(scope); setPage(0); }}>{scope === "all" ? "كل المتاح" : scope === "mine" ? "مسؤوليتي" : "متابعة متأخرة"}</button>)}</div>
       <p>{searchInput.trim().length === 1 ? "اكتب حرفين على الأقل لبدء البحث." : `يعرض ${firstVisible.toLocaleString("ar-EG")}–${lastVisible.toLocaleString("ar-EG")} من ${totalCount.toLocaleString("ar-EG")} نتيجة.`}</p>
     </section>
 
@@ -317,8 +311,10 @@ export function CrmCustomerDirectory() {
         <div className="crm-directory-filter-grid">
         <label><span>المصدر</span><select value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value as CrmSource | ""); setPage(0); }}><option value="">كل المصادر</option>{(Object.keys(crmSourceConfig) as CrmSource[]).map((source) => <option value={source} key={source}>{crmSourceConfig[source].label}</option>)}</select></label>
         <label><span>الاهتمام</span><select value={interestFilter} onChange={(event) => { setInterestFilter(event.target.value as CrmInterest | ""); setPage(0); }}><option value="">كل الاهتمامات</option>{(Object.keys(crmInterestConfig) as CrmInterest[]).map((interest) => <option value={interest} key={interest}>{crmInterestConfig[interest].label}</option>)}</select></label>
+        <label><span>خبرة التداول</span><select value={tradingExperienceFilter} onChange={(event) => { setTradingExperienceFilter(event.target.value as CrmTradingExperience | ""); setPage(0); }}><option value="">كل مستويات الخبرة</option>{(Object.keys(crmTradingExperienceConfig) as CrmTradingExperience[]).map((experience) => <option value={experience} key={experience}>{crmTradingExperienceConfig[experience].label}</option>)}</select></label>
         <label><span>المرحلة</span><select value={stageFilter} onChange={(event) => { setStageFilter(event.target.value as CrmLeadStage | ""); setPage(0); }}><option value="">كل المراحل</option>{visibleStages.map((stage) => <option value={stage} key={stage}>{crmLeadStageConfig[stage].label}</option>)}</select></label>
         {manager ? <label><span>مسؤول السيلز</span><select value={ownerFilter} onChange={(event) => { setOwnerFilter(event.target.value); setPage(0); }}><option value="">كل العملاء</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : null}
+        <label><span>نطاق المسؤولية</span><select value={scopeFilter} onChange={(event) => { setScopeFilter(event.target.value as ScopeFilter); setPage(0); }}><option value="all">كل المتاح</option><option value="mine">عملائي فقط</option><option value="overdue">متابعة متأخرة</option></select></label>
         <label><span>حالة الملف</span><select value={viewFilter} onChange={(event) => { const nextView = event.target.value as ViewFilter; setViewFilter(nextView); setStageFilter(""); if (nextView === "archive" && scopeFilter === "overdue") setScopeFilter("all"); setPage(0); }}><option value="all">الحالي والأرشيف</option><option value="current">المتابعات الحالية</option><option value="archive">الملفات المحسومة</option></select></label>
         <label><span>الأولوية المقترحة</span><select value={priorityFilter} onChange={(event) => { setPriorityFilter(event.target.value as PriorityFilter); setPage(0); }}><option value="all">كل الأولويات</option><option value="high">الأعلى للتواصل الآن</option></select></label>
         </div>

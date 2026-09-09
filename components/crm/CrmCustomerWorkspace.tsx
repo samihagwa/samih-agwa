@@ -51,7 +51,7 @@ const contactOutcomeConfig: Record<ContactOutcome, { label: string; stage: CrmLe
   call_later: { label: "طلب التواصل لاحقًا", stage: "follow_up", followUp: true },
   interested: { label: "مهتم", stage: "follow_up", followUp: true },
   qualified: { label: "مؤهل للشراء", stage: "qualified", followUp: true },
-  converted: { label: "تم البيع / تقديم الخدمة", stage: "won", followUp: false },
+  converted: { label: "أصبح عميلًا حاليًا", stage: "won", followUp: false },
   not_interested: { label: "غير مهتم", stage: "lost", followUp: false },
   invalid_data: { label: "بيانات غير صحيحة", stage: "do_not_contact", followUp: false },
 };

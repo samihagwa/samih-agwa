@@ -348,7 +348,7 @@ export default {
       const { data: matches, error: matchesError } = matchingIds.size ? await matchQuery : { data: [], error: null };
       if (matchesError) return jsonResponse({ message: "تعذّر فتح نتائج العملاء الآن. حاول مرة أخرى." }, 503);
       if (!matches?.length) return databaseAnswer("ملقتش عميلاً مطابقًا في الجزء المسموح لحسابك. جرّب الاسم الكامل أو الهاتف أو البريد أو حساب TradingView.", [], "crm_lookup");
-      const answer = `لقيت ${matches.length.toLocaleString("ar-EG")} نتيجة مطابقة:\n\n${matches.map((contact, index) => `${index + 1}. ${contact.full_name} — ${contact.stage === "won" ? "تم التحويل" : contact.stage === "lost" ? "غير محوّل" : "متابعة نشطة"}`).join("\n")}`;
+      const answer = `لقيت ${matches.length.toLocaleString("ar-EG")} نتيجة مطابقة:\n\n${matches.map((contact, index) => `${index + 1}. ${contact.full_name} — ${contact.stage === "won" ? "عميل حالي" : contact.stage === "lost" ? "لم يشترِ" : "متابعة نشطة"}`).join("\n")}`;
       return databaseAnswer(answer, matches.map((contact) => ({ label: `فتح ${text(contact.full_name) || "ملف العميل"}`, url: `/crm/${contact.id}` })), "crm_lookup");
     }
 
