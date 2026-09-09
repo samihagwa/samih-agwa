@@ -401,8 +401,13 @@ export function CrmWorkspace() {
   }, [searchInput]);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("add") !== "1") return;
-    queueMicrotask(() => setShowCreate(true));
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("add") !== "1") return;
+    queueMicrotask(() => {
+      setShowCreate(true);
+      url.searchParams.delete("add");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    });
   }, []);
 
   useEffect(() => {
@@ -450,15 +455,6 @@ export function CrmWorkspace() {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [showCreate, showImport]);
-
-  useEffect(() => {
-    if (!workspace || workspace.membership.role === "viewer" || showCreate) return;
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("add") !== "1") return;
-    setShowCreate(true);
-    url.searchParams.delete("add");
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [showCreate, workspace]);
 
   const identitiesByContact = useMemo(() => {
     const grouped = new Map<string, Identity[]>();
