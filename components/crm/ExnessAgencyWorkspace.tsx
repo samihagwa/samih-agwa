@@ -1,8 +1,9 @@
 "use client";
 
 import type { Session } from "@supabase/supabase-js";
-import { Activity, AlertTriangle, BadgeDollarSign, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleX, Database as DatabaseIcon, LoaderCircle, LockKeyhole, RefreshCw, Search, ShieldCheck, UsersRound } from "lucide-react";
+import { Activity, AlertTriangle, BadgeDollarSign, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleX, Database as DatabaseIcon, FolderOpen, LoaderCircle, LockKeyhole, RefreshCw, Search, ShieldCheck, UsersRound } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { crmContactDeepLink } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Database, Json, Tables } from "../../lib/supabase/database.types";
 import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-errors";
@@ -16,6 +17,7 @@ type Account = Tables<"broker_client_accounts">;
 type SyncRun = Tables<"broker_sync_runs">;
 type LookupResult = Database["public"]["Functions"]["lookup_exness_account"]["Returns"][number];
 type AgencySummary = Database["public"]["Functions"]["get_exness_agency_summary"]["Returns"][number];
+type AgencyClient = Database["public"]["Functions"]["search_exness_agency_clients"]["Returns"][number];
 type Workspace = { membership: Membership; organization: Organization };
 type InvokePayload = { message?: string; retry_after_seconds?: number; sync?: SyncRun & { fetched_clients?: number }; replayed?: boolean };
 
@@ -59,6 +61,7 @@ export function ExnessAgencyWorkspace() {
   const [lookupResult, setLookupResult] = useState<LookupResult | null>(null);
   const [summary, setSummary] = useState<AgencySummary | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [agencyClients, setAgencyClients] = useState<AgencyClient[]>([]);
   const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [searchInput, setSearchInput] = useState("");
@@ -72,6 +75,7 @@ export function ExnessAgencyWorkspace() {
     setWorkspace(null);
     setSummary(null);
     setAccounts([]);
+    setAgencyClients([]);
     setSyncRuns([]);
     setTotalCount(0);
   }, []);
@@ -152,11 +156,39 @@ export function ExnessAgencyWorkspace() {
     }
   }, [page, searchQuery, statusFilter]);
 
+  const loadAgencyClients = useCallback(async (organizationId: string) => {
+    const supabase = getSupabaseBrowserClient();
+    setOwnerLoading(true);
+    setError(null);
+    try {
+      const { data, error: accountsError } = await supabase.rpc("search_exness_agency_clients", {
+        target_organization_id: organizationId,
+        search_query: searchQuery,
+        target_status: statusFilter,
+        result_limit: PAGE_SIZE,
+        result_offset: page * PAGE_SIZE,
+      });
+      if (accountsError) throw accountsError;
+      setAgencyClients(data ?? []);
+      setTotalCount(Number(data?.[0]?.total_count ?? 0));
+      if (page > 0 && !data?.length) setPage(0);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "تعذّر تحميل قائمة عملاء الوكالة.");
+    } finally {
+      setOwnerLoading(false);
+    }
+  }, [page, searchQuery, statusFilter]);
+
   useEffect(() => {
     if (!workspace || workspace.membership.role !== "owner") return;
     const timer = window.setTimeout(() => void loadOwnerData(workspace.organization.id), 0);
     return () => window.clearTimeout(timer);
   }, [loadOwnerData, workspace]);
+  useEffect(() => {
+    if (!workspace || workspace.membership.role === "owner") return;
+    const timer = window.setTimeout(() => void loadAgencyClients(workspace.organization.id), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadAgencyClients, workspace]);
 
   async function lookupAccount() {
     if (!workspace) return;
@@ -204,7 +236,7 @@ export function ExnessAgencyWorkspace() {
   const cooldownSeconds = Math.max(0, Math.ceil((lastSyncMs + 5 * 60 * 1000 - now) / 1000));
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const firstVisible = totalCount ? page * PAGE_SIZE + 1 : 0;
-  const lastVisible = Math.min(totalCount, page * PAGE_SIZE + accounts.length);
+  const lastVisible = Math.min(totalCount, page * PAGE_SIZE + (isOwner ? accounts.length : agencyClients.length));
   const summaryCurrency = summary?.commission_currency === "MIXED" ? "عملات متعددة" : summary?.commission_currency ?? "USD";
   const lookupState = useMemo(() => {
     if (!lookupResult) return null;
@@ -236,6 +268,30 @@ export function ExnessAgencyWorkspace() {
       </form>
       {lookupState ? <article className={`exness-lookup-result ${lookupState.tone}`}><lookupState.icon aria-hidden="true" size={22} /><div><strong>{lookupState.title}</strong><p>{lookupState.description}</p>{lookupResult?.last_synced_at ? <small dir="ltr">Data updated: {formatDate(lookupResult.last_synced_at)}</small> : null}</div></article> : null}
     </section>
+
+    {!isOwner ? <>
+      <section className="exness-report-toolbar" aria-label="البحث وتصفية عملاء الوكالة">
+        <label><Search aria-hidden="true" size={16} /><input dir="ltr" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Search account / Client UID" />{searchInput ? <button type="button" onClick={() => setSearchInput("")}>مسح</button> : null}</label>
+        <div role="group" aria-label="حالة الحساب">{(["all", "active", "inactive"] as const).map((status) => <button type="button" className={statusFilter === status ? "active" : ""} onClick={() => { setStatusFilter(status); setPage(0); }} key={status}>{status === "all" ? "كل العملاء" : status === "active" ? "نشط" : "غير نشط"}</button>)}</div>
+        <p dir="ltr">{firstVisible}–{lastVisible} of {totalCount}</p>
+      </section>
+
+      {agencyClients.length ? <div className="exness-account-table-wrap" role="region" aria-label="عملاء Exness الحاليون تحت الوكالة"><table className="exness-account-table exness-sales-table"><thead><tr><th>رقم الحساب</th><th>Client UID</th><th>الدولة</th><th>نوع الحساب</th><th>تاريخ التسجيل</th><th>آخر نشاط</th><th>الحالة</th><th><span className="sr-only">تفاصيل</span></th></tr></thead><tbody>{agencyClients.map((account) => {
+        const expanded = expandedAccountId === account.account_id;
+        return <Fragment key={account.account_id}><tr className={expanded ? "expanded" : ""}>
+          <td data-label="رقم الحساب"><strong dir="ltr">{account.account_number}</strong></td>
+          <td data-label="Client UID"><strong dir="ltr">{account.external_client_id}</strong></td>
+          <td data-label="الدولة">{account.country ?? "—"}</td>
+          <td data-label="نوع الحساب">{account.account_type ?? "—"}</td>
+          <td data-label="تاريخ التسجيل"><strong dir="ltr">{formatDate(account.registered_at)}</strong></td>
+          <td data-label="آخر نشاط"><strong dir="ltr">{formatDate(account.last_activity_at)}</strong></td>
+          <td data-label="الحالة"><StatusBadge tone={account.is_active ? "success" : "danger"}>{account.is_active ? "نشط" : "غير نشط"}</StatusBadge></td>
+          <td data-label="التفاصيل"><button className="crm-row-expand" type="button" aria-expanded={expanded} aria-controls={`exness-sales-account-${account.account_id}`} aria-label={`${expanded ? "إغلاق" : "عرض"} تفاصيل الحساب ${account.account_number}`} onClick={() => setExpandedAccountId(expanded ? null : account.account_id)}><ChevronDown aria-hidden="true" size={17} /></button></td>
+        </tr>{expanded ? <tr className="exness-account-expanded"><td colSpan={8}><div id={`exness-sales-account-${account.account_id}`} className="exness-sales-expanded"><dl><div><dt>آخر تحديث للبيانات</dt><dd dir="ltr">{formatDate(account.last_synced_at)}</dd></div><div><dt>حالة الربط بالـCRM</dt><dd>{account.crm_contact_id ? "مرتبط بملف عميل" : "غير مرتبط بعد"}</dd></div></dl>{account.crm_contact_id ? <a className="crm-file-link" href={crmContactDeepLink(account.crm_contact_id)}><FolderOpen aria-hidden="true" size={14} /> فتح ملف العميل</a> : null}</div></td></tr> : null}</Fragment>;
+      })}</tbody></table></div> : <section className="panel empty-state"><span className="empty-visual"><UsersRound aria-hidden="true" size={20} /></span><div><h2>{ownerLoading ? "جارٍ تحميل العملاء" : "لا توجد حسابات مطابقة"}</h2><p>غيّر البحث أو حالة الحساب، أو اطلب من المالك تنفيذ مزامنة Exness.</p></div></section>}
+
+      {totalCount > PAGE_SIZE ? <nav className="crm-pagination" aria-label="صفحات عملاء الوكالة"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}><ChevronRight aria-hidden="true" size={15} /> السابق</button><span>صفحة {page + 1} من {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)}>التالي <ChevronLeft aria-hidden="true" size={15} /></button></nav> : null}
+    </> : null}
 
     {isOwner ? <>
       <section className="exness-summary-grid" aria-label="ملخص حسابات وكالة Exness">

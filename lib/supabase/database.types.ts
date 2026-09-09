@@ -1435,6 +1435,7 @@ export type Database = {
           source_detail: string | null
           source_registered_at: string | null
           stage: Database["public"]["Enums"]["crm_lead_stage"]
+          trading_experience: Database["public"]["Enums"]["crm_trading_experience"]
           updated_at: string
           version: number
         }
@@ -1458,6 +1459,7 @@ export type Database = {
           source_detail?: string | null
           source_registered_at?: string | null
           stage?: Database["public"]["Enums"]["crm_lead_stage"]
+          trading_experience?: Database["public"]["Enums"]["crm_trading_experience"]
           updated_at?: string
           version?: number
         }
@@ -1481,6 +1483,7 @@ export type Database = {
           source_detail?: string | null
           source_registered_at?: string | null
           stage?: Database["public"]["Enums"]["crm_lead_stage"]
+          trading_experience?: Database["public"]["Enums"]["crm_trading_experience"]
           updated_at?: string
           version?: number
         }
@@ -5030,6 +5033,27 @@ export type Database = {
         }
         Returns: string
       }
+      create_crm_lead_v4: {
+        Args: {
+          contact_consent_status: Database["public"]["Enums"]["crm_consent_status"]
+          contact_full_name: string
+          contact_identities: Json
+          contact_interest: Database["public"]["Enums"]["crm_interest"]
+          contact_interest_detail: string
+          contact_owner_id: string
+          contact_source: Database["public"]["Enums"]["crm_source"]
+          contact_source_detail: string
+          contact_trading_experience: Database["public"]["Enums"]["crm_trading_experience"]
+          initial_notes: string
+          target_conversation_channel: Database["public"]["Enums"]["crm_conversation_channel"]
+          target_conversation_label: string
+          target_conversation_url: string
+          target_follow_up_at: string
+          target_organization_id: string
+          target_user_id: string
+        }
+        Returns: string
+      }
       create_launch_deliverable: {
         Args: {
           deliverable_brief: string
@@ -5861,6 +5885,22 @@ export type Database = {
         }
         Returns: Json
       }
+      save_crm_sales_profile_v2: {
+        Args: {
+          expected_profile_version: number
+          target_contact_id: string
+          target_lead_temperature: string
+          target_needs: string
+          target_next_action: string
+          target_objections: string
+          target_preferred_contact_method: string
+          target_preferred_contact_time: string
+          target_tags: string[]
+          target_trading_experience: Database["public"]["Enums"]["crm_trading_experience"]
+          target_user_id: string
+        }
+        Returns: Json
+      }
       add_crm_conversation_link: {
         Args: {
           make_primary?: boolean
@@ -6156,6 +6196,51 @@ export type Database = {
           total_count: number
         }[]
       }
+      search_crm_contacts_v7: {
+        Args: {
+          result_limit: number
+          result_offset: number
+          search_query: string
+          target_interest: Database["public"]["Enums"]["crm_interest"] | null
+          target_organization_id: string
+          target_owner_id: string | null
+          target_priority: string
+          target_queue: string
+          target_scope: string
+          target_segment: string
+          target_source: Database["public"]["Enums"]["crm_source"] | null
+          target_stage: Database["public"]["Enums"]["crm_lead_stage"] | null
+          target_view: string
+        }
+        Returns: {
+          contact_id: string
+          priority_reason: string
+          priority_score: number
+          total_count: number
+        }[]
+      }
+      search_exness_agency_clients: {
+        Args: {
+          result_limit: number
+          result_offset: number
+          search_query: string
+          target_organization_id: string
+          target_status: string
+        }
+        Returns: {
+          account_id: string
+          account_number: string
+          account_type: string | null
+          country: string | null
+          crm_contact_id: string | null
+          external_client_id: string
+          is_active: boolean
+          last_activity_at: string | null
+          last_synced_at: string
+          registered_at: string | null
+          total_count: number
+        }[]
+      }
       send_team_chat_message_v2: {
         Args: {
           message_body: string
@@ -6401,7 +6486,13 @@ export type Database = {
         | "meta_business"
         | "email"
         | "other"
-      crm_identity_kind: "phone" | "email" | "telegram" | "tradingview"
+      crm_identity_kind:
+        | "phone"
+        | "email"
+        | "telegram"
+        | "tradingview"
+        | "instagram"
+        | "facebook"
       crm_interest:
         | "indicator"
         | "signals_gold"
@@ -6419,6 +6510,7 @@ export type Database = {
         | "won"
         | "lost"
         | "do_not_contact"
+      crm_trading_experience: "unknown" | "new" | "experienced"
       crm_source:
         | "manual"
         | "whales_zone"
@@ -6719,7 +6811,14 @@ export const Constants = {
         "email",
         "other",
       ],
-      crm_identity_kind: ["phone", "email", "telegram", "tradingview"],
+      crm_identity_kind: [
+        "phone",
+        "email",
+        "telegram",
+        "tradingview",
+        "instagram",
+        "facebook",
+      ],
       crm_interest: [
         "indicator",
         "signals_gold",
@@ -6739,6 +6838,7 @@ export const Constants = {
         "lost",
         "do_not_contact",
       ],
+      crm_trading_experience: ["unknown", "new", "experienced"],
       crm_source: [
         "manual",
         "whales_zone",

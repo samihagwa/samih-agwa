@@ -530,7 +530,7 @@ export function ContentWorkspace() {
           <div className="segmented-control" aria-label="تصفية المحتوى">{(["active", "scheduled", "archive"] as ContentFilter[]).map((value) => <button type="button" key={value} className={contentFilter === value ? "active" : ""} onClick={() => setContentFilter(value)}>{value === "active" ? "الحالي" : value === "scheduled" ? "المجدول" : "الأرشيف"}</button>)}</div>
           <button className="icon-button" type="button" aria-label="تحديث المحتوى" onClick={() => void refreshContent(workspace.organization.id)}><RefreshCw size={17} /></button>
           <Button href="/tasks" variant="secondary"><Route size={16} /> عرض كل المهام</Button>
-          {canCreateContentWorkflow ? <Button type="button" onClick={() => setShowQuickIntake((value) => !value)}><MessageSquareText size={16} /> طلب ريلز كامل</Button> : null}
+          {canCreateContentWorkflow ? <Button type="button" onClick={() => setShowQuickIntake((value) => !value)}><MessageSquareText size={16} /> طلب محتوى جديد</Button> : null}
         </div>
       </div>
 

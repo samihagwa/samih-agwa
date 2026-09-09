@@ -3,7 +3,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ContactRound, FileClock, Filter, FolderOpen, LoaderCircle, LockKeyhole, Plus, RefreshCw, Route, Search, ShieldCheck, Sparkles, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { crmInterestConfig, crmLeadStageConfig, crmLeadStages, crmSourceConfig, type CrmInterest, type CrmLeadStage, type CrmSource } from "../../lib/crm";
+import { crmInterestConfig, crmLeadStageConfig, crmLeadStages, crmSourceConfig, crmTradingExperienceConfig, type CrmInterest, type CrmLeadStage, type CrmSource } from "../../lib/crm";
 import { crmContactDeepLink, taskDeepLink } from "../../lib/deep-links";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Database, Tables } from "../../lib/supabase/database.types";
@@ -25,6 +25,7 @@ type ScopeFilter = "all" | "mine" | "overdue";
 type ViewFilter = "all" | "current" | "archive";
 type QueueFilter = "all" | "new" | "today" | "overdue" | "waiting" | "interested" | "converted" | "lost";
 type PriorityFilter = "all" | "high";
+type LeadSegment = "all" | "indicator" | "other";
 
 const PAGE_SIZE = 25;
 const crmProgressStages: Array<{ id: CrmLeadStage; label: string }> = [
@@ -78,6 +79,7 @@ export function CrmCustomerDirectory() {
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
+  const [leadSegment, setLeadSegment] = useState<LeadSegment>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
   const filterCloseRef = useRef<HTMLButtonElement>(null);
@@ -141,7 +143,7 @@ export function CrmCustomerDirectory() {
     setDirectoryLoading(true);
     setError(null);
     try {
-      const [searchResult, performanceResult] = await Promise.all([supabase.rpc("search_crm_contacts_v6", {
+      const [searchResult, performanceResult] = await Promise.all([supabase.rpc("search_crm_contacts_v7", {
         target_organization_id: organizationId,
         search_query: searchQuery,
         target_owner_id: (ownerFilter || null) as unknown as string,
@@ -152,6 +154,7 @@ export function CrmCustomerDirectory() {
         target_view: viewFilter,
         target_queue: queueFilter,
         target_priority: priorityFilter,
+        target_segment: leadSegment,
         result_limit: PAGE_SIZE,
         result_offset: page * PAGE_SIZE,
       }), manager
@@ -187,7 +190,7 @@ export function CrmCustomerDirectory() {
     } finally {
       setDirectoryLoading(false);
     }
-  }, [clearData, interestFilter, manager, ownerFilter, page, priorityFilter, queueFilter, scopeFilter, searchQuery, sourceFilter, stageFilter, viewFilter]);
+  }, [clearData, interestFilter, leadSegment, manager, ownerFilter, page, priorityFilter, queueFilter, scopeFilter, searchQuery, sourceFilter, stageFilter, viewFilter]);
 
   useEffect(() => {
     const clean = searchInput.trim();
@@ -248,8 +251,9 @@ export function CrmCustomerDirectory() {
 
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const hasFilters = Boolean(searchQuery || sourceFilter || interestFilter || stageFilter || ownerFilter || scopeFilter !== "all" || viewFilter !== "all" || queueFilter !== "all" || priorityFilter !== "all");
-  const salesPeople = workspace.people.filter((person) => salesOwnerIds.includes(person.id));
+  const hasFilters = Boolean(searchQuery || sourceFilter || interestFilter || stageFilter || ownerFilter || scopeFilter !== "all" || viewFilter !== "all" || queueFilter !== "all" || priorityFilter !== "all" || leadSegment !== "all");
+  const visibleSalesOwnerIds = new Set([...salesOwnerIds, ...(manager ? [session.user.id] : [])]);
+  const salesPeople = workspace.people.filter((person) => visibleSalesOwnerIds.has(person.id));
   const firstVisible = totalCount ? page * PAGE_SIZE + 1 : 0;
   const lastVisible = Math.min(totalCount, page * PAGE_SIZE + contacts.length);
   const visibleStages = crmLeadStages.filter((stage) => viewFilter === "all"
@@ -267,6 +271,7 @@ export function CrmCustomerDirectory() {
     setScopeFilter("all");
     setViewFilter("all");
     setPriorityFilter("all");
+    setLeadSegment("all");
     setPage(0);
   }
 
@@ -276,6 +281,14 @@ export function CrmCustomerDirectory() {
       <div className="toolbar-actions"><button className="icon-button" type="button" aria-label="تحديث دليل العملاء" disabled={directoryLoading} onClick={() => void refreshDirectory(workspace.organization.id)}><RefreshCw aria-hidden="true" className={directoryLoading ? "spin" : ""} size={17} /></button>{workspace.membership.role !== "viewer" ? <Button href="/crm/operations?add=1"><Plus aria-hidden="true" size={15} /> عميل جديد</Button> : null}<Button href="/crm/operations" variant="secondary"><Route aria-hidden="true" size={15} /> إعداد المتابعة</Button></div>
     </div>
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+
+    <nav className="crm-lead-segments" aria-label="فصل عملاء المؤشر عن باقي العملاء">
+      {([
+        ["all", "كل العملاء"],
+        ["indicator", "عملاء المؤشر"],
+        ["other", "باقي العملاء"],
+      ] as Array<[LeadSegment, string]>).map(([segment, label]) => <button type="button" className={leadSegment === segment ? "active" : ""} aria-current={leadSegment === segment ? "page" : undefined} onClick={() => { setLeadSegment(segment); setInterestFilter(""); setPage(0); }} key={segment}>{label}</button>)}
+    </nav>
 
     <nav className="crm-queue-tabs" aria-label="قوائم متابعة العملاء">
       {queueOptions.map((queue) => <button type="button" className={queueFilter === queue.id ? "active" : ""} aria-current={queueFilter === queue.id ? "page" : undefined} onClick={() => { setQueueFilter(queue.id); setPage(0); }} key={queue.id}>{queue.label}{queueFilter === queue.id ? <span>{totalCount.toLocaleString("ar-EG")}</span> : null}</button>)}
@@ -313,7 +326,7 @@ export function CrmCustomerDirectory() {
       </section>
     </div> : null}
 
-    {contacts.length ? <div className="crm-directory-table-wrap" role="region" aria-label="جدول العملاء"><table className="crm-directory-table"><thead><tr><th>#</th><th>العميل</th><th>المصدر</th><th>المسؤول</th><th>المرحلة</th><th>الأولوية</th><th>مستوى التقدم</th><th>المتابعة التالية</th><th>آخر تواصل</th><th><span className="sr-only">فتح الملف</span></th></tr></thead><tbody>{contacts.map((contact, index) => {
+    {contacts.length ? <div className="crm-directory-table-wrap" role="region" aria-label="جدول العملاء"><table className="crm-directory-table"><thead><tr><th>#</th><th>العميل</th><th>المصدر</th><th>خبرة التداول</th><th>المسؤول</th><th>المرحلة</th><th>الأولوية</th><th>مستوى التقدم</th><th>المتابعة التالية</th><th>آخر تواصل</th><th><span className="sr-only">فتح الملف</span></th></tr></thead><tbody>{contacts.map((contact, index) => {
       const contactIdentities = identitiesByContact.get(contact.id) ?? [];
       const openTask = (tasksByContact.get(contact.id) ?? []).find((task) => !["done", "cancelled"].includes(task.status));
       const overdue = Boolean(contact.next_follow_up_at && new Date(contact.next_follow_up_at).getTime() < renderNow && crmLeadStageConfig[contact.stage].active);
@@ -331,6 +344,7 @@ export function CrmCustomerDirectory() {
         <td data-label="#"><strong className="crm-directory-row-number">{page * PAGE_SIZE + index + 1}</strong></td>
         <td data-label="العميل"><a className="crm-directory-customer-link" href={crmContactDeepLink(contact.id)}><strong>{contact.full_name}</strong><small>{crmInterestConfig[contact.interest].label}</small></a><div className="crm-directory-identities">{contactIdentities.slice(0, 1).map((identity) => <span key={identity.id}><b dir="ltr">{identity.value}</b></span>)}</div></td>
         <td data-label="المصدر"><strong>{crmSourceConfig[contact.source].label}</strong>{contact.source_detail ? <small>{contact.source_detail}</small> : null}</td>
+        <td data-label="خبرة التداول"><strong>{crmTradingExperienceConfig[contact.trading_experience].label}</strong></td>
         <td data-label="المسؤول"><strong>{peopleById.get(contact.owner_id)?.name ?? "غير مسند للسيلز الحالي"}</strong></td>
         <td data-label="المرحلة"><StatusBadge tone={crmLeadStageConfig[contact.stage].tone}>{crmLeadStageConfig[contact.stage].shortLabel}</StatusBadge></td>
         <td data-label="الأولوية">{priority && priority.score >= 55 ? <span className="crm-priority-chip" title={priority.reason}><Sparkles aria-hidden="true" size={12} /> تواصل الآن</span> : <span className="crm-directory-muted">عادية</span>}</td>
@@ -338,8 +352,8 @@ export function CrmCustomerDirectory() {
         <td data-label="المتابعة التالية">{contact.next_follow_up_at ? <a href={openTask ? taskDeepLink(openTask.id) : crmContactDeepLink(contact.id)} className={overdue ? "crm-directory-overdue" : "crm-directory-next"}>{overdue ? <AlertTriangle aria-hidden="true" size={12} /> : <CalendarClock aria-hidden="true" size={12} />}<strong>{formatDate(contact.next_follow_up_at)}</strong></a> : <span className="crm-directory-muted"><FileClock aria-hidden="true" size={12} /> لا يوجد موعد</span>}</td>
         <td data-label="آخر تواصل">{contact.last_contacted_at ? <strong dir="ltr">{formatDate(contact.last_contacted_at)}</strong> : <span className="crm-directory-muted">لم يبدأ</span>}</td>
         <td data-label="التفاصيل"><button className="crm-row-expand" type="button" aria-expanded={expanded} aria-controls={`crm-row-${contact.id}`} aria-label={`${expanded ? "إغلاق" : "عرض"} تفاصيل ${contact.full_name}`} onClick={() => setExpandedContactId(expanded ? null : contact.id)}><ChevronDown aria-hidden="true" size={17} /></button></td>
-      </tr>{expanded ? <tr className="crm-directory-expanded-row"><td colSpan={10}><section id={`crm-row-${contact.id}`} className="crm-directory-expanded-content">
-        <div className="crm-expanded-facts"><div><span>بيانات التواصل</span>{contactIdentities.length ? contactIdentities.map((identity) => <strong dir="ltr" key={identity.id}>{identity.value}</strong>) : <strong>لا توجد بيانات</strong>}</div><div><span>المصدر والاهتمام</span><strong>{crmSourceConfig[contact.source].label} · {crmInterestConfig[contact.interest].label}</strong>{contact.source_detail ? <small>{contact.source_detail}</small> : null}</div><div><span>المسؤول</span><strong>{peopleById.get(contact.owner_id)?.name ?? "غير مسند للسيلز الحالي"}</strong></div><div><span>المتابعة</span><strong>{contact.next_follow_up_at ? formatDate(contact.next_follow_up_at) : "لا يوجد موعد"}</strong>{priority ? <small>{priority.reason}</small> : null}</div></div>
+      </tr>{expanded ? <tr className="crm-directory-expanded-row"><td colSpan={11}><section id={`crm-row-${contact.id}`} className="crm-directory-expanded-content">
+        <div className="crm-expanded-facts"><div><span>بيانات التواصل</span>{contactIdentities.length ? contactIdentities.map((identity) => <strong dir="ltr" key={identity.id}>{identity.value}</strong>) : <strong>لا توجد بيانات</strong>}</div><div><span>المصدر والاهتمام</span><strong>{crmSourceConfig[contact.source].label} · {crmInterestConfig[contact.interest].label}</strong>{contact.source_detail ? <small>{contact.source_detail}</small> : null}</div><div><span>خبرة التداول</span><strong>{crmTradingExperienceConfig[contact.trading_experience].label}</strong></div><div><span>المسؤول</span><strong>{peopleById.get(contact.owner_id)?.name ?? "غير مسند للسيلز الحالي"}</strong></div><div><span>المتابعة</span><strong>{contact.next_follow_up_at ? formatDate(contact.next_follow_up_at) : "لا يوجد موعد"}</strong>{priority ? <small>{priority.reason}</small> : null}</div></div>
         <div className="crm-expanded-actions">{openTask ? <Button href={taskDeepLink(openTask.id)} variant="secondary"><CalendarClock aria-hidden="true" size={14} /> فتح مهمة المتابعة</Button> : <span className="crm-directory-no-task"><CheckCircle2 aria-hidden="true" size={14} /> لا توجد متابعة مفتوحة</span>}<Button href={crmContactDeepLink(contact.id)}><FolderOpen aria-hidden="true" size={15} /> فتح ملف العميل</Button></div>
       </section></td></tr> : null}</Fragment>;
     })}</tbody></table></div> : <section className="panel empty-state"><span className="empty-visual"><ContactRound aria-hidden="true" size={20} /></span><div><h2>{hasFilters ? "لا توجد نتائج مطابقة" : "لا يوجد عملاء متاحون"}</h2><p>{hasFilters ? "غيّر البحث أو المصدر أو المرحلة أو المسؤول." : "سيظهر العملاء هنا بمجرد إضافتهم أو وصولهم من أحد المصادر المربوطة."}</p></div></section>}

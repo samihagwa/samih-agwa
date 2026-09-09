@@ -8,7 +8,7 @@ const sources = new Set([
   "market_whales_app", "exness", "tickmill", "referral", "other",
 ]);
 const interests = new Set(["indicator", "signals_gold", "signals_fx", "course", "brokerage", "book", "service", "other"]);
-const identityKinds = new Set(["phone", "email", "telegram", "tradingview"]);
+const identityKinds = new Set(["phone", "email", "telegram", "tradingview", "instagram", "facebook"]);
 const conversationChannels = new Set(["telegram", "whatsapp", "instagram", "facebook", "messenger", "tiktok", "meta_business", "email", "other"]);
 const consentStatuses = new Set(["unknown", "granted", "denied"]);
 const activityKinds = new Set(["call", "message", "email", "note"]);
@@ -16,6 +16,7 @@ const leadStages = new Set(["new", "contacted", "qualified", "follow_up", "won",
 const activeStages = new Set(["new", "contacted", "qualified", "follow_up"]);
 const leadTemperatures = new Set(["cold", "warm", "hot"]);
 const preferredContactMethods = new Set(["phone", "email", "telegram", "whatsapp", "instagram", "facebook", "messenger", "tiktok", "meta_business", "other"]);
+const tradingExperiences = new Set(["unknown", "new", "experienced"]);
 const leadershipRoles = new Set(["owner", "admin", "manager"]);
 const socialSources = new Set(["telegram", "meta", "facebook", "instagram", "tiktok", "meta_business", "whatsapp"]);
 
@@ -44,11 +45,12 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/Email identity is invalid/i, "البريد الإلكتروني غير صحيح."],
     [/Telegram username is invalid/i, "اسم مستخدم Telegram غير صحيح. اكتب اسم المستخدم فقط مثل @username، وضع لينك الشات في خانته المنفصلة."],
     [/TradingView identity is invalid/i, "اسم حساب TradingView غير صحيح."],
+    [/Social username is invalid/i, "اسم مستخدم Facebook أو Instagram غير صحيح. اكتب اسم المستخدم فقط بدون رابط."],
     [/already belongs/i, "وسيلة التواصل هذه مسجلة بالفعل لعميل آخر."],
     [/owner must be an active/i, "مسؤول المتابعة يجب أن يكون عضوًا نشطًا في مساحة العمل."],
     [/Only an active working member/i, "حسابك لا يملك صلاحية إضافة عميل محتمل."],
     [/Team members can create CRM leads for themselves only/i, "عضو الفريق يمكنه إسناد العميل لنفسه فقط."],
-    [/between one and four CRM contact identities/i, "أضف وسيلة واحدة على الأقل، وبحد أقصى هاتف وبريد وTelegram وTradingView."],
+    [/between one and six CRM contact identities/i, "أضف وسيلة واحدة على الأقل، وبحد أقصى وسيلة واحدة من كل نوع."],
     [/each CRM identity kind only once/i, "يمكن إضافة هاتف واحد وبريد واحد واسم Telegram واحد عند إنشاء الملف."],
     [/exactly one primary CRM identity/i, "اختر وسيلة تواصل أساسية واحدة."],
     [/Only the CRM owner or organization leadership/i, "إضافة وسيلة تواصل متاحة لمسؤول العميل أو إدارة الشركة فقط."],
@@ -70,6 +72,14 @@ function validIdentity(kind: string, value: string) {
   if (kind === "telegram") return /^[a-z0-9_]{5,32}$/i.test(value.replace(/^@/, ""));
   if (kind === "tradingview") return value.trim().length >= 3 && value.trim().length <= 100
     && !Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+  if (kind === "instagram" || kind === "facebook") {
+    const username = value.trim().replace(/^@/, "");
+    const hasForbiddenCharacter = Array.from(username).some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127 || /[\s/?#]/.test(character);
+    });
+    return username.length >= 3 && username.length <= 160 && !hasForbiddenCharacter;
+  }
   return false;
 }
 
@@ -92,7 +102,7 @@ function parseIdentities(body: Record<string, unknown>): ContactIdentity[] | nul
   }).filter((identity) => identity.kind || identity.value);
   const primaryKind = text(body.primary_identity_kind) || parsed[0]?.kind;
   for (const identity of parsed) identity.is_primary = identity.kind === primaryKind;
-  if (parsed.length < 1 || parsed.length > 4 || new Set(parsed.map((identity) => identity.kind)).size !== parsed.length) return null;
+  if (parsed.length < 1 || parsed.length > 6 || new Set(parsed.map((identity) => identity.kind)).size !== parsed.length) return null;
   if (parsed.filter((identity) => identity.is_primary).length !== 1) return null;
   return parsed;
 }
@@ -111,6 +121,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   const conversationChannel = text(body.conversation_channel);
   const conversationUrl = text(body.conversation_url);
   const conversationLabel = text(body.conversation_label);
+  const tradingExperience = text(body.trading_experience) || "unknown";
 
   if (!organizationId || fullName.length < 2 || fullName.length > 160 || !ownerId) {
     return jsonResponse({ message: "أكمل اسم العميل ومسؤول المتابعة." }, 400);
@@ -118,8 +129,11 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   if (!sources.has(source) || !interests.has(interest) || !consentStatuses.has(consentStatus)) {
     return jsonResponse({ message: "مصدر العميل أو اهتمامه أو حالة الموافقة غير صالحة." }, 400);
   }
+  if (!tradingExperiences.has(tradingExperience)) {
+    return jsonResponse({ message: "حدد هل العميل جديد في التداول أم لديه خبرة." }, 400);
+  }
   if (!identities || identities.some((identity) => !identityKinds.has(identity.kind) || identity.value.length < 3 || identity.value.length > 320)) {
-    return jsonResponse({ message: "أضف وسيلة تواصل واحدة على الأقل: هاتف أو بريد أو Telegram أو TradingView، بدون تكرار النوع." }, 400);
+    return jsonResponse({ message: "أضف وسيلة تواصل واحدة على الأقل، مثل الهاتف أو Facebook أو Instagram، بدون تكرار النوع." }, 400);
   }
   const invalidIdentity = identities.find((identity) => !validIdentity(identity.kind, identity.value));
   if (invalidIdentity) {
@@ -129,7 +143,9 @@ async function createLead(body: Record<string, unknown>, context: Context) {
         ? "البريد الإلكتروني غير صحيح."
         : invalidIdentity.kind === "tradingview"
           ? "اسم حساب TradingView غير صحيح."
-          : "رقم الهاتف غير صحيح. استخدم رقمًا من 7 إلى 16 رقمًا ويمكن أن يبدأ بعلامة +.";
+          : invalidIdentity.kind === "instagram" || invalidIdentity.kind === "facebook"
+            ? "اسم مستخدم Facebook أو Instagram غير صحيح. اكتب اسم المستخدم فقط بدون رابط."
+            : "رقم الهاتف غير صحيح. استخدم رقمًا من 7 إلى 16 رقمًا ويمكن أن يبدأ بعلامة +.";
     return jsonResponse({ message }, 400);
   }
   if (source === "other" && (sourceDetail.length < 2 || sourceDetail.length > 160)) {
@@ -172,14 +188,14 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     return jsonResponse({ message: "تعذّر التحقق من فريق السيلز. حاول مرة أخرى." }, 503);
   }
   const leadership = leadershipRoles.has(text(membershipResult.data?.role));
-  if (!ownerRouteResult.data) {
+  if (!ownerRouteResult.data && !(leadership && ownerId === actorId)) {
     return jsonResponse({ message: "مسؤول العميل يجب أن يكون ضمن فريق السيلز المحدد." }, 400);
   }
   if (!leadership && (ownerId !== actorId || !actorRouteResult.data)) {
     return jsonResponse({ message: "عضو السيلز يستطيع إضافة العميل لنفسه فقط." }, 403);
   }
 
-  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v3", {
+  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v4", {
     target_user_id: context!.userClaims!.id,
     target_organization_id: organizationId,
     contact_full_name: fullName,
@@ -190,6 +206,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     contact_owner_id: ownerId,
     contact_consent_status: consentStatus,
     contact_identities: identities,
+    contact_trading_experience: tradingExperience,
     initial_notes: text(body.notes),
     target_follow_up_at: followUpAt,
     target_conversation_channel: conversationChannel || null,
@@ -258,12 +275,13 @@ async function saveSalesProfile(body: Record<string, unknown>, context: Context)
   const contactId = text(body.contact_id);
   const expectedVersion = Number(body.expected_version ?? 0);
   const leadTemperature = text(body.lead_temperature) || "warm";
+  const tradingExperience = text(body.trading_experience) || "unknown";
   const preferredContactMethod = text(body.preferred_contact_method);
   const tags = Array.isArray(body.tags)
     ? body.tags.map((tag) => text(tag)).filter(Boolean)
     : [];
 
-  if (!contactId || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0 || !leadTemperatures.has(leadTemperature)) {
+  if (!contactId || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0 || !leadTemperatures.has(leadTemperature) || !tradingExperiences.has(tradingExperience)) {
     return jsonResponse({ message: "بيانات ملخص السيلز غير صالحة." }, 400);
   }
   if (preferredContactMethod && !preferredContactMethods.has(preferredContactMethod)) {
@@ -283,7 +301,7 @@ async function saveSalesProfile(body: Record<string, unknown>, context: Context)
     return jsonResponse({ message: "أحد حقول ملخص السيلز أطول من الحد المسموح." }, 400);
   }
 
-  const { data, error } = await context!.supabaseAdmin.rpc("save_crm_sales_profile", {
+  const { data, error } = await context!.supabaseAdmin.rpc("save_crm_sales_profile_v2", {
     target_user_id: context!.userClaims!.id,
     target_contact_id: contactId,
     expected_profile_version: expectedVersion,
@@ -294,6 +312,7 @@ async function saveSalesProfile(body: Record<string, unknown>, context: Context)
     target_objections: fields.objections,
     target_next_action: fields.next_action,
     target_tags: tags,
+    target_trading_experience: tradingExperience,
   });
   return commandError(error, "تعذّر حفظ ملخص السيلز.") ?? jsonResponse(data);
 }

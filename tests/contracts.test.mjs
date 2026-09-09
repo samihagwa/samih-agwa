@@ -850,7 +850,7 @@ test("content intake accepts generic raw-material web links while legacy Telegra
   assert.doesNotMatch(quickForm, /raw_material_sent/);
   assert.match(quickForm, /crypto\.randomUUID/);
   assert.doesNotMatch(quickForm, /content_goal|content_hook|content_cta|content_editing_brief/);
-  assert.match(workspace, /طلب ريلز كامل/);
+  assert.match(workspace, /طلب محتوى جديد/);
   assert.doesNotMatch(workspace, /طلب كامل من Telegram|إدخال يدوي/);
   assert.match(workspace, /content_timeline_cues/);
   assert.match(taskDetail, /content_items/);
@@ -1235,7 +1235,7 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(migration, /from public, anon, authenticated/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
-  assert.match(edgeFunction, /create_crm_lead_v3/);
+  assert.match(edgeFunction, /create_crm_lead_v4/);
   assert.match(edgeFunction, /add_crm_identity/);
   assert.match(contextMigration, /create table public\.crm_conversation_links/);
   assert.match(contextMigration, /alter table public\.crm_conversation_links enable row level security/);
@@ -2179,7 +2179,7 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.match(priorityMigration, /function public\.get_crm_owner_performance_v2/);
   assert.match(priorityMigration, /average_first_response_minutes/);
   for (const source of ["instagram", "tiktok", "meta_business"]) assert.match(socialMigration, new RegExp(`'${source}'`));
-  assert.match(directory, /rpc\("search_crm_contacts_v6"/);
+  assert.match(directory, /rpc\("search_crm_contacts_v7"/);
   assert.match(directory, /الأعلى للتواصل الآن/);
   assert.match(directory, /عميل جديد/);
   assert.match(directory, /get_crm_owner_performance_v2/);

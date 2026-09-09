@@ -9,8 +9,9 @@ import {
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   crmActivityKindConfig, crmConversationChannelConfig,
-  crmIdentityKindConfig, crmInterestConfig, crmLeadStageConfig, crmSourceConfig,
-  type CrmActivityKind, type CrmConversationChannel, type CrmIdentityKind,
+  crmIdentityKindConfig, crmIdentityKinds, crmInterestConfig, crmLeadStageConfig, crmSourceConfig,
+  crmTradingExperienceConfig,
+  type CrmActivityKind, type CrmConversationChannel,
   type CrmLeadStage,
 } from "../../lib/crm";
 import { crmContactReference, taskDeepLink, taskReference } from "../../lib/deep-links";
@@ -214,9 +215,9 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
   useEffect(() => {
     if (!data) return;
     const shouldComplete = new URLSearchParams(window.location.search).get("action") === "complete-follow-up";
-    setCompletingFollowUp(shouldComplete);
     if (!shouldComplete) return;
     const timer = window.setTimeout(() => {
+      setCompletingFollowUp(true);
       const resultSection = document.getElementById("follow-up-result");
       resultSection?.scrollIntoView({ behavior: "smooth", block: "start" });
       resultSection?.querySelector<HTMLTextAreaElement>('textarea[name="summary"]')?.focus({ preventScroll: true });
@@ -316,6 +317,7 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
       action: "save_sales_profile",
       contact_id: data.contact.id,
       expected_version: data.salesProfile?.version ?? 0,
+      trading_experience: formText(form, "trading_experience"),
       lead_temperature: formText(form, "lead_temperature"),
       preferred_contact_method: formText(form, "preferred_contact_method"),
       preferred_contact_time: formText(form, "preferred_contact_time"),
@@ -364,7 +366,7 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
   const directIdentity = identities.find((identity) => identity.is_primary && identityHref(identity)) ?? identities.find((identity) => identityHref(identity));
   const directLink = conversationLinks.find((link) => link.is_primary) ?? conversationLinks[0];
   const directHref = directLink?.url ?? (directIdentity ? identityHref(directIdentity) : null);
-  const remainingKinds = (["phone", "email", "telegram", "tradingview"] as CrmIdentityKind[]).filter((kind) => !identities.some((identity) => identity.kind === kind));
+  const remainingKinds = crmIdentityKinds.filter((kind) => !identities.some((identity) => identity.kind === kind));
   const customerStageIndex = customerProgressStages.findIndex((stage) => stage.id === contact.stage);
   const customerProgress: SegmentedProgressStep[] = customerProgressStages.map((stage, index) => ({
     id: stage.id,
@@ -401,6 +403,7 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
           <div className="section-heading compact"><div><p className="overline">بيانات العميل</p><h2>التواصل والتسجيل</h2></div><ContactRound size={19} /></div>
           <dl className="crm-customer-facts">
             {identities.map((identity) => <div key={identity.id}><dt>{crmIdentityKindConfig[identity.kind].label}{identity.is_primary ? " · أساسية" : ""}</dt><dd dir="ltr">{identity.value}</dd></div>)}
+            <div><dt>خبرة التداول</dt><dd>{crmTradingExperienceConfig[contact.trading_experience].label}</dd></div>
             <div><dt><CircleUserRound size={13} /> المسؤول</dt><dd>{peopleById.get(contact.owner_id)?.name ?? "عضو فريق"}</dd></div>
             <div><dt><FileClock size={13} /> تاريخ التسجيل</dt><dd>{formatDate(contact.source_registered_at ?? contact.created_at)}</dd></div>
           </dl>
@@ -442,6 +445,7 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
         <section className="panel crm-customer-section">
           <div className="section-heading compact"><div><p className="overline">ملخص السيلز</p><h2>المعلومة التي يحتاجها المسؤول</h2><p>حقول قليلة فقط تمنع ضياع الاحتياج والاعتراض والخطوة التالية.</p></div><UserRoundCheck size={19} /></div>
           {canAct ? <form className="crm-sales-profile-form" key={salesProfile?.version ?? 0} onSubmit={(event) => void saveSalesProfile(event)}>
+            <label><span>خبرة التداول</span><select name="trading_experience" defaultValue={contact.trading_experience}>{Object.entries(crmTradingExperienceConfig).map(([value, option]) => <option value={value} key={value}>{option.label}</option>)}</select></label>
             <label><span>درجة الاهتمام</span><select name="lead_temperature" defaultValue={salesProfile?.lead_temperature ?? "warm"}>{(Object.keys(temperatureConfig) as LeadTemperature[]).map((temperature) => <option value={temperature} key={temperature}>{temperatureConfig[temperature].label}</option>)}</select></label>
             <label><span>طريقة التواصل المفضلة</span><select name="preferred_contact_method" defaultValue={salesProfile?.preferred_contact_method ?? ""}><option value="">غير محددة</option>{Object.entries(preferredMethodLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
             <label><span>الوقت المفضل</span><input name="preferred_contact_time" maxLength={120} defaultValue={salesProfile?.preferred_contact_time ?? ""} placeholder="مثال: بعد 6 مساءً" /></label>

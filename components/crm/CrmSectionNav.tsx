@@ -5,7 +5,7 @@ import { Building2, LayoutList, Settings2 } from "lucide-react";
 
 const items = [
   { href: "/crm", label: "العملاء", icon: LayoutList },
-  { href: "/crm/exness", label: "فحص الوكالة", icon: Building2 },
+  { href: "/crm/exness", label: "عملاء الوكالة", icon: Building2 },
   { href: "/crm/operations", label: "إعداد المتابعة", icon: Settings2 },
 ];
 

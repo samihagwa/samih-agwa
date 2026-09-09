@@ -40,12 +40,14 @@ import {
   crmLeadStageConfig,
   crmLeadStages,
   crmSourceConfig,
+  crmTradingExperienceConfig,
   type CrmActivityKind,
   type CrmConversationChannel,
   type CrmIdentityKind,
   type CrmInterest,
   type CrmLeadStage,
   type CrmSource,
+  type CrmTradingExperience,
 } from "../../lib/crm";
 import { parseTelegramCustomerImport, parseWhalesZoneSheetImport, type TelegramImportPreview, type TelegramImportSignal } from "../../lib/crm-import";
 import { crmContactDeepLink, currentUuidDeepLink, taskDeepLink, taskReference } from "../../lib/deep-links";
@@ -174,6 +176,7 @@ export function CrmWorkspace() {
   const [source, setSource] = useState<CrmSource>("manual");
   const [interest, setInterest] = useState<CrmInterest>("indicator");
   const [conversationChannel, setConversationChannel] = useState<CrmConversationChannel | "">("");
+  const [tradingExperience, setTradingExperience] = useState<CrmTradingExperience>("unknown");
   const [filter, setFilter] = useState<Filter>("all");
   const [ownerFilter, setOwnerFilter] = useState("");
   const [stageFilter, setStageFilter] = useState<CrmLeadStage | "">("");
@@ -448,6 +451,15 @@ export function CrmWorkspace() {
     };
   }, [showCreate, showImport]);
 
+  useEffect(() => {
+    if (!workspace || workspace.membership.role === "viewer" || showCreate) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("add") !== "1") return;
+    setShowCreate(true);
+    url.searchParams.delete("add");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [showCreate, workspace]);
+
   const identitiesByContact = useMemo(() => {
     const grouped = new Map<string, Identity[]>();
     for (const identity of identities) grouped.set(identity.contact_id, [...(grouped.get(identity.contact_id) ?? []), identity]);
@@ -529,10 +541,10 @@ export function CrmWorkspace() {
     const identities = crmIdentityKinds
       .map((kind) => ({ kind, value: formText(form, `identity_${kind}`) }))
       .filter((identity) => identity.value);
-    if (!identities.length) return setError("أضف وسيلة تواصل واحدة على الأقل: هاتف أو بريد أو Telegram أو TradingView.");
-    if (!identities.some((identity) => identity.kind === primaryIdentityKind)) {
-      return setError(`املأ ${crmIdentityKindConfig[primaryIdentityKind].label} أو اختر وسيلة أخرى كأساسية.`);
-    }
+    if (!identities.length) return setError("أضف وسيلة تواصل واحدة على الأقل: هاتف أو بريد أو Facebook أو Instagram.");
+    const resolvedPrimaryKind = identities.some((identity) => identity.kind === primaryIdentityKind)
+      ? primaryIdentityKind
+      : identities[0].kind;
     const socialSources = new Set<CrmSource>(["facebook", "instagram", "tiktok", "meta", "meta_business", "telegram", "whatsapp"]);
     if (socialSources.has(source) && (!formText(form, "conversation_channel") || !formText(form, "conversation_url"))) {
       return setError("مصدر العميل منصة تواصل؛ اختر المنصة والصق لينك الشات عشان المسؤول يوصله مباشرة.");
@@ -548,7 +560,8 @@ export function CrmWorkspace() {
       owner_id: requestedOwnerId || session.user.id,
       consent_status: formText(form, "consent_status"),
       identities,
-      primary_identity_kind: primaryIdentityKind,
+      primary_identity_kind: resolvedPrimaryKind,
+      trading_experience: tradingExperience,
       follow_up_at: followUpAt,
       notes: formText(form, "notes"),
       conversation_channel: formText(form, "conversation_channel"),
@@ -561,6 +574,7 @@ export function CrmWorkspace() {
       setSource("manual");
       setInterest("indicator");
       setConversationChannel("");
+      setTradingExperience("unknown");
       setShowCreate(false);
     }
   }
@@ -733,13 +747,12 @@ export function CrmWorkspace() {
   const canCreate = workspace.membership.role !== "viewer";
   const peopleById = new Map(workspace.people.map((person) => [person.id, person]));
   const selectedSalesMembers = leadRoutingMembers.filter((member) => selectedSalesIds.includes(member.user_id));
-  const performanceSalesPeople = ownerPerformance.flatMap((metric) => {
-    const person = peopleById.get(metric.owner_id);
-    return person ? [{ id: person.id, name: person.name }] : [];
-  });
+  const selfSalesPerson = workspace.people.find((person) => person.id === session.user.id);
   const salesPeople = platformAdmin
-    ? selectedSalesMembers.map((member) => ({ id: member.user_id, name: member.full_name }))
-    : performanceSalesPeople;
+    ? selectedSalesMembers.length
+      ? selectedSalesMembers.map((member) => ({ id: member.user_id, name: member.full_name }))
+      : selfSalesPerson ? [{ id: selfSalesPerson.id, name: selfSalesPerson.name }] : []
+    : selfSalesPerson ? [{ id: selfSalesPerson.id, name: selfSalesPerson.name }] : [];
   const totals = {
     all: Number(crmSummary?.total_contacts ?? totalCount),
     overdue: Number(crmSummary?.overdue_contacts ?? 0),
@@ -831,13 +844,14 @@ export function CrmWorkspace() {
       <div className="crm-safety-note"><ShieldCheck size={18} /><div><strong>لن تُرسل أي رسالة</strong><p>هذا الإدخال يحفظ الملف ويضيف مهمة متابعة فقط. الاستيراد والتواصل التلقائي غير مفعّلين.</p></div></div>
       <div className="form-grid">
         <label><span>اسم العميل المحتمل</span><input ref={createNameInputRef} name="full_name" minLength={2} maxLength={160} required placeholder="الاسم كما تعرفه" /></label>
-        <label><span>مصدر التسجيل</span><select name="source" value={source} onChange={(event) => setSource(event.target.value as CrmSource)}>{(Object.keys(crmSourceConfig) as CrmSource[]).map((option) => <option value={option} key={option}>{crmSourceConfig[option].label}</option>)}</select><small>اختر «مصدر مخصص» لإضافة أي مصدر جديد.</small></label>
+        <label><span>مصدر التسجيل</span><select name="source" value={source} onChange={(event) => { const nextSource = event.target.value as CrmSource; setSource(nextSource); if (nextSource === "facebook" || nextSource === "instagram") setConversationChannel(nextSource); }}>{(Object.keys(crmSourceConfig) as CrmSource[]).map((option) => <option value={option} key={option}>{crmSourceConfig[option].label}</option>)}</select><small>اختر «مصدر مخصص» لإضافة أي مصدر جديد.</small></label>
         {source === "other" ? <label><span>اسم المصدر الجديد</span><input name="source_detail" minLength={2} maxLength={160} required placeholder="مثال: Webinar أغسطس" /></label> : null}
         <label><span>سبب التسجيل / الاهتمام</span><select name="interest" value={interest} onChange={(event) => setInterest(event.target.value as CrmInterest)}>{(Object.keys(crmInterestConfig) as CrmInterest[]).map((option) => <option value={option} key={option}>{crmInterestConfig[option].label}</option>)}</select><small>اختر «سبب آخر» لكتابة خدمة أو حملة جديدة.</small></label>
         {interest === "other" ? <label><span>سبب التسجيل الجديد</span><input name="interest_detail" minLength={2} maxLength={160} required placeholder="مثال: حضور ويبنار التحليل الفني" /></label> : null}
         <label><span>حالة الموافقة على التواصل</span><select name="consent_status" defaultValue="unknown"><option value="unknown">غير معروفة</option><option value="granted">وافق</option></select><small>إذا رفض لاحقًا، أغلقه بنتيجة «عدم تواصل».</small></label>
+        <label><span>خبرة العميل في التداول</span><select value={tradingExperience} onChange={(event) => setTradingExperience(event.target.value as CrmTradingExperience)}>{(Object.keys(crmTradingExperienceConfig) as CrmTradingExperience[]).map((value) => <option value={value} key={value}>{crmTradingExperienceConfig[value].label}</option>)}</select><small>يمكن تركها «لم تُحدّد» وتحديثها بعد أول تواصل.</small></label>
         <fieldset className="crm-identities-fieldset full-field"><legend>وسائل التواصل والحسابات — املأ واحدة أو أكثر</legend><div>{crmIdentityKinds.map((kind) => <label key={kind}><span>{crmIdentityKindConfig[kind].label}</span><input name={`identity_${kind}`} type={crmIdentityKindConfig[kind].inputType} dir="ltr" minLength={3} maxLength={kind === "tradingview" ? 100 : 320} placeholder={crmIdentityKindConfig[kind].placeholder} /></label>)}</div><label className="crm-primary-select"><span>وسيلة التواصل الأساسية</span><select value={primaryIdentityKind} onChange={(event) => setPrimaryIdentityKind(event.target.value as CrmIdentityKind)}>{crmIdentityKinds.map((kind) => <option value={kind} key={kind}>{crmIdentityKindConfig[kind].label}</option>)}</select></label><small>الأساسية تظهر أولًا، وجميع القيم—including TradingView—تدخل في البحث ومنع التكرار.</small></fieldset>
-        <label><span>منصة المحادثة المباشرة — مهمة جدًا</span><select name="conversation_channel" value={conversationChannel} onChange={(event) => setConversationChannel(event.target.value as CrmConversationChannel | "")} required={["facebook", "instagram", "tiktok", "meta", "meta_business", "telegram", "whatsapp"].includes(source)}><option value="">بدون لينك حاليًا</option>{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select><small>إجباري عند تسجيل العميل من منصة اجتماعية.</small></label>
+        <label><span>منصة المحادثة الأساسية</span><select name="conversation_channel" value={conversationChannel} onChange={(event) => setConversationChannel(event.target.value as CrmConversationChannel | "")} required={["facebook", "instagram", "tiktok", "meta", "meta_business", "telegram", "whatsapp"].includes(source)}><option value="">بدون لينك حاليًا</option>{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select><small>Facebook وInstagram وWhatsApp وTelegram وباقي قنوات التواصل متاحة هنا.</small></label>
         {conversationChannel ? <label><span>لينك شات {crmConversationChannelConfig[conversationChannel].label}</span><input name="conversation_url" type="url" dir="ltr" maxLength={2000} required placeholder={crmConversationChannelConfig[conversationChannel].placeholder} /><small>الصق لينكًا كاملًا يبدأ بـ https://</small></label> : null}
         {manager ? <label><span>مسؤول متابعة السيلز</span><select name="owner_id" defaultValue={salesPeople[0]?.id ?? ""} required><option value="" disabled>{salesPeople.length ? "اختر مسؤول السيلز" : "أضف فريق السيلز أولًا"}</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select><small>{salesPeople.length ? "القائمة تعرض فريق السيلز المختار فقط." : "لن يُسند العميل تلقائيًا لأي عضو خارج فريق السيلز."}</small></label> : <input name="owner_id" type="hidden" value={session.user.id} />}
         <label><span>موعد أول متابعة</span><input name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /></label>

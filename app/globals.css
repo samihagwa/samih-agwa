@@ -3547,6 +3547,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 .crm-directory-workspace > .workspace-toolbar { margin: 0; padding: 4px 0 10px; border-bottom: 1px solid var(--line); }
 .crm-directory-workspace > .workspace-toolbar h1 { margin: 2px 0; font-size: 30px; font-weight: 500; }
 .crm-directory-workspace > .workspace-toolbar p:not(.overline) { margin: 0; color: var(--ink-500); font-size: 12px; }
+.crm-lead-segments { min-width: 0; padding: 3px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); }
+.crm-lead-segments button { min-height: 42px; padding: 8px 12px; border: 0; border-radius: 3px; background: transparent; color: var(--ink-600); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+.crm-lead-segments button:hover { color: var(--ink-950); background: rgba(255, 255, 255, .58); }
+.crm-lead-segments button.active { background: var(--paper); color: var(--ink-950); font-weight: 700; box-shadow: inset 0 -3px 0 var(--yellow-500), 0 1px 3px rgba(20, 29, 34, .06); }
 .crm-queue-tabs { min-width: 0; padding: 3px; display: flex; gap: 2px; overflow-x: auto; border: 1px solid var(--line); background: var(--paper); scrollbar-width: thin; }
 .crm-queue-tabs button { min-width: max-content; min-height: 38px; padding: 7px 12px; border: 0; background: transparent; color: var(--ink-600); }
 .crm-queue-tabs button.active { color: var(--ink-950); }
@@ -3692,6 +3696,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 .exness-account-expanded dl > div { min-width: 0; display: grid; gap: 4px; }
 .exness-account-expanded dt { color: var(--ink-500); font-size: 11px; }
 .exness-account-expanded dd { margin: 0; color: var(--ink-950); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.exness-sales-expanded { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+.exness-sales-expanded dl { flex: 1; }
+.exness-sales-expanded .crm-file-link { flex: 0 0 auto; }
 .exness-sync-history { border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
 .exness-sync-history > summary { min-height: 47px; padding: 10px 13px; display: flex; align-items: center; gap: 7px; color: var(--ink-800); font-size: 13px; font-weight: 500; cursor: pointer; list-style: none; }
 .exness-sync-history > summary::-webkit-details-marker { display: none; }
@@ -3711,6 +3718,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 }
 
 @media (max-width: 760px) {
+  .crm-lead-segments { grid-template-columns: 1fr; }
   .exness-agency-header { align-items: stretch; }
   .exness-agency-header h1 { font-size: 24px; }
   .exness-agency-header .toolbar-actions .button { flex: 1; }
@@ -3739,6 +3747,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
   .exness-account-expanded > td::before { display: none; }
   .exness-account-expanded > td > div { padding: 14px 12px; }
   .exness-account-expanded dl { grid-template-columns: 1fr; gap: 12px; }
+  .exness-sales-expanded { align-items: stretch; flex-direction: column; }
+  .exness-sales-expanded .crm-file-link { justify-content: center; }
   .exness-sync-history li { grid-template-columns: auto 1fr; }
   .exness-sync-history li > span, .exness-sync-history li > small { grid-column: 1 / -1; }
 }

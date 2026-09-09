@@ -7,6 +7,7 @@ export type CrmIdentityKind = Database["public"]["Enums"]["crm_identity_kind"];
 export type CrmConversationChannel = Database["public"]["Enums"]["crm_conversation_channel"];
 export type CrmConsentStatus = Database["public"]["Enums"]["crm_consent_status"];
 export type CrmActivityKind = Database["public"]["Enums"]["crm_activity_kind"];
+export type CrmTradingExperience = Database["public"]["Enums"]["crm_trading_experience"];
 
 type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -83,9 +84,17 @@ export const crmIdentityKindConfig: Record<CrmIdentityKind, { label: string; pla
   email: { label: "البريد الإلكتروني", placeholder: "name@example.com", inputType: "email" },
   telegram: { label: "اسم مستخدم Telegram", placeholder: "@username", inputType: "text" },
   tradingview: { label: "حساب TradingView", placeholder: "TradingView username", inputType: "text" },
+  instagram: { label: "اسم مستخدم Instagram", placeholder: "@username", inputType: "text" },
+  facebook: { label: "اسم مستخدم Facebook", placeholder: "profile.username", inputType: "text" },
 };
 
 export const crmIdentityKinds = Object.keys(crmIdentityKindConfig) as CrmIdentityKind[];
+
+export const crmTradingExperienceConfig: Record<CrmTradingExperience, { label: string }> = {
+  unknown: { label: "لم تُحدّد بعد" },
+  new: { label: "جديد في التداول" },
+  experienced: { label: "لديه خبرة في التداول" },
+};
 
 export const crmConsentConfig: Record<CrmConsentStatus, { label: string; tone: Tone }> = {
   unknown: { label: "الموافقة غير معروفة", tone: "neutral" },
