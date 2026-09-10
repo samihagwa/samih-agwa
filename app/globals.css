@@ -3677,10 +3677,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 .auth-mode-tabs button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 3px; background: transparent; color: var(--ink-600); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
 
 /* Market Whales OS v75 — secure Exness agency bridge and owner report. */
-.exness-agency-workspace { min-width: 0; display: grid; gap: 14px; }
+.exness-agency-workspace { width: min(100%, 1080px); min-width: 0; margin-inline: auto; display: grid; gap: 14px; }
 .exness-agency-header { margin: 0; padding: 4px 0 12px; border-bottom: 1px solid var(--line); }
 .exness-agency-header h1 { margin: 2px 0; font-size: 30px; font-weight: 500; }
-.exness-agency-header p:not(.overline) { margin: 0; color: var(--ink-500); font-size: 12px; }
 .exness-lookup-panel { padding: 20px; display: grid; grid-template-columns: minmax(210px, .7fr) minmax(340px, 1fr); align-items: end; gap: 16px 22px; border: 1px solid var(--line); border-top: 4px solid var(--yellow-500); border-radius: 5px; background: var(--paper); }
 .exness-lookup-panel h2 { margin: 3px 0 5px; font-size: 21px; font-weight: 500; }
 .exness-lookup-panel > div > p:not(.overline) { margin: 0; color: var(--ink-500); font-size: 12px; line-height: 1.7; }
@@ -3696,6 +3695,12 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 .exness-lookup-result.success { border-color: #c6e6d4; background: var(--green-100); color: var(--green-700); }
 .exness-lookup-result.warning { border-color: #f2dc82; background: var(--amber-100); color: var(--amber-700); }
 .exness-lookup-result.danger { border-color: #efc4bf; background: var(--red-100); color: var(--red-700); }
+.exness-linked-toggle { grid-column: 1 / -1; min-height: 46px; padding: 10px 13px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface-soft); color: var(--ink-850); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.exness-linked-toggle:hover { background: var(--paper); }
+.exness-linked-toggle:focus-visible { outline: 3px solid color-mix(in srgb, var(--yellow-500) 46%, transparent); outline-offset: 2px; }
+.exness-linked-toggle svg { flex: 0 0 auto; transition: transform .16s ease; }
+.exness-linked-toggle svg.expanded { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .exness-linked-toggle svg { transition: none; } }
 .exness-related-accounts { grid-column: 1 / -1; padding-top: 15px; display: grid; gap: 10px; border-top: 1px solid var(--line); }
 .exness-related-accounts h3 { margin: 2px 0; font-size: 17px; font-weight: 550; }
 .exness-related-accounts > div > small { color: var(--ink-500); font-size: 11px; font-variant-numeric: tabular-nums; }

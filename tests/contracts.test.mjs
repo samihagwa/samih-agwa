@@ -1335,6 +1335,8 @@ test("Exness agency foundation separates owner financial data from Sales lookup"
   assert.match(edgeFunction, /onConflict: "integration_id,account_number"/);
   assert.match(edgeFunction, /ACCOUNT_NUMBER_PATTERN/);
   assert.match(edgeFunction, /accountsByNumber = new Map/);
+  assert.match(edgeFunction, /duplicate_source_rows: duplicateSourceRows/);
+  assert.match(edgeFunction, /const invalidRows = normalizedResults\.length - normalizedAccounts\.length/);
   assert.match(edgeFunction, /fetched_rows: rawAccounts\.length/);
   assert.match(edgeFunction, /action: "broker\.exness_synced"/);
   assert.match(bridgeMigration, /function public\.get_exness_agency_summary/);
@@ -1345,10 +1347,12 @@ test("Exness agency foundation separates owner financial data from Sales lookup"
   assert.match(privacyMigration, /grant execute on function public\.search_exness_agency_clients[^;]+to service_role/is);
   assert.match(settingsWorkspace, /المالك يرى الحسابات واللوتات والعمولة/);
   assert.match(agencyWorkspace, /هل الحساب تحت وكالتنا؟/);
-  assert.match(agencyWorkspace, /دون إظهار أي لوتات أو عمولات للسيلز/);
-  assert.match(agencyWorkspace, /كل الحسابات/);
+  assert.match(agencyWorkspace, /كل بحث يراجع Exness مباشرةً ويحدّث قاعدة البيانات/);
+  assert.match(agencyWorkspace, /الحسابات المرتبطة بنفس العميل/);
   assert.match(agencyWorkspace, /Client UID/);
-  assert.match(agencyWorkspace, /كل حسابات العميل المرتبطة/);
+  assert.match(agencyWorkspace, /إظهار كل حسابات العميل/);
+  assert.match(agencyWorkspace, /showRelatedAccounts/);
+  assert.doesNotMatch(agencyWorkspace, /إجمالي العمولة|حجم التداول|مزامنة الآن|سجل المزامنة/);
   assert.doesNotMatch(agencyWorkspace, /supabase\.rpc\("search_exness_agency_clients"/);
   assert.match(crmNav, /href: "\/crm\/exness"/);
   assert.match(config, /\[functions\.broker-commands\]\s+verify_jwt = true/);

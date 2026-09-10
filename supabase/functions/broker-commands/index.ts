@@ -75,7 +75,7 @@ async function exnessRequest(path: string, init: RequestInit = {}, authenticatio
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
   try {
-    const response = await fetch(`${EXNESS_BASE_URL}${path}`, { ...init, signal: controller.signal });
+    const response = await fetch(`${EXNESS_BASE_URL}${path}`, { ...init, cache: "no-store", signal: controller.signal });
     const rawPayload = await response.json().catch(() => null);
     if (!response.ok) {
       const providerMessage = text(object(rawPayload)?.message ?? object(rawPayload)?.detail);
@@ -297,7 +297,12 @@ export default {
           action: "broker.exness_lookup_refreshed",
           entity_type: "broker_integration",
           entity_id: lookupIntegration.id,
-          after_data: { source: "official_partnership_api", matched_accounts: relatedAccounts.length },
+          after_data: {
+            source: "official_partnership_api",
+            source_rows: rawAccounts.length,
+            matched_source_rows: relatedRawAccounts.length,
+            matched_accounts: relatedAccounts.length,
+          },
         });
         const primary = relatedAccounts.find((account) => account.account_number === lookupValue) ?? relatedAccounts[0] ?? null;
         return jsonResponse({
@@ -397,13 +402,17 @@ export default {
         rawAccounts.map((raw) => normalizeAccount(raw, organizationId, integration.id, startedAt, statusByClient)),
       );
       const normalizedAccounts = normalizedResults.filter((account): account is NormalizedAccount => account !== null);
+      const uniqueClientAccountRows = new Set(
+        normalizedAccounts.map((account) => `${account.external_client_id}\u0000${account.account_number}`),
+      ).size;
+      const invalidRows = normalizedResults.length - normalizedAccounts.length;
+      const duplicateSourceRows = normalizedAccounts.length - uniqueClientAccountRows;
       const accountsByNumber = new Map<string, NormalizedAccount>();
       for (const account of normalizedAccounts) accountsByNumber.set(account.account_number, account);
       const accounts = Array.from(accountsByNumber.values());
-      const errorRows = rawAccounts.length - accounts.length;
       await context.supabaseAdmin.from("broker_sync_runs").update({
         fetched_rows: rawAccounts.length,
-        error_rows: errorRows,
+        error_rows: invalidRows,
       }).eq("id", syncRun.id);
       for (let offset = 0; offset < accounts.length; offset += SYNC_BATCH_SIZE) {
         const batch = accounts.slice(offset, offset + SYNC_BATCH_SIZE);
@@ -426,7 +435,7 @@ export default {
         status: "completed",
         fetched_rows: rawAccounts.length,
         upserted_rows: accounts.length,
-        error_rows: errorRows,
+        error_rows: invalidRows,
         completed_at: completedAt,
       }).eq("id", syncRun.id);
       await context.supabaseAdmin.from("broker_integrations").update({
@@ -434,7 +443,7 @@ export default {
         base_url: EXNESS_BASE_URL,
         account_lookup_enabled: true,
         last_sync_at: startedAt,
-        last_error: errorRows ? `تم تجاهل ${errorRows} سجل حساب غير صالح.` : null,
+        last_error: invalidRows ? `تم تجاهل ${invalidRows} سجل حساب غير صالح.` : null,
       }).eq("id", integration.id);
       await context.supabaseAdmin.from("audit_events").insert({
         organization_id: organizationId,
@@ -447,8 +456,11 @@ export default {
           source: "official_partnership_api",
           fetched_rows: rawAccounts.length,
           fetched_clients: rawClients.length,
+          normalized_rows: normalizedAccounts.length,
+          unique_client_account_rows: uniqueClientAccountRows,
+          duplicate_source_rows: duplicateSourceRows,
           upserted_rows: accounts.length,
-          error_rows: errorRows,
+          error_rows: invalidRows,
         },
       });
       return jsonResponse({
@@ -458,7 +470,8 @@ export default {
           fetched_rows: rawAccounts.length,
           fetched_clients: rawClients.length,
           upserted_rows: accounts.length,
-          error_rows: errorRows,
+          duplicate_source_rows: duplicateSourceRows,
+          error_rows: invalidRows,
           completed_at: completedAt,
         },
       });

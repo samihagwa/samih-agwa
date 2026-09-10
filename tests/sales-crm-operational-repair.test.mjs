@@ -43,7 +43,7 @@ test("CRM directory exposes one clear set of customer views and trading-experien
   assert.match(directory, /search_crm_contacts_v8/);
 });
 
-test("agency customers are visible to CRM sales without financial data", async () => {
+test("agency account lookup is available to CRM sales without a financial directory", async () => {
   const [migration, workspace, nav] = await Promise.all([
     read("../supabase/migrations/20260909010100_sales_crm_operational_repair.sql"),
     read("../components/crm/ExnessAgencyWorkspace.tsx"),
@@ -52,8 +52,10 @@ test("agency customers are visible to CRM sales without financial data", async (
 
   assert.match(migration, /create or replace function public\.search_exness_agency_clients/);
   assert.doesNotMatch(migration.match(/create or replace function public\.search_exness_agency_clients[\s\S]*?revoke all/)?.[0] ?? "", /commission|lots/);
-  assert.match(workspace, /search_exness_agency_clients/);
-  assert.match(workspace, /عملاء Exness الحاليون تحت الوكالة/);
+  assert.match(workspace, /lookup_exness_account/);
+  assert.match(workspace, /إظهار كل حسابات العميل/);
+  assert.doesNotMatch(workspace, /search_exness_agency_clients/);
+  assert.doesNotMatch(workspace, /إجمالي العمولة|حجم التداول|مزامنة الآن|سجل المزامنة/);
   assert.match(nav, /عملاء الوكالة/);
 });
 
