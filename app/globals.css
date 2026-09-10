@@ -3696,6 +3696,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 .exness-lookup-result.success { border-color: #c6e6d4; background: var(--green-100); color: var(--green-700); }
 .exness-lookup-result.warning { border-color: #f2dc82; background: var(--amber-100); color: var(--amber-700); }
 .exness-lookup-result.danger { border-color: #efc4bf; background: var(--red-100); color: var(--red-700); }
+.exness-related-accounts { grid-column: 1 / -1; padding-top: 15px; display: grid; gap: 10px; border-top: 1px solid var(--line); }
+.exness-related-accounts h3 { margin: 2px 0; font-size: 17px; font-weight: 550; }
+.exness-related-accounts > div > small { color: var(--ink-500); font-size: 11px; font-variant-numeric: tabular-nums; }
+.exness-related-accounts .exness-account-table { min-width: 680px; }
 .exness-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
 .exness-summary-grid article { min-width: 0; min-height: 106px; padding: 17px 18px; display: grid; grid-template-columns: 1fr auto; align-content: center; gap: 6px 10px; border-inline-start: 1px solid var(--line); }
 .exness-summary-grid article:first-child { border-inline-start: 0; }

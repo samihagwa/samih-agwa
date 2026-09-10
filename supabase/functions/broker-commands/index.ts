@@ -10,6 +10,8 @@ const SYNC_BATCH_SIZE = 250;
 const EXNESS_BASE_URL = "https://my.exnessaffiliates.com";
 const EXNESS_PAGE_SIZE = 500;
 const EXNESS_MAX_PAGES = 100;
+const ACCOUNT_NUMBER_PATTERN = /^[A-Za-z0-9._-]{3,80}$/;
+const CLIENT_ID_PATTERN = /^[A-Za-z0-9._-]{1,160}$/;
 
 type JsonRecord = Record<string, unknown>;
 type NormalizedAccount = {
@@ -40,6 +42,12 @@ function jsonResponse(body: unknown, status = 200) {
 
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function identifier(value: unknown) {
+  if (typeof value === "string") return value.replaceAll("\u0000", "").trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
 }
 
 function object(value: unknown): JsonRecord | null {
@@ -156,9 +164,9 @@ async function normalizeAccount(
   const raw = object(rawValue);
   if (!raw) return null;
   const data = raw;
-  const accountNumber = text(data.client_account ?? data.account_number);
-  const externalClientId = text(data.client_uid ?? data.external_client_id) || accountNumber;
-  if (!LOOKUP_PATTERN.test(accountNumber) || !LOOKUP_PATTERN.test(externalClientId)) return null;
+  const accountNumber = identifier(data.client_account ?? data.account_number);
+  const externalClientId = identifier(data.client_uid ?? data.external_client_id) || accountNumber;
+  if (!ACCOUNT_NUMBER_PATTERN.test(accountNumber) || !CLIENT_ID_PATTERN.test(externalClientId)) return null;
   const currencyCandidate = text(data.currency ?? data.commission_currency).toUpperCase();
   const currency = /^[A-Z]{3,8}$/.test(currencyCandidate) ? currencyCandidate : "USD";
   const status = (statusByClient.get(externalClientId) || text(data.client_status ?? data.status)).toLowerCase();
@@ -185,14 +193,17 @@ async function normalizeAccount(
     registeredAt: isoDate(data.client_account_created ?? data.reg_date ?? data.registered_at),
     lastActivityAt: isoDate(data.client_account_last_trade ?? data.trade_fn ?? data.last_activity_at),
   });
-  const activeStatuses = new Set(["active", "enabled", "activated"]);
+  const inactiveStatuses = new Set(["inactive", "disabled", "deactivated", "blocked", "archived", "closed", "suspended"]);
   return {
     organization_id: organizationId,
     integration_id: integrationId,
     external_client_id: externalClientId,
     account_number: accountNumber,
     client_profile: clientProfile,
-    is_active: activeStatuses.has(status),
+    // The official account report is itself the current agency-membership source.
+    // Exness currently omits a status value for ordinary linked accounts, so an
+    // absent/unknown status must not turn every returned account into inactive.
+    is_active: !inactiveStatuses.has(status),
     lots: Math.max(0, finiteNumber(data.volume_lots ?? data.lots)),
     commission: finiteNumber(data.reward_usd ?? data.commission),
     commission_currency: currency,
@@ -225,17 +236,88 @@ export default {
     if (action === "lookup_exness_account") {
       const lookupValue = text(body.lookup_value);
       if (!LOOKUP_PATTERN.test(lookupValue)) return jsonResponse({ message: "اكتب رقم حساب أو معرّف عميل صحيحًا." }, 400);
-      const { data, error } = await context.supabaseAdmin.rpc("lookup_exness_account", {
-        target_user_id: context.userClaims.id,
-        target_organization_id: organizationId,
-        lookup_value: lookupValue,
-      });
-      if (error) {
-        if (/CRM access is required/i.test(error.message)) return jsonResponse({ message: "حسابك غير مصرح له ببحث الوكالة." }, 403);
-        if (/valid brokerage account/i.test(error.message)) return jsonResponse({ message: "اكتب رقم حساب أو معرّف عميل صحيحًا." }, 400);
-        return jsonResponse({ message: "تعذّر فحص حساب الوكالة الآن." }, 500);
+      const { data: lookupMembership, error: lookupMembershipError } = await context.supabaseAdmin.from("memberships")
+        .select("role,allowed_sections").eq("organization_id", organizationId).eq("user_id", context.userClaims.id)
+        .eq("status", "active").maybeSingle();
+      if (lookupMembershipError) return jsonResponse({ message: "تعذّر التحقق من صلاحية البحث." }, 500);
+      if (!lookupMembership || lookupMembership.role === "viewer" || (lookupMembership.role !== "owner" && !lookupMembership.allowed_sections?.includes("crm"))) {
+        return jsonResponse({ message: "حسابك غير مصرح له ببحث الوكالة." }, 403);
       }
-      return jsonResponse(data?.[0] ?? { integration_ready: false, under_agency: false, is_active: false, last_synced_at: null });
+
+      const { data: lookupIntegration, error: lookupIntegrationError } = await context.supabaseAdmin.from("broker_integrations")
+        .select("id,status,account_lookup_enabled").eq("organization_id", organizationId).eq("provider", "exness").maybeSingle();
+      if (lookupIntegrationError) return jsonResponse({ message: "تعذّر تحميل ربط Exness." }, 500);
+      if (!lookupIntegration || lookupIntegration.status !== "ready" || !lookupIntegration.account_lookup_enabled) {
+        return jsonResponse({ integration_ready: false, under_agency: false, is_active: false, last_synced_at: null, external_client_id: null, accounts: [] });
+      }
+
+      try {
+        const checkedAt = new Date().toISOString();
+        const token = await exnessToken();
+        const rawAccounts = await fetchExnessPages("/api/reports/clients/accounts/", token, "client_account");
+        const matchingClientIds = new Set<string>();
+        for (const rawValue of rawAccounts) {
+          const raw = object(rawValue);
+          if (!raw) continue;
+          const accountNumber = identifier(raw.client_account ?? raw.account_number);
+          const clientId = identifier(raw.client_uid ?? raw.external_client_id) || accountNumber;
+          if (accountNumber === lookupValue || clientId === lookupValue) matchingClientIds.add(clientId);
+        }
+        const relatedRawAccounts = rawAccounts.filter((rawValue) => {
+          const raw = object(rawValue);
+          if (!raw) return false;
+          const accountNumber = identifier(raw.client_account ?? raw.account_number);
+          const clientId = identifier(raw.client_uid ?? raw.external_client_id) || accountNumber;
+          return matchingClientIds.has(clientId) || accountNumber === lookupValue;
+        });
+        const normalized = (await Promise.all(relatedRawAccounts.map((raw) => normalizeAccount(
+          raw,
+          organizationId,
+          lookupIntegration.id,
+          checkedAt,
+          new Map(),
+        )))).filter((account): account is NormalizedAccount => account !== null);
+        const relatedByNumber = new Map<string, NormalizedAccount>();
+        for (const account of normalized) relatedByNumber.set(account.account_number, account);
+        const relatedAccounts = Array.from(relatedByNumber.values());
+        if (relatedAccounts.length) {
+          for (let offset = 0; offset < relatedAccounts.length; offset += SYNC_BATCH_SIZE) {
+            const { error: lookupUpsertError } = await context.supabaseAdmin.from("broker_client_accounts")
+              .upsert(relatedAccounts.slice(offset, offset + SYNC_BATCH_SIZE), { onConflict: "integration_id,account_number" });
+            if (lookupUpsertError) throw new ExnessError(`Lookup upsert failed: ${lookupUpsertError.code}`, "تم التحقق من Exness لكن تعذّر تحديث ملف الحساب.", 500);
+          }
+        } else {
+          await context.supabaseAdmin.from("broker_client_accounts").update({ is_active: false, last_synced_at: checkedAt })
+            .eq("organization_id", organizationId).eq("integration_id", lookupIntegration.id)
+            .or(`account_number.eq.${lookupValue},external_client_id.eq.${lookupValue}`);
+        }
+        await context.supabaseAdmin.from("audit_events").insert({
+          organization_id: organizationId,
+          actor_id: context.userClaims.id,
+          action: "broker.exness_lookup_refreshed",
+          entity_type: "broker_integration",
+          entity_id: lookupIntegration.id,
+          after_data: { source: "official_partnership_api", matched_accounts: relatedAccounts.length },
+        });
+        const primary = relatedAccounts.find((account) => account.account_number === lookupValue) ?? relatedAccounts[0] ?? null;
+        return jsonResponse({
+          integration_ready: true,
+          under_agency: relatedAccounts.length > 0,
+          is_active: relatedAccounts.some((account) => account.is_active),
+          last_synced_at: checkedAt,
+          external_client_id: primary?.external_client_id ?? null,
+          accounts: relatedAccounts.map((account) => ({
+            account_number: account.account_number,
+            registered_at: account.registered_at,
+            last_activity_at: account.last_activity_at,
+            is_active: account.is_active,
+          })),
+        });
+      } catch (error) {
+        const exnessError = error instanceof ExnessError ? error : new ExnessError("Unexpected live lookup failure", "تعذّر التحقق المباشر من Exness الآن.", 500);
+        console.error("Exness live lookup failed", { message: exnessError.message, status: exnessError.status });
+        return jsonResponse({ message: exnessError.publicMessage }, exnessError.status);
+      }
     }
 
     if (action === "get_exness_overview") {
@@ -307,22 +389,39 @@ export default {
       const statusByClient = new Map<string, string>();
       for (const rawClient of rawClients) {
         const client = object(rawClient);
-        const clientId = text(client?.client_uid);
-        const status = text(client?.client_status);
+        const clientId = identifier(client?.client_uid ?? client?.external_client_id);
+        const status = text(client?.client_status ?? client?.status ?? client?.state);
         if (clientId && status) statusByClient.set(clientId, status);
       }
       const normalizedResults = await Promise.all(
         rawAccounts.map((raw) => normalizeAccount(raw, organizationId, integration.id, startedAt, statusByClient)),
       );
-      const accounts = normalizedResults.filter((account): account is NormalizedAccount => account !== null);
+      const normalizedAccounts = normalizedResults.filter((account): account is NormalizedAccount => account !== null);
+      const accountsByNumber = new Map<string, NormalizedAccount>();
+      for (const account of normalizedAccounts) accountsByNumber.set(account.account_number, account);
+      const accounts = Array.from(accountsByNumber.values());
+      const errorRows = rawAccounts.length - accounts.length;
+      await context.supabaseAdmin.from("broker_sync_runs").update({
+        fetched_rows: rawAccounts.length,
+        error_rows: errorRows,
+      }).eq("id", syncRun.id);
       for (let offset = 0; offset < accounts.length; offset += SYNC_BATCH_SIZE) {
         const batch = accounts.slice(offset, offset + SYNC_BATCH_SIZE);
         const { error: upsertError } = await context.supabaseAdmin.from("broker_client_accounts")
           .upsert(batch, { onConflict: "integration_id,account_number" });
-        if (upsertError) throw new ExnessError(`Account upsert failed: ${upsertError.code}`, "تعذّر حفظ حسابات Exness في النظام الجديد.", 500);
+        if (upsertError) {
+          console.error("Exness account upsert failed", {
+            code: upsertError.code,
+            message: upsertError.message,
+            details: upsertError.details,
+            hint: upsertError.hint,
+            batch_offset: offset,
+            batch_size: batch.length,
+          });
+          throw new ExnessError(`Account upsert failed: ${upsertError.code}`, "تعذّر حفظ حسابات Exness في النظام الجديد.", 500);
+        }
       }
       const completedAt = new Date().toISOString();
-      const errorRows = rawAccounts.length - accounts.length;
       await context.supabaseAdmin.from("broker_sync_runs").update({
         status: "completed",
         fetched_rows: rawAccounts.length,
@@ -365,6 +464,7 @@ export default {
       });
     } catch (error) {
       const exnessError = error instanceof ExnessError ? error : new ExnessError("Unexpected sync failure", "تعذّرت مزامنة Exness الآن.", 500);
+      console.error("Exness synchronization failed", { message: exnessError.message, status: exnessError.status });
       const completedAt = new Date().toISOString();
       await context.supabaseAdmin.from("broker_sync_runs").update({ status: "failed", error_message: exnessError.publicMessage, completed_at: completedAt }).eq("id", syncRun.id);
       await context.supabaseAdmin.from("broker_integrations").update({ status: "error", account_lookup_enabled: false, last_error: exnessError.publicMessage }).eq("id", integration.id);

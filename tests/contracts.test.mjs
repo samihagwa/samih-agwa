@@ -1292,9 +1292,10 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
 });
 
 test("Exness agency foundation separates owner financial data from Sales lookup", async () => {
-  const [migration, bridgeMigration, edgeFunction, settingsWorkspace, agencyWorkspace, crmWorkspace, crmNav, config, roadmap] = await Promise.all([
+  const [migration, bridgeMigration, privacyMigration, edgeFunction, settingsWorkspace, agencyWorkspace, crmWorkspace, crmNav, config, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260822182732_exness_agency_integration_foundation.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260908004314_exness_bridge_owner_summary.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260910045000_restrict_exness_directory_to_owner.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/broker-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/settings/ExnessIntegrationWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/ExnessAgencyWorkspace.tsx", import.meta.url), "utf8"),
@@ -1317,7 +1318,11 @@ test("Exness agency foundation separates owner financial data from Sales lookup"
   assert.doesNotMatch(migration, /grant execute on function public\.lookup_exness_account[^;]+to authenticated/i);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
-  assert.match(edgeFunction, /context\.supabaseAdmin\.rpc\("lookup_exness_account"/);
+  assert.match(edgeFunction, /action === "lookup_exness_account"/);
+  assert.match(edgeFunction, /fetchExnessPages\("\/api\/reports\/clients\/accounts\/"/);
+  assert.match(edgeFunction, /external_client_id: primary\?\.external_client_id/);
+  assert.match(edgeFunction, /accounts: relatedAccounts\.map/);
+  assert.match(edgeFunction, /is_active: !inactiveStatuses\.has\(status\)/);
   assert.match(edgeFunction, /EXNESS_PARTNER_LOGIN/);
   assert.match(edgeFunction, /EXNESS_PARTNER_PASSWORD/);
   assert.match(edgeFunction, /exnessRequest\("\/api\/v2\/auth\/"/);
@@ -1328,16 +1333,23 @@ test("Exness agency foundation separates owner financial data from Sales lookup"
   assert.match(edgeFunction, /PROVIDER_TIMEOUT_MS/);
   assert.match(edgeFunction, /SYNC_COOLDOWN_MS/);
   assert.match(edgeFunction, /onConflict: "integration_id,account_number"/);
+  assert.match(edgeFunction, /ACCOUNT_NUMBER_PATTERN/);
+  assert.match(edgeFunction, /accountsByNumber = new Map/);
+  assert.match(edgeFunction, /fetched_rows: rawAccounts\.length/);
   assert.match(edgeFunction, /action: "broker\.exness_synced"/);
   assert.match(bridgeMigration, /function public\.get_exness_agency_summary/);
   assert.match(bridgeMigration, /membership\.role = 'owner'/);
   assert.match(bridgeMigration, /grant execute on function public\.get_exness_agency_summary\(uuid, uuid\)\s+to service_role/);
   assert.doesNotMatch(bridgeMigration, /grant execute on function public\.get_exness_agency_summary[^;]+to authenticated/i);
+  assert.match(privacyMigration, /revoke execute on function public\.search_exness_agency_clients[^;]+from authenticated/is);
+  assert.match(privacyMigration, /grant execute on function public\.search_exness_agency_clients[^;]+to service_role/is);
   assert.match(settingsWorkspace, /المالك يرى الحسابات واللوتات والعمولة/);
   assert.match(agencyWorkspace, /هل الحساب تحت وكالتنا؟/);
-  assert.match(agencyWorkspace, /موظف السيلز لن يرى اللوتات أو العمولة/);
+  assert.match(agencyWorkspace, /دون إظهار أي لوتات أو عمولات للسيلز/);
   assert.match(agencyWorkspace, /كل الحسابات/);
   assert.match(agencyWorkspace, /Client UID/);
+  assert.match(agencyWorkspace, /كل حسابات العميل المرتبطة/);
+  assert.doesNotMatch(agencyWorkspace, /supabase\.rpc\("search_exness_agency_clients"/);
   assert.match(crmNav, /href: "\/crm\/exness"/);
   assert.match(config, /\[functions\.broker-commands\]\s+verify_jwt = true/);
   assert.match(crmWorkspace, /فحص سريع بدون كشف بيانات الوكالة/);
