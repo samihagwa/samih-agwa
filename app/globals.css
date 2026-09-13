@@ -3870,3 +3870,56 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
   .crm-sales-scoreboard dl > div { border-inline-start: 0; }
   .workspace-assistant { width: 100%; border-radius: 8px 8px 0 0; }
 }
+
+/* Customer directory: provenance-based queues, quiet team metrics, compact mobile actions. */
+.crm-sales-performance { min-width: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); }
+.crm-sales-performance > summary { min-height: 44px; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--ink-800); font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
+.crm-sales-performance > summary::-webkit-details-marker { display: none; }
+.crm-sales-performance > summary > span:last-child { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-500); font-size: 11px; }
+.crm-sales-performance[open] > summary { border-bottom: 1px solid var(--line); }
+.crm-sales-performance[open] > summary svg { transform: rotate(180deg); }
+.crm-sales-performance .crm-sales-scoreboard { padding: 9px; }
+.crm-primary-customer-views button[data-view="current"] { color: var(--green-700); }
+.crm-primary-customer-views button[data-view="current"].active { box-shadow: inset 0 -3px 0 var(--green-700); }
+.crm-directory-table td[data-label="التفاصيل"] { min-width: 122px; }
+.crm-directory-row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; }
+.crm-directory-row-actions > a { min-height: 36px; padding: 6px 7px; display: inline-flex; align-items: center; gap: 5px; border-radius: 3px; color: var(--ink-800); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.crm-directory-row-actions > a:hover { background: var(--surface-soft); }
+.crm-directory-row-actions .crm-row-convert-link { color: var(--green-700); }
+.crm-row-expand { width: auto; min-width: 40px; padding: 5px 7px; gap: 4px; font: inherit; font-size: 11px; font-weight: 600; }
+.crm-convert-action { min-height: 42px; padding: 8px 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--green-700); border-radius: 4px; background: var(--green-100); color: var(--green-700); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.crm-convert-action:hover { background: var(--paper); }
+.crm-convert-action:focus-visible, .crm-directory-row-actions a:focus-visible, .crm-directory-row-actions button:focus-visible, .crm-sales-performance > summary:focus-visible { outline: 3px solid var(--yellow-500); outline-offset: 2px; }
+
+@media (max-width: 760px) {
+  .crm-directory-table-wrap { min-width: 0; max-width: 100%; }
+  .crm-directory-table, .crm-directory-table tbody { width: 100%; min-width: 0; }
+  .crm-directory-table tr:not(.crm-directory-expanded-row) { min-width: 0; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; }
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td { min-width: 0; width: auto; padding: 0; font-size: 11px; }
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="#"],
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="المصدر"],
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="خبرة التداول"],
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="المسؤول"],
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="الأولوية"],
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="مستوى التقدم"],
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="آخر تواصل"] { display: none; }
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="العميل"] { grid-column: 1; grid-row: 1; }
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="العميل"]::before,
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="المرحلة"]::before { display: none; }
+  .crm-directory-customer-link strong { font-size: 14px; }
+  .crm-directory-identities { display: none; }
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="المرحلة"] { grid-column: 2; grid-row: 1; align-self: start; }
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="المتابعة التالية"] { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; gap: 8px; }
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="المتابعة التالية"]::before { content: "المتابعة"; flex: 0 0 auto; }
+  .crm-directory-table tr:not(.crm-directory-expanded-row) td[data-label="التفاصيل"] { position: static; grid-column: 1 / -1; grid-row: 3; width: 100%; padding-top: 6px; border-top: 1px solid var(--line); }
+  .crm-directory-row-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .crm-directory-row-actions > a, .crm-directory-row-actions > button { min-width: 0; min-height: 42px; padding: 6px; justify-content: center; border: 1px solid var(--line); border-radius: 4px; font-size: 11px; text-align: center; white-space: normal; }
+  .crm-directory-row-actions .crm-row-convert-link { grid-column: 1 / -1; border-color: #b7d9c4; background: var(--green-100); }
+  .crm-directory-table tr.crm-directory-expanded-row > td { width: 100%; padding: 0; }
+  .exness-lookup-panel, .exness-related-accounts { min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr); }
+  .exness-lookup-panel > *, .exness-related-accounts > * { min-width: 0; max-width: 100%; }
+  .exness-related-accounts .exness-account-table-wrap { width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
+  .exness-related-accounts .exness-account-table, .exness-related-accounts .exness-account-table tbody { width: 100%; min-width: 0; max-width: 100%; display: grid; }
+  .exness-related-accounts .exness-account-table tr { min-width: 0; }
+  .exness-related-accounts .exness-account-table td strong { overflow-wrap: anywhere; }
+}

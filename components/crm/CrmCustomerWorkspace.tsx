@@ -51,7 +51,7 @@ const contactOutcomeConfig: Record<ContactOutcome, { label: string; stage: CrmLe
   call_later: { label: "طلب التواصل لاحقًا", stage: "follow_up", followUp: true },
   interested: { label: "مهتم", stage: "follow_up", followUp: true },
   qualified: { label: "مؤهل للشراء", stage: "qualified", followUp: true },
-  converted: { label: "أصبح عميلًا حاليًا", stage: "won", followUp: false },
+  converted: { label: "اشترى وأصبح عميلًا بالفعل", stage: "won", followUp: false },
   not_interested: { label: "غير مهتم", stage: "lost", followUp: false },
   invalid_data: { label: "بيانات غير صحيحة", stage: "do_not_contact", followUp: false },
 };
@@ -214,13 +214,14 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
 
   useEffect(() => {
     if (!data) return;
-    const shouldComplete = new URLSearchParams(window.location.search).get("action") === "complete-follow-up";
-    if (!shouldComplete) return;
+    const action = new URLSearchParams(window.location.search).get("action");
+    if (action !== "complete-follow-up" && action !== "convert") return;
     const timer = window.setTimeout(() => {
       setCompletingFollowUp(true);
+      if (action === "convert") { setContactOutcome("converted"); setNeedsFollowUp(false); }
       const resultSection = document.getElementById("follow-up-result");
       resultSection?.scrollIntoView({ behavior: "smooth", block: "start" });
-      resultSection?.querySelector<HTMLTextAreaElement>('textarea[name="summary"]')?.focus({ preventScroll: true });
+      resultSection?.querySelector<HTMLElement>(action === "convert" ? 'input[name="purchased_service"]' : 'textarea[name="summary"]')?.focus({ preventScroll: true });
     }, 120);
     return () => window.clearTimeout(timer);
   }, [data]);
@@ -268,9 +269,11 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
     const nextFollowUp = needsFollowUp ? futureDateIso(nextFollowUpAt) : null;
     const lossReasonKey = formText(form, "loss_reason") as keyof typeof lossReasonConfig;
     const note = formText(form, "summary");
+    const purchasedService = formText(form, "purchased_service");
     if (needsFollowUp && !nextFollowUp) { setError("حدد موعد المتابعة التالية في المستقبل."); return; }
     if (!needsFollowUp && nextStage === "lost" && !lossReasonConfig[lossReasonKey]) { setError("اختر سبب إغلاق العميل كغير محوّل."); return; }
-    const summary = [contactOutcomeConfig[contactOutcome].label, lossReasonConfig[lossReasonKey], note].filter(Boolean).join(" — ");
+    if (nextStage === "won" && purchasedService.length < 3) { setError("اكتب اسم الخدمة أو المنتج الذي اشتراه العميل."); return; }
+    const summary = [contactOutcomeConfig[contactOutcome].label, purchasedService ? `اشترى: ${purchasedService}` : "", lossReasonConfig[lossReasonKey], note].filter(Boolean).join(" — ");
     const result = await invokeCrm({
       action: "record_activity",
       contact_id: data.contact.id,
@@ -375,6 +378,16 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
       ? "upcoming"
       : index < customerStageIndex ? "done" : index === customerStageIndex ? "current" : "upcoming",
   }));
+  function startConversion() {
+    setContactOutcome("converted");
+    setNeedsFollowUp(false);
+    setCompletingFollowUp(true);
+    window.setTimeout(() => {
+      const resultSection = document.getElementById("follow-up-result");
+      resultSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+      resultSection?.querySelector<HTMLInputElement>('input[name="purchased_service"]')?.focus({ preventScroll: true });
+    }, 0);
+  }
   return <section className="crm-customer-workspace">
     <div className="crm-customer-toolbar">
       <Button href="/crm" variant="ghost"><ArrowRight size={15} /> العودة للعملاء</Button>
@@ -383,7 +396,7 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
 
     <section className="panel crm-customer-header">
       <div><p className="overline">{crmSourceConfig[contact.source].label} · {crmInterestConfig[contact.interest].label}</p><h2>{contact.full_name}</h2><p>ملف العميل يجمع التواصل والمتابعة والمهام في مكان واحد.</p></div>
-      <div className="crm-customer-header-status"><StatusBadge tone={crmLeadStageConfig[contact.stage].tone}>{crmLeadStageConfig[contact.stage].label}</StatusBadge><span><CircleUserRound size={14} /> {peopleById.get(contact.owner_id)?.name ?? "عضو فريق"}</span></div>
+      <div className="crm-customer-header-status"><StatusBadge tone={crmLeadStageConfig[contact.stage].tone}>{crmLeadStageConfig[contact.stage].label}</StatusBadge><span><CircleUserRound size={14} /> {peopleById.get(contact.owner_id)?.name ?? "عضو فريق"}</span>{canAct && canRecordResult ? <button className="crm-convert-action" type="button" onClick={startConversion}><CheckCircle2 aria-hidden="true" size={16} /> نقل إلى عملاء بالفعل</button> : null}</div>
       <SegmentedProgress steps={customerProgress} ariaLabel={`مستوى تقدم ${contact.full_name}`} />
     </section>
 
@@ -433,11 +446,12 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
           <form className="crm-customer-result-form crm-follow-up-flow" onSubmit={(event) => void recordActivity(event)}>
             <fieldset className="wide crm-outcome-fieldset"><legend>1 — اختر النتيجة</legend><div className="crm-outcome-grid">{(Object.keys(contactOutcomeConfig) as ContactOutcome[]).map((outcome) => <button type="button" className={contactOutcome === outcome ? "active" : ""} aria-pressed={contactOutcome === outcome} onClick={() => { setContactOutcome(outcome); setNeedsFollowUp(contactOutcomeConfig[outcome].followUp); }} key={outcome}>{contactOutcomeConfig[outcome].label}</button>)}</div></fieldset>
             <label><span>طريقة التواصل</span><select name="kind" defaultValue="message">{(Object.keys(crmActivityKindConfig) as Exclude<CrmActivityKind, "created">[]).map((kind) => <option value={kind} key={kind}>{crmActivityKindConfig[kind].label}</option>)}</select></label>
-            <label className="wide"><span>ملاحظة قصيرة</span><textarea name="summary" required minLength={3} maxLength={1000} rows={3} placeholder="اكتب الاتفاق أو الاعتراض أو سبب عدم إتمام التواصل…" /></label>
+            {contactOutcome === "converted" ? <label className="wide"><span>الخدمة أو المنتج الذي اشتراه العميل</span><input name="purchased_service" required minLength={3} maxLength={160} placeholder="مثال: اشتراك المؤشر أو كورس التداول" /></label> : null}
+            <label className="wide"><span>{contactOutcome === "converted" ? "تفاصيل الشراء أو الاتفاق (اختياري)" : "ملاحظة قصيرة"}</span><textarea name="summary" required={contactOutcome !== "converted"} minLength={3} maxLength={1000} rows={3} placeholder={contactOutcome === "converted" ? "موعد الاشتراك، المطلوب بعد الشراء، أو أي تفاصيل مهمة…" : "اكتب الاتفاق أو الاعتراض أو سبب عدم إتمام التواصل…"} /></label>
             {contactOutcome !== "converted" && contactOutcome !== "invalid_data" ? <fieldset className="wide crm-follow-up-decision"><legend>2 — هل يحتاج العميل إلى متابعة أخرى؟</legend><div><button type="button" className={needsFollowUp ? "active" : ""} aria-pressed={needsFollowUp} onClick={() => setNeedsFollowUp(true)}>نعم، حدّد الموعد</button><button type="button" className={!needsFollowUp ? "active danger" : ""} aria-pressed={!needsFollowUp} onClick={() => setNeedsFollowUp(false)}>لا، إغلاق كغير محوّل</button></div></fieldset> : null}
             {needsFollowUp ? <div className="wide crm-follow-up-schedule"><span>3 — موعد المتابعة التالية</span><div className="crm-follow-up-presets">{([
               ["hour", "بعد ساعة"], ["two_hours", "بعد ساعتين"], ["tomorrow", "غدًا"], ["two_days", "بعد يومين"], ["next_week", "الأسبوع القادم"], ["custom", "تاريخ ووقت"],
-            ] as Array<[FollowUpPreset, string]>).map(([preset, label]) => <button type="button" className={followUpPreset === preset ? "active" : ""} onClick={() => { setFollowUpPreset(preset); if (preset !== "custom") setNextFollowUpAt(followUpDate(preset)); }} key={preset}>{label}</button>)}</div><label><span>التاريخ والوقت</span><input name="next_follow_up_at" type="datetime-local" value={nextFollowUpAt} required onChange={(event) => { setFollowUpPreset("custom"); setNextFollowUpAt(event.target.value); }} /></label></div> : contactOutcome === "converted" ? <div className="wide crm-conversion-note"><CheckCircle2 size={18} /><div><strong>سيُسجّل العميل كمحوّل</strong><small>ستُغلق المتابعة الحالية ولن تُنشأ مهمة جديدة.</small></div></div> : <div className="wide crm-loss-warning" role="alert"><AlertTriangle size={19} /><div><strong>سيُنقل العميل إلى قائمة «غير المحولين»</strong><p>سيؤثر ذلك على معدل التحويل، وسيظل الملف محفوظًا ويمكن للإدارة إعادة فتحه.</p><label><span>سبب عدم التحويل</span><select name="loss_reason" required defaultValue=""><option value="" disabled>اختر السبب</option>{Object.entries(lossReasonConfig).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><button className="text-button" type="button" onClick={() => { setNeedsFollowUp(true); setFollowUpPreset("tomorrow"); setNextFollowUpAt(followUpDate("tomorrow")); }}>جدولة محاولة أخيرة بدل الإغلاق</button></div></div>}
+            ] as Array<[FollowUpPreset, string]>).map(([preset, label]) => <button type="button" className={followUpPreset === preset ? "active" : ""} onClick={() => { setFollowUpPreset(preset); if (preset !== "custom") setNextFollowUpAt(followUpDate(preset)); }} key={preset}>{label}</button>)}</div><label><span>التاريخ والوقت</span><input name="next_follow_up_at" type="datetime-local" value={nextFollowUpAt} required onChange={(event) => { setFollowUpPreset("custom"); setNextFollowUpAt(event.target.value); }} /></label></div> : contactOutcome === "converted" ? <div className="wide crm-conversion-note"><CheckCircle2 size={18} /><div><strong>سينتقل إلى «عملاء بالفعل» بعد الحفظ</strong><small>تُحفظ تفاصيل الشراء في سجل العميل وتُغلق مهمة المتابعة الحالية.</small></div></div> : <div className="wide crm-loss-warning" role="alert"><AlertTriangle size={19} /><div><strong>سيُنقل العميل إلى قائمة «غير المحولين»</strong><p>سيؤثر ذلك على معدل التحويل، وسيظل الملف محفوظًا ويمكن للإدارة إعادة فتحه.</p><label><span>سبب عدم التحويل</span><select name="loss_reason" required defaultValue=""><option value="" disabled>اختر السبب</option>{Object.entries(lossReasonConfig).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><button className="text-button" type="button" onClick={() => { setNeedsFollowUp(true); setFollowUpPreset("tomorrow"); setNextFollowUpAt(followUpDate("tomorrow")); }}>جدولة محاولة أخيرة بدل الإغلاق</button></div></div>}
             <div className="form-actions wide"><Button type="submit" variant={!needsFollowUp && contactOutcome !== "converted" ? "danger" : "primary"} disabled={working !== null}>{working === "activity" ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} {needsFollowUp ? "اعتماد التنفيذ وإنشاء المتابعة" : contactOutcome === "converted" ? "اعتماد التنفيذ وتأكيد التحويل" : "اعتماد التنفيذ والإغلاق"}</Button></div>
           </form>
         </section> : null}

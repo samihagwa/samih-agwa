@@ -91,4 +91,9 @@ Additional verification on 2026-09-07:
 - Password recovery records only an owner-visible request. A fresh Supabase recovery action link is generated on demand, returned once to the owner for private delivery, and never stored in application tables.
 - Production verification confirmed zero access/recovery test rows were created during release checks; no fake member was added.
 
+Additional verification on 2026-09-13:
+
+- `separate_manual_sales_intake` adds an independently indexed manual/external origin, backfilled only from the newer `crm.customer_created` audit event. Historical indicator imports use `crm.lead_created` and remain external. The trigger marks future manual entries within the same database transaction; no customer stage, owner, or identity was changed.
+- Existing production records classify as two manually entered prospective customers and 118 external indicator registrations. `search_crm_contacts_v8` remains `SECURITY INVOKER`, executable by authenticated members but not anonymous callers; RLS still limits each salesperson to permitted contacts.
+
 Never commit `.env.local`, secret keys, legacy service-role keys, or production customer data.

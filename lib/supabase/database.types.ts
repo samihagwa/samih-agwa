@@ -1424,6 +1424,7 @@ export type Database = {
           follow_up_required: boolean
           full_name: string
           id: string
+          intake_origin: string
           interest: Database["public"]["Enums"]["crm_interest"]
           interest_detail: string | null
           last_contacted_at: string | null
@@ -1448,6 +1449,7 @@ export type Database = {
           follow_up_required?: boolean
           full_name: string
           id?: string
+          intake_origin?: string
           interest: Database["public"]["Enums"]["crm_interest"]
           interest_detail?: string | null
           last_contacted_at?: string | null
@@ -1472,6 +1474,7 @@ export type Database = {
           follow_up_required?: boolean
           full_name?: string
           id?: string
+          intake_origin?: string
           interest?: Database["public"]["Enums"]["crm_interest"]
           interest_detail?: string | null
           last_contacted_at?: string | null

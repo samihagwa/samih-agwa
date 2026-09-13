@@ -39,8 +39,31 @@ test("CRM directory exposes one clear set of customer views and trading-experien
   assert.match(migration, /target_trading_experience is null/);
   assert.match(directory, /عملاء المؤشر/);
   assert.match(directory, /عملاء الكاش باك/);
-  assert.match(directory, /عملاء حاليون/);
+  assert.match(directory, /عملاء بالفعل/);
   assert.match(directory, /search_crm_contacts_v8/);
+});
+
+test("manual customer queue never conflates automatic indicator intake with sales-created customers", async () => {
+  const [migration, directory, customer, css] = await Promise.all([
+    read("../supabase/migrations/20260913010000_separate_manual_sales_intake.sql"),
+    read("../components/crm/CrmCustomerDirectory.tsx"),
+    read("../components/crm/CrmCustomerWorkspace.tsx"),
+    read("../app/globals.css"),
+  ]);
+  assert.match(migration, /event\.action = 'crm\.customer_created'/);
+  assert.match(migration, /new\.action = 'crm\.customer_created'/);
+  assert.doesNotMatch(migration, /'crm\.lead_created'/);
+  assert.match(migration, /target_segment = 'manual' and contact\.intake_origin = 'manual'/);
+  assert.match(migration, /target_segment = 'indicator' and contact\.intake_origin = 'external'/);
+  assert.match(migration, /security invoker/);
+  assert.match(directory, /primaryView === "new" \? "manual"/);
+  assert.match(directory, /crm-sales-performance/);
+  assert.match(directory, /action=convert/);
+  assert.match(customer, /name="purchased_service" required/);
+  assert.match(customer, /next_stage: nextStage/);
+  assert.match(css, /\.crm-primary-customer-views button\[data-view="current"\]\.active/);
+  assert.match(css, /\.exness-related-accounts \.exness-account-table, \.exness-related-accounts \.exness-account-table tbody \{ width: 100%; min-width: 0/);
+  assert.match(css, /td\[data-label="المصدر"\][\s\S]*?display: none/);
 });
 
 test("agency account lookup is available to CRM sales without a financial directory", async () => {

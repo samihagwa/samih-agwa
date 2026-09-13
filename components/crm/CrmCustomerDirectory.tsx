@@ -39,7 +39,7 @@ const crmProgressStages: Array<{ id: CrmLeadStage; label: string }> = [
 const primaryViews: Array<{ id: PrimaryView; label: string }> = [
   { id: "new", label: "عملاء جدد" },
   { id: "today", label: "متابعة اليوم" },
-  { id: "current", label: "عملاء حاليون" },
+  { id: "current", label: "عملاء بالفعل" },
   { id: "indicator", label: "عملاء المؤشر" },
   { id: "cashback", label: "عملاء الكاش باك" },
   { id: "all", label: "كل العملاء" },
@@ -136,8 +136,8 @@ export function CrmCustomerDirectory() {
 
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading });
   const manager = Boolean(workspace && canManageTasks(workspace.membership.role));
-  const queueFilter: QueueFilter = primaryView === "new" ? "new" : primaryView === "today" ? "today" : primaryView === "current" ? "converted" : "all";
-  const leadSegment: LeadSegment = primaryView === "indicator" ? "indicator" : primaryView === "cashback" ? "cashback" : "all";
+  const queueFilter: QueueFilter = primaryView === "today" ? "today" : primaryView === "current" ? "converted" : "all";
+  const leadSegment: LeadSegment | "manual" = primaryView === "new" ? "manual" : primaryView === "indicator" ? "indicator" : primaryView === "cashback" ? "cashback" : "all";
 
   const refreshDirectory = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
@@ -173,7 +173,9 @@ export function CrmCustomerDirectory() {
       setPriorities(new Map(matches.map((match) => [match.contact_id, { score: Number(match.priority_score), reason: match.priority_reason }])));
       setTotalCount(Number(matches[0]?.total_count ?? 0));
       if (!contactIds.length) {
-        clearData();
+        setContacts([]);
+        setIdentities([]);
+        setTasks([]);
         if (page > 0) setPage(0);
         return;
       }
@@ -192,7 +194,7 @@ export function CrmCustomerDirectory() {
     } finally {
       setDirectoryLoading(false);
     }
-  }, [clearData, interestFilter, leadSegment, manager, ownerFilter, page, priorityFilter, queueFilter, scopeFilter, searchQuery, sourceFilter, stageFilter, tradingExperienceFilter, viewFilter]);
+  }, [interestFilter, leadSegment, manager, ownerFilter, page, priorityFilter, queueFilter, scopeFilter, searchQuery, sourceFilter, stageFilter, tradingExperienceFilter, viewFilter]);
 
   useEffect(() => {
     const clean = searchInput.trim();
@@ -286,17 +288,17 @@ export function CrmCustomerDirectory() {
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
 
     <nav className="crm-queue-tabs crm-primary-customer-views" aria-label="قوائم العملاء الأساسية">
-      {primaryViews.map((view) => <button type="button" className={primaryView === view.id ? "active" : ""} aria-current={primaryView === view.id ? "page" : undefined} onClick={() => { setPrimaryView(view.id); setInterestFilter(""); setStageFilter(""); setViewFilter("all"); setPage(0); }} key={view.id}>{view.label}{primaryView === view.id ? <span>{totalCount.toLocaleString("ar-EG")}</span> : null}</button>)}
+      {primaryViews.map((view) => <button type="button" className={primaryView === view.id ? "active" : ""} data-view={view.id} aria-current={primaryView === view.id ? "page" : undefined} onClick={() => { setPrimaryView(view.id); setInterestFilter(""); setStageFilter(""); setViewFilter("all"); setPage(0); }} key={view.id}>{view.label}{primaryView === view.id ? <span>{totalCount.toLocaleString("ar-EG")}</span> : null}</button>)}
     </nav>
 
-    {manager && ownerPerformance.length ? <section className="crm-sales-scoreboard" aria-label="ملخص أداء فريق السيلز">{ownerPerformance.map((metric) => {
+    {manager && ownerPerformance.length ? <details className="crm-sales-performance"><summary><span>أداء فريق السيلز</span><span>{ownerPerformance.length} أعضاء <ChevronDown aria-hidden="true" size={16} /></span></summary><section className="crm-sales-scoreboard" aria-label="ملخص أداء فريق السيلز">{ownerPerformance.map((metric) => {
       const person = peopleById.get(metric.owner_id);
       const total = Number(metric.total_contacts);
       const won = Number(metric.won_contacts);
       const completed = Number(metric.completed_follow_ups);
       const onTime = Number(metric.on_time_follow_ups);
-      return <article key={metric.owner_id}><header><strong>{person?.name ?? "مسؤول سيلز"}</strong><button type="button" onClick={() => { setOwnerFilter(metric.owner_id); setPage(0); }}>عرض العملاء</button></header><dl><div><dt>العملاء</dt><dd>{total}</dd></div><div><dt>عملاء حاليون</dt><dd>{won}</dd></div><div><dt>لم يشتروا</dt><dd>{metric.lost_contacts}</dd></div><div><dt>التزام المتابعة</dt><dd>{completed ? `${Math.round(onTime / completed * 100)}%` : "—"}</dd></div><div><dt>متوسط أول رد</dt><dd>{metric.average_first_response_minutes == null ? "—" : `${Math.round(Number(metric.average_first_response_minutes))} د`}</dd></div></dl></article>;
-    })}</section> : null}
+      return <article key={metric.owner_id}><header><strong>{person?.name ?? "مسؤول سيلز"}</strong><button type="button" onClick={() => { setOwnerFilter(metric.owner_id); setPage(0); }}>عرض العملاء</button></header><dl><div><dt>العملاء</dt><dd>{total}</dd></div><div><dt>عملاء بالفعل</dt><dd>{won}</dd></div><div><dt>لم يشتروا</dt><dd>{metric.lost_contacts}</dd></div><div><dt>التزام المتابعة</dt><dd>{completed ? `${Math.round(onTime / completed * 100)}%` : "—"}</dd></div><div><dt>متوسط أول رد</dt><dd>{metric.average_first_response_minutes == null ? "—" : `${Math.round(Number(metric.average_first_response_minutes))} د`}</dd></div></dl></article>;
+    })}</section></details> : null}
 
     <section className="crm-report-toolbar" aria-label="البحث وأدوات دليل العملاء">
       <label className="crm-search-field"><Search aria-hidden="true" size={16} /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="ابحث بالاسم، الهاتف، البريد، TradingView أو نتيجة التواصل…" aria-label="البحث في دليل العملاء" />{searchInput ? <button type="button" onClick={() => setSearchInput("")}>مسح</button> : null}</label>
@@ -336,6 +338,7 @@ export function CrmCustomerDirectory() {
       }));
       const expanded = expandedContactId === contact.id;
       const priority = priorities.get(contact.id);
+      const canConvert = primaryView === "new" && contact.stage !== "won" && contact.stage !== "lost" && contact.stage !== "do_not_contact" && (manager || contact.owner_id === session.user.id) && workspace.membership.role !== "viewer";
       return <Fragment key={contact.id}><tr className={`${overdue ? "overdue" : ""} ${expanded ? "expanded" : ""}`}>
         <td data-label="#"><strong className="crm-directory-row-number">{page * PAGE_SIZE + index + 1}</strong></td>
         <td data-label="العميل"><a className="crm-directory-customer-link" href={crmContactDeepLink(contact.id)}><strong>{contact.full_name}</strong><small>{crmInterestConfig[contact.interest].label}</small></a><div className="crm-directory-identities">{contactIdentities.slice(0, 1).map((identity) => <span key={identity.id}><b dir="ltr">{identity.value}</b></span>)}</div></td>
@@ -347,10 +350,10 @@ export function CrmCustomerDirectory() {
         <td data-label="مستوى التقدم"><SegmentedProgress steps={progressSteps} compact ariaLabel={`مستوى تقدم ${contact.full_name}`} /></td>
         <td data-label="المتابعة التالية">{contact.next_follow_up_at ? <a href={openTask ? taskDeepLink(openTask.id) : crmContactDeepLink(contact.id)} className={overdue ? "crm-directory-overdue" : "crm-directory-next"}>{overdue ? <AlertTriangle aria-hidden="true" size={12} /> : <CalendarClock aria-hidden="true" size={12} />}<strong>{formatDate(contact.next_follow_up_at)}</strong></a> : <span className="crm-directory-muted"><FileClock aria-hidden="true" size={12} /> لا يوجد موعد</span>}</td>
         <td data-label="آخر تواصل">{contact.last_contacted_at ? <strong dir="ltr">{formatDate(contact.last_contacted_at)}</strong> : <span className="crm-directory-muted">لم يبدأ</span>}</td>
-        <td data-label="التفاصيل"><button className="crm-row-expand" type="button" aria-expanded={expanded} aria-controls={`crm-row-${contact.id}`} aria-label={`${expanded ? "إغلاق" : "عرض"} تفاصيل ${contact.full_name}`} onClick={() => setExpandedContactId(expanded ? null : contact.id)}><ChevronDown aria-hidden="true" size={17} /></button></td>
+        <td data-label="التفاصيل"><div className="crm-directory-row-actions"><button className="crm-row-expand" type="button" aria-expanded={expanded} aria-controls={`crm-row-${contact.id}`} onClick={() => setExpandedContactId(expanded ? null : contact.id)}><ChevronDown aria-hidden="true" size={17} /> <span>{expanded ? "إخفاء التفاصيل" : "التفاصيل"}</span></button><a className="crm-row-file-link" href={crmContactDeepLink(contact.id)}><FolderOpen aria-hidden="true" size={15} /> فتح الملف</a>{canConvert ? <a className="crm-row-convert-link" href={`${crmContactDeepLink(contact.id)}?action=convert`}><CheckCircle2 aria-hidden="true" size={15} /> نقل إلى عملاء بالفعل</a> : null}</div></td>
       </tr>{expanded ? <tr className="crm-directory-expanded-row"><td colSpan={11}><section id={`crm-row-${contact.id}`} className="crm-directory-expanded-content">
         <div className="crm-expanded-facts"><div><span>بيانات التواصل</span>{contactIdentities.length ? contactIdentities.map((identity) => <strong dir="ltr" key={identity.id}>{identity.value}</strong>) : <strong>لا توجد بيانات</strong>}</div><div><span>المصدر والاهتمام</span><strong>{crmSourceConfig[contact.source].label} · {crmInterestConfig[contact.interest].label}</strong>{contact.source_detail ? <small>{contact.source_detail}</small> : null}</div><div><span>خبرة التداول</span><strong>{crmTradingExperienceConfig[contact.trading_experience].label}</strong></div><div><span>المسؤول</span><strong>{peopleById.get(contact.owner_id)?.name ?? "غير مسند للسيلز الحالي"}</strong></div><div><span>المتابعة</span><strong>{contact.next_follow_up_at ? formatDate(contact.next_follow_up_at) : "لا يوجد موعد"}</strong>{priority ? <small>{priority.reason}</small> : null}</div></div>
-        <div className="crm-expanded-actions">{openTask ? <Button href={taskDeepLink(openTask.id)} variant="secondary"><CalendarClock aria-hidden="true" size={14} /> فتح مهمة المتابعة</Button> : <span className="crm-directory-no-task"><CheckCircle2 aria-hidden="true" size={14} /> لا توجد متابعة مفتوحة</span>}<Button href={crmContactDeepLink(contact.id)}><FolderOpen aria-hidden="true" size={15} /> فتح ملف العميل</Button></div>
+        <div className="crm-expanded-actions">{openTask ? <Button href={taskDeepLink(openTask.id)} variant="secondary"><CalendarClock aria-hidden="true" size={14} /> فتح مهمة المتابعة</Button> : <span className="crm-directory-no-task"><CheckCircle2 aria-hidden="true" size={14} /> لا توجد متابعة مفتوحة</span>}<Button href={crmContactDeepLink(contact.id)}><FolderOpen aria-hidden="true" size={15} /> فتح ملف العميل</Button>{canConvert ? <Button href={`${crmContactDeepLink(contact.id)}?action=convert`} variant="secondary"><CheckCircle2 aria-hidden="true" size={15} /> نقل إلى عملاء بالفعل</Button> : null}</div>
       </section></td></tr> : null}</Fragment>;
     })}</tbody></table></div> : <section className="panel empty-state"><span className="empty-visual"><ContactRound aria-hidden="true" size={20} /></span><div><h2>{hasFilters ? "لا توجد نتائج مطابقة" : "لا يوجد عملاء متاحون"}</h2><p>{hasFilters ? "غيّر البحث أو المصدر أو المرحلة أو المسؤول." : "سيظهر العملاء هنا بمجرد إضافتهم أو وصولهم من أحد المصادر المربوطة."}</p></div></section>}
 
