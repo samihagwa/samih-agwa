@@ -75,6 +75,7 @@ export function CrmCustomerDirectory() {
   const [stageFilter, setStageFilter] = useState<CrmLeadStage | "">("");
   const [ownerFilter, setOwnerFilter] = useState("");
   const [salesOwnerIds, setSalesOwnerIds] = useState<string[]>([]);
+  const [assignableOwnerIds, setAssignableOwnerIds] = useState<string[]>([]);
   const [ownerPerformance, setOwnerPerformance] = useState<OwnerPerformance[]>([]);
   const [priorities, setPriorities] = useState(new Map<string, { score: number; reason: string }>());
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
@@ -102,6 +103,7 @@ export function CrmCustomerDirectory() {
   const clearWorkspace = useCallback(() => {
     setWorkspace(null);
     setSalesOwnerIds([]);
+    setAssignableOwnerIds([]);
     clearData();
   }, [clearData]);
 
@@ -148,7 +150,7 @@ export function CrmCustomerDirectory() {
     setDirectoryLoading(true);
     setError(null);
     try {
-      const [searchResult, performanceResult] = await Promise.all([supabase.rpc("search_crm_contacts_v9", {
+      const [searchResult, performanceResult, assignableResult] = await Promise.all([supabase.rpc("search_crm_contacts_v9", {
         target_organization_id: organizationId,
         search_query: searchQuery,
         target_owner_id: (ownerFilter || null) as unknown as string,
@@ -165,9 +167,12 @@ export function CrmCustomerDirectory() {
         result_offset: page * PAGE_SIZE,
       }), manager
         ? supabase.rpc("get_crm_owner_performance_v2", { target_organization_id: organizationId, target_range_days: 30 })
-        : Promise.resolve({ data: [] as OwnerPerformance[], error: null })]);
+        : Promise.resolve({ data: [] as OwnerPerformance[], error: null }),
+      supabase.rpc("list_crm_assignable_owners", { target_organization_id: organizationId })]);
       if (searchResult.error) throw searchResult.error;
       if (performanceResult.error) throw performanceResult.error;
+      if (assignableResult.error) throw assignableResult.error;
+      setAssignableOwnerIds((assignableResult.data ?? []).map((owner) => owner.user_id));
       const nextSalesOwnerIds = (performanceResult.data ?? []).map((metric) => metric.owner_id);
       setOwnerPerformance(performanceResult.data ?? []);
       setSalesOwnerIds(nextSalesOwnerIds);
@@ -299,7 +304,7 @@ export function CrmCustomerDirectory() {
     </div>
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
     {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
-    {showCreate && workspace.membership.role !== "viewer" ? <CrmCreateLeadDialog organizationId={workspace.organization.id} actorId={session.user.id} people={manager ? salesPeople : workspace.people.filter((person) => person.id === session.user.id)} manager={manager} onClose={() => setShowCreate(false)} onCreated={(kind) => { setShowCreate(false); setNotice(kind === "current" ? "تم حفظ العميل الحالي." : "تم حفظ العميل في قائمة العملاء."); setPage(0); const nextView = kind === "current" ? "current" : "new"; if (primaryView === nextView && page === 0) void refreshDirectory(workspace.organization.id); else setPrimaryView(nextView); }} /> : null}
+    {showCreate && workspace.membership.role !== "viewer" ? <CrmCreateLeadDialog organizationId={workspace.organization.id} actorId={session.user.id} people={workspace.people.filter((person) => assignableOwnerIds.includes(person.id))} onClose={() => setShowCreate(false)} onCreated={(kind) => { setShowCreate(false); setNotice(kind === "current" ? "تم حفظ العميل الحالي." : "تم حفظ العميل في قائمة العملاء."); setPage(0); const nextView = kind === "current" ? "current" : "new"; if (primaryView === nextView && page === 0) void refreshDirectory(workspace.organization.id); else setPrimaryView(nextView); }} /> : null}
 
     <nav className="crm-queue-tabs crm-primary-customer-views" aria-label="قوائم العملاء الأساسية">
       {primaryViews.map((view) => <button type="button" className={primaryView === view.id ? "active" : ""} data-view={view.id} aria-current={primaryView === view.id ? "page" : undefined} onClick={() => { setPrimaryView(view.id); setInterestFilter(""); setStageFilter(""); setViewFilter("all"); setPage(0); }} key={view.id}>{view.label}{primaryView === view.id ? <span>{totalCount.toLocaleString("ar-EG")}</span> : null}</button>)}

@@ -22,11 +22,10 @@ function tomorrow() {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
-export function CrmCreateLeadDialog({ organizationId, actorId, people, manager, onClose, onCreated }: {
+export function CrmCreateLeadDialog({ organizationId, actorId, people, onClose, onCreated }: {
   organizationId: string;
   actorId: string;
   people: Person[];
-  manager: boolean;
   onClose: () => void;
   onCreated: (kind: CustomerKind) => void;
 }) {
@@ -58,7 +57,7 @@ export function CrmCreateLeadDialog({ organizationId, actorId, people, manager, 
     event.preventDefault();
     if (submitting.current) return;
     const form = new FormData(event.currentTarget);
-    const ownerId = manager ? text(form, "owner_id") : actorId;
+    const ownerId = text(form, "owner_id") || actorId;
     if (!availablePeople.some((person) => person.id === ownerId)) return setError("اختر مسؤولًا صحيحًا للعميل.");
     const followUp = needsFollowUp ? new Date(text(form, "follow_up_at")) : null;
     if (needsFollowUp && (!followUp || !Number.isFinite(followUp.getTime()) || followUp.getTime() <= Date.now())) return setError("حدد موعد متابعة صحيحًا في المستقبل.");
@@ -116,7 +115,7 @@ export function CrmCreateLeadDialog({ organizationId, actorId, people, manager, 
         <label><span>خبرة التداول</span><select value={experience} onChange={(event) => setExperience(event.target.value as CrmTradingExperience)}>{(Object.keys(crmTradingExperienceConfig) as CrmTradingExperience[]).map((option) => <option value={option} key={option}>{crmTradingExperienceConfig[option].label}</option>)}</select></label>
         <label><span>لينك المحادثة{withoutLink ? " — تم الاستثناء" : " — مطلوب"}</span><input name="conversation_url" type="url" dir="ltr" maxLength={2000} required={!withoutLink} disabled={withoutLink} placeholder={channel ? crmConversationChannelConfig[channel].placeholder : "https://..."} /></label>
         <label className="crm-checkbox crm-chat-link-exception"><input type="checkbox" checked={withoutLink} onChange={(event) => setWithoutLink(event.target.checked)} /><span>بدون لينك محادثة</span></label>
-        {manager ? <label><span>مسؤول المتابعة والملف</span><select name="owner_id" defaultValue={actorId} required>{availablePeople.map((person) => <option value={person.id} key={person.id}>{person.id === actorId ? `${person.name} — أنا` : person.name}</option>)}</select><small>اسمك محدد تلقائيًا؛ غيّره فقط لو هتسند الملف والمتابعة لحد تاني من فريق السيلز.</small></label> : <label><span>مسؤول المتابعة والملف</span><input value={`${availablePeople.find((person) => person.id === actorId)?.name ?? "أنا"} — أنا`} readOnly aria-readonly="true" /><small>الملف والمتابعة هينزلوا عندك تلقائيًا. تغيير المسؤول متاح لمدير السيلز.</small><input name="owner_id" type="hidden" value={actorId} /></label>}
+        <label><span>مسؤول المتابعة والملف</span><select name="owner_id" defaultValue={actorId} required>{availablePeople.map((person) => <option value={person.id} key={person.id}>{person.id === actorId ? `${person.name} — أنا` : person.name}</option>)}</select><small>اسمك محدد تلقائيًا. غيّره فقط لو هتسند الملف والمتابعة لعضو سيلز فعّال.</small></label>
         {kind === "current" ? <CrmPurchaseFields key={interest} defaultProduct={interest} /> : null}
         <fieldset className="crm-follow-up-decision crm-create-follow-up-decision"><legend>هل يحتاج متابعة مرة أخرى؟</legend><div><button type="button" className={needsFollowUp ? "active" : ""} aria-pressed={needsFollowUp} onClick={() => setNeedsFollowUp(true)}>نعم</button><button type="button" className={!needsFollowUp ? "active" : ""} aria-pressed={!needsFollowUp} onClick={() => setNeedsFollowUp(false)}>لا</button></div></fieldset>
         {needsFollowUp ? <label><span>موعد المتابعة</span><input name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /></label> : <div className="crm-current-customer-note"><CheckCircle2 size={17} /><span><strong>بدون متابعة مجدولة</strong><small>يمكن تحديد موعد لاحقًا من ملف العميل.</small></span></div>}

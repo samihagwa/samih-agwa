@@ -5683,6 +5683,10 @@ export type Database = {
           won_in_period: number
         }[]
       }
+      list_crm_assignable_owners: {
+        Args: { target_organization_id: string }
+        Returns: { user_id: string }[]
+      }
       get_crm_owner_performance_v2: {
         Args: { target_organization_id: string; target_range_days: number }
         Returns: {
