@@ -1205,6 +1205,30 @@ test("application shell does not impersonate an authenticated owner", async () =
   assert.match(source, /SessionChip/);
 });
 
+test("manual CRM intake stays in the directory and retries cannot duplicate the customer", async () => {
+  const [directory, dialog, workspace, edgeFunction, migration] = await Promise.all([
+    readFile(new URL("../components/crm/CrmCustomerDirectory.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmCreateLeadDialog.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/crm-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260913180000_crm_idempotent_manual_intake.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(directory, /<CrmCreateLeadDialog/);
+  assert.doesNotMatch(directory, /href="\/crm\/operations\?add=1"/);
+  assert.match(dialog, /if \(submitting\.current\) return/);
+  assert.match(dialog, /request_id: requestId\.current/);
+  assert.match(dialog, /defaultValue=\{actorId\}/);
+  assert.match(workspace, /request_id: createRequestId\.current/);
+  assert.match(workspace, /defaultValue=\{session\.user\.id\}/);
+  assert.match(edgeFunction, /create_crm_lead_v7/);
+  assert.match(migration, /primary key \(organization_id, request_id\)/);
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /existing\.payload_hash <> fingerprint/);
+  assert.match(migration, /This conversation already belongs to a CRM customer/);
+  assert.match(migration, /alter table public\.crm_creation_requests enable row level security/);
+  assert.doesNotMatch(migration, /grant (insert|update|delete) on public\.crm_creation_requests to authenticated/i);
+});
+
 test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task system", async () => {
   const [migration, contextMigration, scaleMigration, importMigration, importPolicyFix, edgeFunction, workspace, taskWorkspace, contract, importParser, roadmap] = await Promise.all([
     readFile(new URL("../supabase/migrations/20260817033924_crm_foundation.sql", import.meta.url), "utf8"),
@@ -1235,7 +1259,7 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(migration, /from public, anon, authenticated/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
-  assert.match(edgeFunction, /create_crm_lead_v6/);
+  assert.match(edgeFunction, /create_crm_lead_v7/);
   assert.match(edgeFunction, /add_crm_identity/);
   assert.match(contextMigration, /create table public\.crm_conversation_links/);
   assert.match(contextMigration, /alter table public\.crm_conversation_links enable row level security/);

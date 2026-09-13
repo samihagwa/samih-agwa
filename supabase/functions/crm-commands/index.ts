@@ -45,6 +45,8 @@ function commandError(error: { message: string } | null, fallback: string) {
     [/TradingView identity is invalid/i, "اسم حساب TradingView غير صحيح."],
     [/Social username is invalid/i, "اسم مستخدم Facebook أو Instagram غير صحيح. اكتب اسم المستخدم فقط بدون رابط."],
     [/Exness account identity is invalid/i, "رقم حساب Exness غير صحيح. استخدم رقم الحساب كما يظهر في Exness."],
+    [/This conversation already belongs/i, "لينك المحادثة مسجل بالفعل لعميل آخر. ابحث عنه وافتح ملفه بدل إنشاء ملف مكرر."],
+    [/intake request was already used/i, "تم حفظ هذا الطلب ببيانات مختلفة. أغلق النموذج وافتحه مجددًا لو ستسجل عميلًا آخر."],
     [/already belongs/i, "وسيلة التواصل هذه مسجلة بالفعل لعميل آخر."],
     [/owner must be an active/i, "مسؤول المتابعة يجب أن يكون عضوًا نشطًا في مساحة العمل."],
     [/Only an active working member/i, "حسابك لا يملك صلاحية إضافة عميل."],
@@ -125,9 +127,13 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   const tradingExperience = text(body.trading_experience) || "unknown";
   const initialStage = text(body.initial_stage) || "new";
   const purchase = typeof body.purchase === "object" && body.purchase && !Array.isArray(body.purchase) ? body.purchase : null;
+  const requestId = text(body.request_id);
 
   if (!organizationId || fullName.length < 2 || fullName.length > 160 || !ownerId) {
     return jsonResponse({ message: "أكمل اسم العميل ومسؤول المتابعة." }, 400);
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+    return jsonResponse({ message: "أعد فتح نافذة إضافة العميل ثم حاول مرة أخرى." }, 400);
   }
   if (!sources.has(source) || !interests.has(interest) || !consentStatuses.has(consentStatus)) {
     return jsonResponse({ message: "مصدر العميل أو اهتمامه أو حالة الموافقة غير صالحة." }, 400);
@@ -205,26 +211,29 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     return jsonResponse({ message: "عضو السيلز يستطيع إضافة العميل لنفسه فقط." }, 403);
   }
 
-  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v6", {
+  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v7", {
     target_user_id: context!.userClaims!.id,
     target_organization_id: organizationId,
-    contact_full_name: fullName,
-    contact_source: source,
-    contact_source_detail: source === "other" ? sourceDetail : null,
-    contact_interest: interest,
-    contact_interest_detail: interest === "other" ? interestDetail : null,
-    contact_owner_id: ownerId,
-    contact_consent_status: consentStatus,
-    contact_identities: identities,
-    contact_trading_experience: tradingExperience,
-    contact_initial_stage: initialStage,
-    initial_notes: text(body.notes),
-    target_follow_up_at: followUpAt,
-    target_conversation_channel: conversationChannel || null,
-    target_conversation_url: conversationUrl || null,
-    target_conversation_label: conversationLabel || null,
-    allow_no_conversation_link: withoutConversationLink,
-    target_purchase: purchase,
+    target_request_id: requestId,
+    payload: {
+      full_name: fullName,
+      source,
+      source_detail: source === "other" ? sourceDetail : null,
+      interest,
+      interest_detail: interest === "other" ? interestDetail : null,
+      owner_id: ownerId,
+      consent_status: consentStatus,
+      identities,
+      trading_experience: tradingExperience,
+      initial_stage: initialStage,
+      notes: text(body.notes),
+      follow_up_at: followUpAt,
+      conversation_channel: conversationChannel || null,
+      conversation_url: conversationUrl || null,
+      conversation_label: conversationLabel || null,
+      without_conversation_link: withoutConversationLink,
+      purchase,
+    },
   });
   return commandError(error, "تعذّر إنشاء ملف العميل. لم يتم حفظ أي جزء من العملية.") ?? jsonResponse({ contactId: data }, 201);
 }

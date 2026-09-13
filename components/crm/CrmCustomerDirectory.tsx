@@ -12,6 +12,7 @@ import { canManageTasks } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { SegmentedProgress, type SegmentedProgressStep } from "../ui/SegmentedProgress";
 import { StatusBadge } from "../ui/StatusBadge";
+import { CrmCreateLeadDialog } from "./CrmCreateLeadDialog";
 
 type Contact = Tables<"crm_contacts">;
 type Identity = Tables<"crm_identities">;
@@ -81,6 +82,8 @@ export function CrmCustomerDirectory() {
   const [primaryView, setPrimaryView] = useState<PrimaryView>("new");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
   const filterCloseRef = useRef<HTMLButtonElement>(null);
   const [page, setPage] = useState(0);
@@ -230,6 +233,14 @@ export function CrmCustomerDirectory() {
   }, [showFilters]);
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("add") !== "1") return;
+    queueMicrotask(() => setShowCreate(true));
+    url.searchParams.delete("add");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+
+  useEffect(() => {
     if (!workspace) return;
     const supabase = getSupabaseBrowserClient();
     const refresh = () => void refreshDirectory(workspace.organization.id);
@@ -284,9 +295,11 @@ export function CrmCustomerDirectory() {
   return <section className="crm-directory-workspace">
     <div className="workspace-toolbar">
       <div><p className="overline">{workspace.organization.name}</p><h1>العملاء</h1><p>{directoryLoading ? "جارٍ تحديث القائمة…" : `${totalCount.toLocaleString("ar-EG")} عميل مطابق ضمن صلاحية حسابك.`}</p></div>
-      <div className="toolbar-actions"><button className="icon-button" type="button" aria-label="تحديث دليل العملاء" disabled={directoryLoading} onClick={() => void refreshDirectory(workspace.organization.id)}><RefreshCw aria-hidden="true" className={directoryLoading ? "spin" : ""} size={17} /></button>{workspace.membership.role !== "viewer" ? <Button href="/crm/operations?add=1"><Plus aria-hidden="true" size={15} /> عميل جديد</Button> : null}</div>
+      <div className="toolbar-actions"><button className="icon-button" type="button" aria-label="تحديث دليل العملاء" disabled={directoryLoading} onClick={() => void refreshDirectory(workspace.organization.id)}><RefreshCw aria-hidden="true" className={directoryLoading ? "spin" : ""} size={17} /></button>{workspace.membership.role !== "viewer" ? <Button type="button" aria-expanded={showCreate} aria-controls="crm-create-dialog" onClick={() => { setNotice(null); setShowCreate(true); }}><Plus aria-hidden="true" size={15} /> عميل جديد</Button> : null}</div>
     </div>
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+    {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
+    {showCreate && workspace.membership.role !== "viewer" ? <CrmCreateLeadDialog organizationId={workspace.organization.id} actorId={session.user.id} people={manager ? salesPeople : []} manager={manager} onClose={() => setShowCreate(false)} onCreated={(kind) => { setShowCreate(false); setNotice(kind === "current" ? "تم حفظ العميل الحالي." : "تم حفظ العميل في قائمة العملاء."); setPage(0); const nextView = kind === "current" ? "current" : "new"; if (primaryView === nextView && page === 0) void refreshDirectory(workspace.organization.id); else setPrimaryView(nextView); }} /> : null}
 
     <nav className="crm-queue-tabs crm-primary-customer-views" aria-label="قوائم العملاء الأساسية">
       {primaryViews.map((view) => <button type="button" className={primaryView === view.id ? "active" : ""} data-view={view.id} aria-current={primaryView === view.id ? "page" : undefined} onClick={() => { setPrimaryView(view.id); setInterestFilter(""); setStageFilter(""); setViewFilter("all"); setPage(0); }} key={view.id}>{view.label}{primaryView === view.id ? <span>{totalCount.toLocaleString("ar-EG")}</span> : null}</button>)}

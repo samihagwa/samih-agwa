@@ -210,6 +210,8 @@ export function CrmWorkspace() {
   const [renderNow] = useState(() => Date.now());
   const [defaultFollowUp] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 24 * 60 * 60 * 1000)));
   const createNameInputRef = useRef<HTMLInputElement>(null);
+  const createRequestId = useRef<string | null>(null);
+  const creatingRef = useRef(false);
   const openedContactLink = useRef<string | null>(null);
   const manager = Boolean(workspace && canManageTasks(workspace.membership.role));
   const platformAdmin = Boolean(workspace && canManageAllTaskExecution(workspace.membership.role));
@@ -494,7 +496,7 @@ export function CrmWorkspace() {
     return grouped;
   }, [tasks]);
 
-  async function invokeCrm(body: Record<string, unknown>, successMessage: string) {
+  async function invokeCrm(body: Record<string, unknown>, successMessage: string, refreshAfter = true) {
     if (!workspace) return false;
     setWorking(true);
     setError(null);
@@ -508,7 +510,7 @@ export function CrmWorkspace() {
       return false;
     }
     setNotice(successMessage);
-    await refreshSafely(workspace.organization.id);
+    if (refreshAfter) await refreshSafely(workspace.organization.id);
     return true;
   }
 
@@ -542,7 +544,7 @@ export function CrmWorkspace() {
 
   async function createLead(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!workspace || !session) return;
+    if (!workspace || !session || creatingRef.current) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const requestedOwnerId = formText(form, "owner_id");
@@ -563,8 +565,13 @@ export function CrmWorkspace() {
       ? primaryIdentityKind
       : identities[0]?.kind ?? "";
     const resolvedSource = sourceForConversationChannel(conversationChannel);
-    const created = await invokeCrm({
+    creatingRef.current = true;
+    createRequestId.current ??= crypto.randomUUID();
+    let created = false;
+    try {
+      created = await invokeCrm({
       action: "create_lead",
+      request_id: createRequestId.current,
       organization_id: workspace.organization.id,
       full_name: formText(form, "full_name"),
       source: resolvedSource,
@@ -584,8 +591,15 @@ export function CrmWorkspace() {
       conversation_label: formText(form, "conversation_label"),
       without_conversation_link: withoutConversationLink,
       purchase: purchaseResult?.purchase ?? null,
-    }, createNeedsFollowUp ? "تم حفظ العميل وإنشاء مهمة المتابعة." : "تم حفظ العميل بدون مهمة متابعة.");
+      }, createNeedsFollowUp ? "تم حفظ العميل وإنشاء مهمة المتابعة." : "تم حفظ العميل بدون مهمة متابعة.", false);
+    } catch (createError) {
+      setError(getErrorMessage(createError));
+      setWorking(false);
+    } finally {
+      creatingRef.current = false;
+    }
     if (created) {
+      createRequestId.current = null;
       formElement.reset();
       setPrimaryIdentityKind("phone");
       setSource("manual");
@@ -596,6 +610,7 @@ export function CrmWorkspace() {
       setCreateNeedsFollowUp(true);
       setWithoutConversationLink(false);
       setShowCreate(false);
+      void refreshSafely(workspace.organization.id);
     }
   }
 
@@ -769,9 +784,8 @@ export function CrmWorkspace() {
   const selectedSalesMembers = leadRoutingMembers.filter((member) => selectedSalesIds.includes(member.user_id));
   const selfSalesPerson = workspace.people.find((person) => person.id === session.user.id);
   const salesPeople = platformAdmin
-    ? selectedSalesMembers.length
-      ? selectedSalesMembers.map((member) => ({ id: member.user_id, name: member.full_name }))
-      : selfSalesPerson ? [{ id: selfSalesPerson.id, name: selfSalesPerson.name }] : []
+    ? [selfSalesPerson ? { id: selfSalesPerson.id, name: selfSalesPerson.name } : null,
+      ...selectedSalesMembers.filter((member) => member.user_id !== session.user.id).map((member) => ({ id: member.user_id, name: member.full_name }))].filter((person): person is { id: string; name: string } => Boolean(person))
     : selfSalesPerson ? [{ id: selfSalesPerson.id, name: selfSalesPerson.name }] : [];
   const totals = {
     all: Number(crmSummary?.total_contacts ?? totalCount),
@@ -875,7 +889,7 @@ export function CrmWorkspace() {
           <label><span>خبرة التداول</span><select value={tradingExperience} onChange={(event) => setTradingExperience(event.target.value as CrmTradingExperience)}>{(Object.keys(crmTradingExperienceConfig) as CrmTradingExperience[]).map((value) => <option value={value} key={value}>{crmTradingExperienceConfig[value].label}</option>)}</select></label>
           <label><span>لينك المحادثة{withoutConversationLink ? " — تم الاستثناء" : " — مطلوب"}</span><input name="conversation_url" type="url" dir="ltr" maxLength={2000} required={!withoutConversationLink} disabled={withoutConversationLink} placeholder={conversationChannel ? crmConversationChannelConfig[conversationChannel].placeholder : "https://..."} /><small>الصق رابط الشات المباشر؛ لو غير متاح اختر الاستثناء بوضوح.</small></label>
           <label className="crm-checkbox crm-chat-link-exception"><input type="checkbox" checked={withoutConversationLink} onChange={(event) => setWithoutConversationLink(event.target.checked)} /><span>بدون لينك محادثة</span></label>
-          {manager ? <label><span>مسؤول العميل</span><select name="owner_id" defaultValue={salesPeople[0]?.id ?? ""} required><option value="" disabled>{salesPeople.length ? "اختر مسؤول السيلز" : "أضف فريق السيلز أولًا"}</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : <input name="owner_id" type="hidden" value={session.user.id} />}
+          {manager ? <label><span>مسؤول المتابعة</span><select name="owner_id" defaultValue={session.user.id} required><option value="" disabled>{salesPeople.length ? "اختر مسؤول السيلز" : "أضف فريق السيلز أولًا"}</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.id === session.user.id ? `${person.name} — أنا` : person.name}</option>)}</select></label> : <input name="owner_id" type="hidden" value={session.user.id} />}
           {customerKind === "current" ? <CrmPurchaseFields key={interest} defaultProduct={interest} /> : null}
           <fieldset className="crm-follow-up-decision crm-create-follow-up-decision"><legend>هل العميل محتاج متابعة مرة تانية؟</legend><div><button type="button" className={createNeedsFollowUp ? "active" : ""} aria-pressed={createNeedsFollowUp} onClick={() => setCreateNeedsFollowUp(true)}>نعم</button><button type="button" className={!createNeedsFollowUp ? "active" : ""} aria-pressed={!createNeedsFollowUp} onClick={() => setCreateNeedsFollowUp(false)}>لا</button></div></fieldset>
           {createNeedsFollowUp ? <label><span>موعد المتابعة</span><input name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /><small>سينشئ مهمة واحدة للمسؤول في هذا الموعد.</small></label> : <div className="crm-current-customer-note"><CheckCircle2 size={17} /><span><strong>بدون متابعة مجدولة</strong><small>يمكن تحديد موعد لاحقًا من ملف العميل.</small></span></div>}

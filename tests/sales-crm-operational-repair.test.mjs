@@ -16,7 +16,7 @@ test("manual sales intake supports chat-only leads, current customers, cashback,
   assert.match(migration, /identity_count > 0/);
   assert.match(migration, /contact_initial_stage not in \('new', 'won'\)/);
   assert.match(migration, /alter type public\.crm_interest add value if not exists 'cashback'/);
-  assert.match(command, /create_crm_lead_v6/);
+  assert.match(command, /create_crm_lead_v7/);
   assert.match(command, /cashback/);
   assert.match(workspace, /حفظ كعميل حالي/);
   assert.match(workspace, /رقم الهاتف أو البريد أو اسم المستخدم ليست شروطًا للحفظ/);
