@@ -15,6 +15,7 @@ const protectedRoutes = [
   ["/crm", "كل عميل له مالك"],
   ["/crm/customers", "دليل موحّد لكل العملاء"],
   ["/crm/exness", "حسابات الوكالة"],
+  ["/crm/operations", "إعداد المتابعة"],
   ["/crm/example", "ملف العميل"],
   ["/analytics", "الأرقام تقود القرار"],
   ["/chat", "دردشة داخلية منظمة"],

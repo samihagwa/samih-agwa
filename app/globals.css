@@ -2535,6 +2535,11 @@ button.publishing-asset-card.selected { border-color: var(--teal-700); box-shado
   .crm-sales-roster > div { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 420px) {
+  .crm-section-nav { flex-wrap: wrap; }
+  .crm-section-nav a { flex: 1 1 112px; }
+}
+
 .secure-login-page { min-height: 100vh; padding: clamp(24px, 5vw, 64px); display: grid; grid-template-rows: auto 1fr auto; place-items: center; gap: 30px; background: radial-gradient(circle at 12% 12%, rgba(11,108,99,.13), transparent 32rem), var(--canvas); }
 .secure-login-brand { display: flex; align-items: center; gap: 12px; direction: ltr; }
 .secure-login-brand strong, .secure-login-brand small { display: block; }

@@ -2218,7 +2218,9 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.doesNotMatch(mainPage, /<CrmWorkspace \/>/);
   assert.match(operationsPage, /<CrmWorkspace \/>/);
   assert.match(nav, /href: "\/crm"/);
-  assert.doesNotMatch(nav, /href: "\/crm\/operations"/);
+  assert.match(nav, /href: "\/crm\/operations", label: "إعداد المتابعة"/);
+  assert.match(nav, /pathname\.startsWith\(href\)/);
+  assert.match(css, /@media \(max-width: 420px\) \{\s*\.crm-section-nav \{ flex-wrap: wrap; \}/);
   assert.match(css, /\.crm-directory-table-wrap \{[^}]+overflow: auto/);
 });
 

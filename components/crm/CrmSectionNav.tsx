@@ -1,11 +1,12 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Building2, LayoutList } from "lucide-react";
+import { Building2, LayoutList, SlidersHorizontal } from "lucide-react";
 
 const items = [
   { href: "/crm", label: "العملاء", icon: LayoutList },
   { href: "/crm/exness", label: "عملاء الوكالة", icon: Building2 },
+  { href: "/crm/operations", label: "إعداد المتابعة", icon: SlidersHorizontal },
 ];
 
 export function CrmSectionNav() {
