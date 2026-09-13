@@ -13,7 +13,6 @@ const conversationChannels = new Set(["telegram", "whatsapp", "instagram", "face
 const consentStatuses = new Set(["unknown", "granted", "denied"]);
 const activityKinds = new Set(["call", "message", "email", "note"]);
 const leadStages = new Set(["new", "contacted", "qualified", "follow_up", "won", "lost", "do_not_contact"]);
-const activeStages = new Set(["new", "contacted", "qualified", "follow_up"]);
 const leadTemperatures = new Set(["cold", "warm", "hot"]);
 const preferredContactMethods = new Set(["phone", "email", "telegram", "whatsapp", "instagram", "facebook", "messenger", "tiktok", "meta_business", "other"]);
 const tradingExperiences = new Set(["unknown", "new", "experienced"]);
@@ -122,8 +121,10 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   const conversationChannel = text(body.conversation_channel);
   const conversationUrl = text(body.conversation_url);
   const conversationLabel = text(body.conversation_label);
+  const withoutConversationLink = body.without_conversation_link === true;
   const tradingExperience = text(body.trading_experience) || "unknown";
   const initialStage = text(body.initial_stage) || "new";
+  const purchase = typeof body.purchase === "object" && body.purchase && !Array.isArray(body.purchase) ? body.purchase : null;
 
   if (!organizationId || fullName.length < 2 || fullName.length > 160 || !ownerId) {
     return jsonResponse({ message: "أكمل اسم العميل ومسؤول المتابعة." }, 400);
@@ -170,6 +171,9 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   if (conversationUrl && !conversationChannel) {
     return jsonResponse({ message: "اختر منصة المحادثة مع لينك الشات." }, 400);
   }
+  if (!conversationUrl && !withoutConversationLink) {
+    return jsonResponse({ message: "أضف لينك المحادثة، أو اختر «بدون لينك محادثة» صراحةً." }, 400);
+  }
   if (conversationChannel && !conversationChannels.has(conversationChannel)) {
     return jsonResponse({ message: "منصة المحادثة غير صالحة." }, 400);
   }
@@ -179,8 +183,9 @@ async function createLead(body: Record<string, unknown>, context: Context) {
   if (conversationLabel && (!conversationUrl || conversationLabel.length < 2 || conversationLabel.length > 80)) {
     return jsonResponse({ message: "وصف لينك المحادثة يجب أن يكون بين حرفين و80 حرفًا." }, 400);
   }
-  if (initialStage === "new" && !followUpAt) return jsonResponse({ message: "حدد موعد متابعة صحيحًا في المستقبل." }, 400);
-  if (initialStage === "won" && text(body.follow_up_at)) return jsonResponse({ message: "العميل الحالي لا يحتاج مهمة متابعة مبيعات عند تسجيله." }, 400);
+  if (text(body.follow_up_at) && !followUpAt) return jsonResponse({ message: "حدد موعد متابعة صحيحًا في المستقبل." }, 400);
+  if (initialStage === "won" && !purchase) return jsonResponse({ message: "اختر المنتج الذي اشتراه العميل بالفعل." }, 400);
+  if (initialStage === "new" && purchase) return jsonResponse({ message: "المنتج المشترى يخص العملاء الفعليين فقط." }, 400);
   if (text(body.notes).length > 5000) return jsonResponse({ message: "ملاحظات العميل أطول من الحد المسموح." }, 400);
 
   const actorId = text(context?.userClaims?.id);
@@ -200,7 +205,7 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     return jsonResponse({ message: "عضو السيلز يستطيع إضافة العميل لنفسه فقط." }, 403);
   }
 
-  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v5", {
+  const { data, error } = await context!.supabaseAdmin.rpc("create_crm_lead_v6", {
     target_user_id: context!.userClaims!.id,
     target_organization_id: organizationId,
     contact_full_name: fullName,
@@ -214,10 +219,12 @@ async function createLead(body: Record<string, unknown>, context: Context) {
     contact_trading_experience: tradingExperience,
     contact_initial_stage: initialStage,
     initial_notes: text(body.notes),
-    target_follow_up_at: initialStage === "new" ? followUpAt : null,
+    target_follow_up_at: followUpAt,
     target_conversation_channel: conversationChannel || null,
     target_conversation_url: conversationUrl || null,
     target_conversation_label: conversationLabel || null,
+    allow_no_conversation_link: withoutConversationLink,
+    target_purchase: purchase,
   });
   return commandError(error, "تعذّر إنشاء ملف العميل. لم يتم حفظ أي جزء من العملية.") ?? jsonResponse({ contactId: data }, 201);
 }
@@ -250,11 +257,11 @@ async function recordActivity(body: Record<string, unknown>, context: Context) {
   if (!contactId || !activityKinds.has(kind) || !leadStages.has(nextStage) || summary.length < 3 || summary.length > 4000) {
     return jsonResponse({ message: "اختر نتيجة المتابعة واكتب ملخصًا واضحًا." }, 400);
   }
-  if (activeStages.has(nextStage) && !nextFollowUpAt) {
-    return jsonResponse({ message: "المرحلة النشطة تحتاج موعد متابعة جديدًا في المستقبل." }, 400);
+  if (text(body.next_follow_up_at) && !nextFollowUpAt) {
+    return jsonResponse({ message: "حدد موعد متابعة صحيحًا في المستقبل." }, 400);
   }
-  if (!activeStages.has(nextStage) && text(body.next_follow_up_at)) {
-    return jsonResponse({ message: "المرحلة المغلقة لا تحتاج موعد متابعة جديدًا." }, 400);
+  if (["lost", "do_not_contact"].includes(nextStage) && nextFollowUpAt) {
+    return jsonResponse({ message: "العميل المغلق لا يحتاج موعد متابعة جديدًا." }, 400);
   }
   if (["lost", "do_not_contact"].includes(nextStage) && summary.length > 1000) {
     return jsonResponse({ message: "سبب الإغلاق يجب ألا يزيد عن 1000 حرف." }, 400);
@@ -265,14 +272,16 @@ async function recordActivity(body: Record<string, unknown>, context: Context) {
     return jsonResponse({ message: "حدّث ملف العميل ثم أعد تسجيل النتيجة." }, 409);
   }
 
-  const { data, error } = await context!.supabaseAdmin.rpc("record_crm_activity_v2", {
+  const purchase = typeof body.purchase === "object" && body.purchase && !Array.isArray(body.purchase) ? body.purchase : null;
+  const { data, error } = await context!.supabaseAdmin.rpc("record_crm_activity_v3", {
     target_user_id: context!.userClaims!.id,
     target_contact_id: contactId,
     expected_contact_version: expectedVersion,
     activity_kind: kind,
     next_stage: nextStage,
     activity_summary: summary,
-    target_next_follow_up_at: activeStages.has(nextStage) ? nextFollowUpAt : null,
+    target_next_follow_up_at: nextFollowUpAt,
+    target_purchase: purchase,
   });
   return commandError(error, "تعذّر تسجيل نتيجة المتابعة.") ?? jsonResponse({ changed: data });
 }

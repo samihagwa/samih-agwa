@@ -1514,6 +1514,62 @@ export type Database = {
           },
         ]
       }
+      crm_customer_purchases: {
+        Row: {
+          id: string
+          organization_id: string
+          contact_id: string
+          product: Database["public"]["Enums"]["crm_interest"]
+          product_detail: string | null
+          exness_account: string | null
+          tradingview_username: string | null
+          subscription_amount: number | null
+          subscription_currency: string | null
+          subscription_starts_on: string | null
+          subscription_ends_on: string | null
+          created_by: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          contact_id: string
+          product: Database["public"]["Enums"]["crm_interest"]
+          product_detail?: string | null
+          exness_account?: string | null
+          tradingview_username?: string | null
+          subscription_amount?: number | null
+          subscription_currency?: string | null
+          subscription_starts_on?: string | null
+          subscription_ends_on?: string | null
+          created_by: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          contact_id?: string
+          product?: Database["public"]["Enums"]["crm_interest"]
+          product_detail?: string | null
+          exness_account?: string | null
+          tradingview_username?: string | null
+          subscription_amount?: number | null
+          subscription_currency?: string | null
+          subscription_starts_on?: string | null
+          subscription_ends_on?: string | null
+          created_by?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_customer_purchases_contact_id_organization_id_fkey"
+            columns: ["contact_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "crm_contacts"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
       crm_sales_profiles: {
         Row: {
           contact_id: string
@@ -5079,6 +5135,30 @@ export type Database = {
         }
         Returns: string
       }
+      create_crm_lead_v6: {
+        Args: {
+          allow_no_conversation_link: boolean
+          contact_consent_status: Database["public"]["Enums"]["crm_consent_status"]
+          contact_full_name: string
+          contact_identities: Json
+          contact_initial_stage: Database["public"]["Enums"]["crm_lead_stage"]
+          contact_interest: Database["public"]["Enums"]["crm_interest"]
+          contact_interest_detail: string
+          contact_owner_id: string
+          contact_source: Database["public"]["Enums"]["crm_source"]
+          contact_source_detail: string
+          contact_trading_experience: Database["public"]["Enums"]["crm_trading_experience"]
+          initial_notes: string
+          target_conversation_channel: Database["public"]["Enums"]["crm_conversation_channel"] | null
+          target_conversation_label: string
+          target_conversation_url: string | null
+          target_follow_up_at: string | null
+          target_organization_id: string
+          target_purchase: Json | null
+          target_user_id: string
+        }
+        Returns: string
+      }
       create_launch_deliverable: {
         Args: {
           deliverable_brief: string
@@ -5895,6 +5975,19 @@ export type Database = {
         }
         Returns: Json
       }
+      record_crm_activity_v3: {
+        Args: {
+          activity_kind: Database["public"]["Enums"]["crm_activity_kind"]
+          activity_summary: string
+          expected_contact_version: number
+          next_stage: Database["public"]["Enums"]["crm_lead_stage"]
+          target_contact_id: string
+          target_next_follow_up_at: string | null
+          target_purchase: Json | null
+          target_user_id: string
+        }
+        Returns: Json
+      }
       save_crm_sales_profile: {
         Args: {
           expected_profile_version: number
@@ -6245,6 +6338,30 @@ export type Database = {
         }[]
       }
       search_crm_contacts_v8: {
+        Args: {
+          result_limit: number
+          result_offset: number
+          search_query: string
+          target_interest: Database["public"]["Enums"]["crm_interest"] | null
+          target_organization_id: string
+          target_owner_id: string | null
+          target_priority: string
+          target_queue: string
+          target_scope: string
+          target_segment: string
+          target_source: Database["public"]["Enums"]["crm_source"] | null
+          target_stage: Database["public"]["Enums"]["crm_lead_stage"] | null
+          target_trading_experience: Database["public"]["Enums"]["crm_trading_experience"] | null
+          target_view: string
+        }
+        Returns: {
+          contact_id: string
+          priority_reason: string
+          priority_score: number
+          total_count: number
+        }[]
+      }
+      search_crm_contacts_v9: {
         Args: {
           result_limit: number
           result_offset: number

@@ -16,7 +16,7 @@ test("manual sales intake supports chat-only leads, current customers, cashback,
   assert.match(migration, /identity_count > 0/);
   assert.match(migration, /contact_initial_stage not in \('new', 'won'\)/);
   assert.match(migration, /alter type public\.crm_interest add value if not exists 'cashback'/);
-  assert.match(command, /create_crm_lead_v5/);
+  assert.match(command, /create_crm_lead_v6/);
   assert.match(command, /cashback/);
   assert.match(workspace, /حفظ كعميل حالي/);
   assert.match(workspace, /رقم الهاتف أو البريد أو اسم المستخدم ليست شروطًا للحفظ/);
@@ -40,7 +40,8 @@ test("CRM directory exposes one clear set of customer views and trading-experien
   assert.match(directory, /عملاء المؤشر/);
   assert.match(directory, /عملاء الكاش باك/);
   assert.match(directory, /عملاء بالفعل/);
-  assert.match(directory, /search_crm_contacts_v8/);
+  assert.match(directory, /search_crm_contacts_v9/);
+  assert.match(directory, /عملاء إكسنس/);
 });
 
 test("manual customer queue never conflates automatic indicator intake with sales-created customers", async () => {
@@ -59,11 +60,38 @@ test("manual customer queue never conflates automatic indicator intake with sale
   assert.match(directory, /primaryView === "new" \? "manual"/);
   assert.match(directory, /crm-sales-performance/);
   assert.match(directory, /action=convert/);
-  assert.match(customer, /name="purchased_service" required/);
+  assert.match(customer, /CrmPurchaseFields/);
   assert.match(customer, /next_stage: nextStage/);
   assert.match(css, /\.crm-primary-customer-views button\[data-view="current"\]\.active/);
   assert.match(css, /\.exness-related-accounts \.exness-account-table, \.exness-related-accounts \.exness-account-table tbody \{ width: 100%; min-width: 0/);
   assert.match(css, /td\[data-label="المصدر"\][\s\S]*?display: none/);
+});
+
+test("CRM purchase and follow-up choices stay atomic, scoped, and distinct from agency lookup", async () => {
+  const [migration, command, directory, workspace, purchaseFields, css] = await Promise.all([
+    read("../supabase/migrations/20260913020000_crm_purchases_and_opt_in_followups.sql"),
+    read("../supabase/functions/crm-commands/index.ts"),
+    read("../components/crm/CrmCustomerDirectory.tsx"),
+    read("../components/crm/CrmWorkspace.tsx"),
+    read("../components/crm/CrmPurchaseFields.tsx"),
+    read("../app/globals.css"),
+  ]);
+  assert.match(migration, /create table public\.crm_customer_purchases/);
+  assert.match(migration, /section_scope_crm_customer_purchases/);
+  assert.match(migration, /create or replace function public\.create_crm_lead_v6/);
+  assert.match(migration, /create or replace function public\.record_crm_activity_v3/);
+  assert.match(migration, /target_segment = 'exness'/);
+  assert.match(migration, /contact\.source = 'exness' or contact\.interest = 'brokerage'/);
+  assert.doesNotMatch(migration, /broker_client_accounts/);
+  assert.match(command, /without_conversation_link/);
+  assert.match(command, /record_crm_activity_v3/);
+  assert.match(workspace, /هل العميل محتاج متابعة مرة تانية؟/);
+  assert.match(workspace, /بدون لينك محادثة/);
+  assert.match(purchaseFields, /purchase_exness_account/);
+  assert.match(purchaseFields, /purchase_tradingview_username/);
+  assert.match(purchaseFields, /purchase_subscription_amount/);
+  assert.match(directory, /crm-mobile-row-number/);
+  assert.match(css, /\.crm-mobile-row-number \{ display: inline-flex/);
 });
 
 test("agency account lookup is available to CRM sales without a financial directory", async () => {

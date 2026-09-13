@@ -1235,7 +1235,7 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(migration, /from public, anon, authenticated/);
   assert.match(edgeFunction, /createSupabaseContext/);
   assert.match(edgeFunction, /auth: "user"/);
-  assert.match(edgeFunction, /create_crm_lead_v5/);
+  assert.match(edgeFunction, /create_crm_lead_v6/);
   assert.match(edgeFunction, /add_crm_identity/);
   assert.match(contextMigration, /create table public\.crm_conversation_links/);
   assert.match(contextMigration, /alter table public\.crm_conversation_links enable row level security/);
@@ -1252,7 +1252,7 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(scaleMigration, /grant execute on function public\.search_crm_contacts[\s\S]*to authenticated/);
   assert.match(scaleMigration, /grant execute on function public\.create_crm_lead_v3[\s\S]*to service_role/);
   assert.match(workspace, /رقم الهاتف أو البريد أو اسم المستخدم ليست شروطًا للحفظ/);
-  assert.match(workspace, /لينك المحادثة — اختياري/);
+  assert.match(workspace, /بدون لينك محادثة/);
   assert.match(workspace, /بتتكلم معاه فين/);
   assert.match(workspace, /اكتب سبب التسجيل/);
   assert.match(workspace, /ابحث بالاسم، الهاتف، البريد، TradingView، Telegram/);
@@ -2130,7 +2130,7 @@ test("CRM customer files save communication results atomically and create the ne
   assert.match(migration, /section_scope_crm_sales_profiles/);
   assert.match(migration, /when 'crm_contact' then[\s\S]*'\/crm\/' \|\| new\.entity_id/);
 
-  assert.match(edge, /rpc\("record_crm_activity_v2"/);
+  assert.match(edge, /rpc\("record_crm_activity_v3"/);
   assert.match(edge, /expected_contact_version: expectedVersion/);
   assert.match(edge, /action === "save_sales_profile"/);
   assert.match(edge, /action === "add_conversation_link"/);
@@ -2147,7 +2147,7 @@ test("CRM customer files save communication results atomically and create the ne
   assert.match(listWorkspace, /crmContactDeepLink\(contact\.id\)/);
   assert.match(deepLinks, /return `\/crm\/\$\{id\}`/);
   assert.match(types, /crm_sales_profiles:/);
-  assert.match(types, /record_crm_activity_v2:/);
+  assert.match(types, /record_crm_activity_v3:/);
 });
 
 test("CRM customer directory keeps every source filter permission-scoped and links exact records", async () => {
@@ -2198,7 +2198,7 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   for (const source of ["instagram", "tiktok", "meta_business"]) assert.match(socialMigration, new RegExp(`'${source}'`));
   assert.match(intakeMigration, /function public\.search_crm_contacts_v8/);
   assert.match(intakeMigration, /target_trading_experience is null/);
-  assert.match(directory, /rpc\("search_crm_contacts_v8"/);
+  assert.match(directory, /rpc\("search_crm_contacts_v9"/);
   assert.match(directory, /الأعلى للتواصل الآن/);
   assert.match(directory, /عميل جديد/);
   assert.match(directory, /get_crm_owner_performance_v2/);
@@ -2218,7 +2218,7 @@ test("CRM customer directory keeps every source filter permission-scoped and lin
   assert.doesNotMatch(mainPage, /<CrmWorkspace \/>/);
   assert.match(operationsPage, /<CrmWorkspace \/>/);
   assert.match(nav, /href: "\/crm"/);
-  assert.match(nav, /href: "\/crm\/operations"/);
+  assert.doesNotMatch(nav, /href: "\/crm\/operations"/);
   assert.match(css, /\.crm-directory-table-wrap \{[^}]+overflow: auto/);
 });
 

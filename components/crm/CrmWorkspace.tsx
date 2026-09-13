@@ -59,6 +59,7 @@ import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { canManageAllTaskExecution, canManageTasks, taskStatusConfig } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
+import { CrmPurchaseFields, readCrmPurchase } from "./CrmPurchaseFields";
 
 type Contact = Tables<"crm_contacts">;
 type Identity = Tables<"crm_identities">;
@@ -191,6 +192,8 @@ export function CrmWorkspace() {
   const [conversationChannel, setConversationChannel] = useState<CrmConversationChannel | "">("");
   const [tradingExperience, setTradingExperience] = useState<CrmTradingExperience>("unknown");
   const [customerKind, setCustomerKind] = useState<CustomerKind>("prospect");
+  const [createNeedsFollowUp, setCreateNeedsFollowUp] = useState(true);
+  const [withoutConversationLink, setWithoutConversationLink] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [ownerFilter, setOwnerFilter] = useState("");
   const [stageFilter, setStageFilter] = useState<CrmLeadStage | "">("");
@@ -546,8 +549,11 @@ export function CrmWorkspace() {
     if (manager && !salesPeople.some((person) => person.id === requestedOwnerId)) {
       return setError("اختر مسؤولًا من فريق السيلز المحدد قبل إنشاء العميل.");
     }
-    const followUpAt = customerKind === "prospect" ? futureDateIso(formText(form, "follow_up_at")) : null;
-    if (customerKind === "prospect" && !followUpAt) return setError("حدد موعد متابعة صحيحًا في المستقبل.");
+    const followUpAt = createNeedsFollowUp ? futureDateIso(formText(form, "follow_up_at")) : null;
+    if (createNeedsFollowUp && !followUpAt) return setError("حدد موعد متابعة صحيحًا في المستقبل.");
+    if (!withoutConversationLink && (!conversationChannel || !formText(form, "conversation_url"))) return setError("أضف لينك المحادثة أو اضغط «بدون لينك محادثة».");
+    const purchaseResult = customerKind === "current" ? readCrmPurchase(form) : null;
+    if (purchaseResult?.error) return setError(purchaseResult.error);
     const identities: Array<{ kind: CrmIdentityKind; value: string }> = crmContactIdentityKinds
       .map((kind) => ({ kind, value: formText(form, `identity_${kind}`) }))
       .filter((identity) => identity.value);
@@ -576,7 +582,9 @@ export function CrmWorkspace() {
       conversation_channel: formText(form, "conversation_channel"),
       conversation_url: formText(form, "conversation_url"),
       conversation_label: formText(form, "conversation_label"),
-    }, customerKind === "current" ? "تم حفظ العميل في قائمة العملاء الحاليين." : "تم حفظ العميل وإنشاء مهمة المتابعة.");
+      without_conversation_link: withoutConversationLink,
+      purchase: purchaseResult?.purchase ?? null,
+    }, createNeedsFollowUp ? "تم حفظ العميل وإنشاء مهمة المتابعة." : "تم حفظ العميل بدون مهمة متابعة.");
     if (created) {
       formElement.reset();
       setPrimaryIdentityKind("phone");
@@ -585,6 +593,8 @@ export function CrmWorkspace() {
       setConversationChannel("");
       setTradingExperience("unknown");
       setCustomerKind("prospect");
+      setCreateNeedsFollowUp(true);
+      setWithoutConversationLink(false);
       setShowCreate(false);
     }
   }
@@ -852,20 +862,23 @@ export function CrmWorkspace() {
       <form id="crm-create-dialog" className="panel crm-create-form crm-simple-intake" role="dialog" aria-modal="true" aria-labelledby="crm-create-dialog-title" onSubmit={(event) => void createLead(event)}>
         <div className="section-heading"><div><p className="overline">تسجيل سريع</p><h2 id="crm-create-dialog-title">إضافة عميل</h2><p>اكتب المتاح فقط. رقم الهاتف أو البريد أو اسم المستخدم ليست شروطًا للحفظ.</p></div><button className="text-button" type="button" onClick={() => { setError(null); setShowCreate(false); }}>إغلاق</button></div>
 
-        <fieldset className="crm-customer-kind"><legend>حالة العميل الآن</legend><input type="hidden" name="customer_kind" value={customerKind} /><div role="group" aria-label="حالة العميل"><button type="button" aria-pressed={customerKind === "prospect"} className={customerKind === "prospect" ? "active" : ""} onClick={() => setCustomerKind("prospect")}><strong>عميل محتمل</strong><small>يحتاج متابعة مبيعات</small></button><button type="button" aria-pressed={customerKind === "current"} className={customerKind === "current" ? "active" : ""} onClick={() => setCustomerKind("current")}><strong>عميل حالي</strong><small>اشترى أو اشترك بالفعل</small></button></div></fieldset>
+        <fieldset className="crm-customer-kind"><legend>حالة العميل الآن</legend><input type="hidden" name="customer_kind" value={customerKind} /><div role="group" aria-label="حالة العميل"><button type="button" aria-pressed={customerKind === "prospect"} className={customerKind === "prospect" ? "active" : ""} onClick={() => { setCustomerKind("prospect"); setCreateNeedsFollowUp(true); }}><strong>عميل محتمل</strong><small>لسه بنتواصل معاه</small></button><button type="button" aria-pressed={customerKind === "current"} className={customerKind === "current" ? "active" : ""} onClick={() => { setCustomerKind("current"); setCreateNeedsFollowUp(false); }}><strong>عميل حالي</strong><small>اشترى أو اشترك بالفعل</small></button></div></fieldset>
 
         {error ? <p className="form-notice error crm-dialog-notice" role="alert">{error}</p> : null}
 
         <div className="form-grid crm-simple-intake-grid">
           <label><span>اسم العميل</span><input ref={createNameInputRef} name="full_name" minLength={2} maxLength={160} required placeholder="الاسم كما تعرفه" /></label>
-          <label><span>بتتكلم معاه فين؟</span><select name="conversation_channel" value={conversationChannel} onChange={(event) => { const channel = event.target.value as CrmConversationChannel | ""; setConversationChannel(channel); setSource(sourceForConversationChannel(channel)); }}><option value="">مش محدد حاليًا</option>{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select><small>اختيار المنصة يكفي حتى لو معكش رقم أو يوزر.</small></label>
+          <label><span>بتتكلم معاه فين؟</span><select name="conversation_channel" value={conversationChannel} required={!withoutConversationLink} onChange={(event) => { const channel = event.target.value as CrmConversationChannel | ""; setConversationChannel(channel); setSource(sourceForConversationChannel(channel)); }}><option value="">اختر المنصة</option>{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select><small>المنصة تساعد مسؤول العميل يفتح المحادثة الصحيحة.</small></label>
           <label><span>مهتم بإيه؟</span><select name="interest" value={interest} onChange={(event) => setInterest(event.target.value as CrmInterest)}>{(Object.keys(crmInterestConfig) as CrmInterest[]).map((option) => <option value={option} key={option}>{crmInterestConfig[option].label}</option>)}</select></label>
           {interest === "other" ? <label><span>اكتب سبب التسجيل</span><input name="interest_detail" minLength={2} maxLength={160} required placeholder="الخدمة أو العرض المطلوب" /></label> : null}
           {interest === "cashback" ? <label className="crm-cashback-account"><span>رقم حساب Exness — اختياري</span><input name="identity_exness_account" dir="ltr" minLength={5} maxLength={32} placeholder="Trading account number" /><small>سيظهر داخل ملف العميل ويسهل البحث ومنع التكرار.</small></label> : null}
           <label><span>خبرة التداول</span><select value={tradingExperience} onChange={(event) => setTradingExperience(event.target.value as CrmTradingExperience)}>{(Object.keys(crmTradingExperienceConfig) as CrmTradingExperience[]).map((value) => <option value={value} key={value}>{crmTradingExperienceConfig[value].label}</option>)}</select></label>
-          {conversationChannel ? <label><span>لينك المحادثة — اختياري</span><input name="conversation_url" type="url" dir="ltr" maxLength={2000} placeholder={crmConversationChannelConfig[conversationChannel].placeholder} /><small>أضفه لو متاح للوصول للشات بضغطة واحدة.</small></label> : null}
+          <label><span>لينك المحادثة{withoutConversationLink ? " — تم الاستثناء" : " — مطلوب"}</span><input name="conversation_url" type="url" dir="ltr" maxLength={2000} required={!withoutConversationLink} disabled={withoutConversationLink} placeholder={conversationChannel ? crmConversationChannelConfig[conversationChannel].placeholder : "https://..."} /><small>الصق رابط الشات المباشر؛ لو غير متاح اختر الاستثناء بوضوح.</small></label>
+          <label className="crm-checkbox crm-chat-link-exception"><input type="checkbox" checked={withoutConversationLink} onChange={(event) => setWithoutConversationLink(event.target.checked)} /><span>بدون لينك محادثة</span></label>
           {manager ? <label><span>مسؤول العميل</span><select name="owner_id" defaultValue={salesPeople[0]?.id ?? ""} required><option value="" disabled>{salesPeople.length ? "اختر مسؤول السيلز" : "أضف فريق السيلز أولًا"}</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : <input name="owner_id" type="hidden" value={session.user.id} />}
-          {customerKind === "prospect" ? <label><span>موعد أول متابعة</span><input name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /><small>سينشئ مهمة واحدة للمسؤول.</small></label> : <div className="crm-current-customer-note"><CheckCircle2 size={17} /><span><strong>سيُحفظ كعميل حالي</strong><small>بدون إنشاء مهمة مبيعات تلقائية.</small></span></div>}
+          {customerKind === "current" ? <CrmPurchaseFields key={interest} defaultProduct={interest} /> : null}
+          <fieldset className="crm-follow-up-decision crm-create-follow-up-decision"><legend>هل العميل محتاج متابعة مرة تانية؟</legend><div><button type="button" className={createNeedsFollowUp ? "active" : ""} aria-pressed={createNeedsFollowUp} onClick={() => setCreateNeedsFollowUp(true)}>نعم</button><button type="button" className={!createNeedsFollowUp ? "active" : ""} aria-pressed={!createNeedsFollowUp} onClick={() => setCreateNeedsFollowUp(false)}>لا</button></div></fieldset>
+          {createNeedsFollowUp ? <label><span>موعد المتابعة</span><input name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /><small>سينشئ مهمة واحدة للمسؤول في هذا الموعد.</small></label> : <div className="crm-current-customer-note"><CheckCircle2 size={17} /><span><strong>بدون متابعة مجدولة</strong><small>يمكن تحديد موعد لاحقًا من ملف العميل.</small></span></div>}
           <label className="full-field"><span>ملاحظة سريعة — اختياري</span><textarea name="notes" maxLength={5000} rows={3} placeholder="طلبه أو ما تم الاتفاق عليه" /></label>
         </div>
 
@@ -873,7 +886,7 @@ export function CrmWorkspace() {
         <input name="consent_status" type="hidden" value="unknown" />
         <input name="source" type="hidden" value={source} />
 
-        <div className="form-actions"><Button type="submit" disabled={working || (manager && !salesPeople.length)}>{working ? <LoaderCircle className="spin" size={16} /> : <UserRoundCheck size={16} />} {customerKind === "current" ? "حفظ كعميل حالي" : "حفظ وإنشاء المتابعة"}</Button><small>يمكن إضافة بيانات التواصل لاحقًا من ملف العميل.</small></div>
+        <div className="form-actions"><Button type="submit" disabled={working || (manager && !salesPeople.length)}>{working ? <LoaderCircle className="spin" size={16} /> : <UserRoundCheck size={16} />} {customerKind === "current" ? "حفظ كعميل حالي" : createNeedsFollowUp ? "حفظ وإنشاء المتابعة" : "حفظ العميل"}</Button><small>يمكن إضافة بيانات التواصل لاحقًا من ملف العميل.</small></div>
       </form>
     </div> : null}
 

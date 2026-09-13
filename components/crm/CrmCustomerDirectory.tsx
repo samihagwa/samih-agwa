@@ -25,8 +25,8 @@ type ScopeFilter = "all" | "mine" | "overdue";
 type ViewFilter = "all" | "current" | "archive";
 type QueueFilter = "all" | "new" | "today" | "overdue" | "waiting" | "interested" | "converted" | "lost";
 type PriorityFilter = "all" | "high";
-type LeadSegment = "all" | "indicator" | "cashback" | "other";
-type PrimaryView = "new" | "today" | "current" | "indicator" | "cashback" | "all";
+type LeadSegment = "all" | "indicator" | "cashback" | "exness" | "other";
+type PrimaryView = "new" | "today" | "current" | "exness" | "indicator" | "cashback" | "all";
 
 const PAGE_SIZE = 25;
 const crmProgressStages: Array<{ id: CrmLeadStage; label: string }> = [
@@ -40,6 +40,7 @@ const primaryViews: Array<{ id: PrimaryView; label: string }> = [
   { id: "new", label: "عملاء جدد" },
   { id: "today", label: "متابعة اليوم" },
   { id: "current", label: "عملاء بالفعل" },
+  { id: "exness", label: "عملاء إكسنس" },
   { id: "indicator", label: "عملاء المؤشر" },
   { id: "cashback", label: "عملاء الكاش باك" },
   { id: "all", label: "كل العملاء" },
@@ -137,14 +138,14 @@ export function CrmCustomerDirectory() {
   const session = useWorkspaceAuth({ configured, loadWorkspace, clearWorkspace, setLoading });
   const manager = Boolean(workspace && canManageTasks(workspace.membership.role));
   const queueFilter: QueueFilter = primaryView === "today" ? "today" : primaryView === "current" ? "converted" : "all";
-  const leadSegment: LeadSegment | "manual" = primaryView === "new" ? "manual" : primaryView === "indicator" ? "indicator" : primaryView === "cashback" ? "cashback" : "all";
+  const leadSegment: LeadSegment | "manual" = primaryView === "new" ? "manual" : primaryView === "indicator" ? "indicator" : primaryView === "cashback" ? "cashback" : primaryView === "exness" ? "exness" : "all";
 
   const refreshDirectory = useCallback(async (organizationId: string) => {
     const supabase = getSupabaseBrowserClient();
     setDirectoryLoading(true);
     setError(null);
     try {
-      const [searchResult, performanceResult] = await Promise.all([supabase.rpc("search_crm_contacts_v8", {
+      const [searchResult, performanceResult] = await Promise.all([supabase.rpc("search_crm_contacts_v9", {
         target_organization_id: organizationId,
         search_query: searchQuery,
         target_owner_id: (ownerFilter || null) as unknown as string,
@@ -283,7 +284,7 @@ export function CrmCustomerDirectory() {
   return <section className="crm-directory-workspace">
     <div className="workspace-toolbar">
       <div><p className="overline">{workspace.organization.name}</p><h1>العملاء</h1><p>{directoryLoading ? "جارٍ تحديث القائمة…" : `${totalCount.toLocaleString("ar-EG")} عميل مطابق ضمن صلاحية حسابك.`}</p></div>
-      <div className="toolbar-actions"><button className="icon-button" type="button" aria-label="تحديث دليل العملاء" disabled={directoryLoading} onClick={() => void refreshDirectory(workspace.organization.id)}><RefreshCw aria-hidden="true" className={directoryLoading ? "spin" : ""} size={17} /></button>{workspace.membership.role !== "viewer" ? <Button href="/crm/operations?add=1"><Plus aria-hidden="true" size={15} /> عميل جديد</Button> : null}<Button href="/crm/operations" variant="secondary"><Route aria-hidden="true" size={15} /> إعداد المتابعة</Button></div>
+      <div className="toolbar-actions"><button className="icon-button" type="button" aria-label="تحديث دليل العملاء" disabled={directoryLoading} onClick={() => void refreshDirectory(workspace.organization.id)}><RefreshCw aria-hidden="true" className={directoryLoading ? "spin" : ""} size={17} /></button>{workspace.membership.role !== "viewer" ? <Button href="/crm/operations?add=1"><Plus aria-hidden="true" size={15} /> عميل جديد</Button> : null}</div>
     </div>
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
 
@@ -312,7 +313,7 @@ export function CrmCustomerDirectory() {
         <header><h2 id="crm-filter-title">تصفية</h2><button ref={filterCloseRef} type="button" aria-label="إغلاق" onClick={() => setShowFilters(false)}><X aria-hidden="true" size={20} /></button></header>
         <div className="crm-directory-filter-grid">
         <label><span>المصدر</span><select value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value as CrmSource | ""); setPage(0); }}><option value="">كل المصادر</option>{(Object.keys(crmSourceConfig) as CrmSource[]).map((source) => <option value={source} key={source}>{crmSourceConfig[source].label}</option>)}</select></label>
-        <label><span>الاهتمام</span><select value={interestFilter} onChange={(event) => { setInterestFilter(event.target.value as CrmInterest | ""); setPage(0); }}><option value="">كل الاهتمامات</option>{(Object.keys(crmInterestConfig) as CrmInterest[]).map((interest) => <option value={interest} key={interest}>{crmInterestConfig[interest].label}</option>)}</select></label>
+        <label><span>{primaryView === "current" ? "المنتج الذي اشتراه" : "الاهتمام"}</span><select value={interestFilter} onChange={(event) => { setInterestFilter(event.target.value as CrmInterest | ""); setPage(0); }}><option value="">{primaryView === "current" ? "كل المنتجات" : "كل الاهتمامات"}</option>{(Object.keys(crmInterestConfig) as CrmInterest[]).map((interest) => <option value={interest} key={interest}>{crmInterestConfig[interest].label}</option>)}</select></label>
         <label><span>خبرة التداول</span><select value={tradingExperienceFilter} onChange={(event) => { setTradingExperienceFilter(event.target.value as CrmTradingExperience | ""); setPage(0); }}><option value="">كل مستويات الخبرة</option>{(Object.keys(crmTradingExperienceConfig) as CrmTradingExperience[]).map((experience) => <option value={experience} key={experience}>{crmTradingExperienceConfig[experience].label}</option>)}</select></label>
         <label><span>المرحلة</span><select value={stageFilter} onChange={(event) => { setStageFilter(event.target.value as CrmLeadStage | ""); setPage(0); }}><option value="">كل المراحل</option>{visibleStages.map((stage) => <option value={stage} key={stage}>{crmLeadStageConfig[stage].label}</option>)}</select></label>
         {manager ? <label><span>مسؤول السيلز</span><select value={ownerFilter} onChange={(event) => { setOwnerFilter(event.target.value); setPage(0); }}><option value="">كل العملاء</option>{salesPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : null}
@@ -341,7 +342,7 @@ export function CrmCustomerDirectory() {
       const canConvert = primaryView === "new" && contact.stage !== "won" && contact.stage !== "lost" && contact.stage !== "do_not_contact" && (manager || contact.owner_id === session.user.id) && workspace.membership.role !== "viewer";
       return <Fragment key={contact.id}><tr className={`${overdue ? "overdue" : ""} ${expanded ? "expanded" : ""}`}>
         <td data-label="#"><strong className="crm-directory-row-number">{page * PAGE_SIZE + index + 1}</strong></td>
-        <td data-label="العميل"><a className="crm-directory-customer-link" href={crmContactDeepLink(contact.id)}><strong>{contact.full_name}</strong><small>{crmInterestConfig[contact.interest].label}</small></a><div className="crm-directory-identities">{contactIdentities.slice(0, 1).map((identity) => <span key={identity.id}><b dir="ltr">{identity.value}</b></span>)}</div></td>
+        <td data-label="العميل"><a className="crm-directory-customer-link" href={crmContactDeepLink(contact.id)}><strong>{contact.full_name}</strong><small>{crmInterestConfig[contact.interest].label}</small><span className="crm-mobile-row-number">#{page * PAGE_SIZE + index + 1}</span></a><div className="crm-directory-identities">{contactIdentities.slice(0, 1).map((identity) => <span key={identity.id}><b dir="ltr">{identity.value}</b></span>)}</div></td>
         <td data-label="المصدر"><strong>{crmSourceConfig[contact.source].label}</strong>{contact.source_detail ? <small>{contact.source_detail}</small> : null}</td>
         <td data-label="خبرة التداول"><strong>{crmTradingExperienceConfig[contact.trading_experience].label}</strong></td>
         <td data-label="المسؤول"><strong>{peopleById.get(contact.owner_id)?.name ?? "غير مسند للسيلز الحالي"}</strong></td>
@@ -357,6 +358,6 @@ export function CrmCustomerDirectory() {
       </section></td></tr> : null}</Fragment>;
     })}</tbody></table></div> : <section className="panel empty-state"><span className="empty-visual"><ContactRound aria-hidden="true" size={20} /></span><div><h2>{hasFilters ? "لا توجد نتائج مطابقة" : "لا يوجد عملاء متاحون"}</h2><p>{hasFilters ? "غيّر البحث أو المصدر أو المرحلة أو المسؤول." : "سيظهر العملاء هنا بمجرد إضافتهم أو وصولهم من أحد المصادر المربوطة."}</p></div></section>}
 
-    {totalCount > PAGE_SIZE ? <nav className="crm-pagination" aria-label="صفحات دليل العملاء"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}><ChevronRight aria-hidden="true" size={15} /> السابق</button><span>صفحة {page + 1} من {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)}>التالي <ChevronLeft aria-hidden="true" size={15} /></button></nav> : null}
+    {totalCount > PAGE_SIZE ? <nav className="crm-pagination" aria-label="صفحات دليل العملاء"><button type="button" disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}><ChevronRight aria-hidden="true" size={15} /> السابق</button>{Array.from(new Set([0, ...Array.from({ length: 5 }, (_, index) => page - 2 + index).filter((value) => value >= 0 && value < totalPages), totalPages - 1])).sort((a, b) => a - b).map((value, index, visible) => <Fragment key={value}>{index > 0 && value - visible[index - 1] > 1 ? <span aria-hidden="true">…</span> : null}<button type="button" className={value === page ? "active" : ""} aria-current={value === page ? "page" : undefined} aria-label={`صفحة ${value + 1}`} onClick={() => setPage(value)}>{value + 1}</button></Fragment>)}<button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)}>التالي <ChevronLeft aria-hidden="true" size={15} /></button></nav> : null}
   </section>;
 }
