@@ -80,6 +80,7 @@ function parseScript(body: Record<string, unknown>) {
   const platform = text(body.platform) || "instagram";
   const duration = Number(body.duration_seconds);
   const contentPillar = text(body.content_pillar);
+  const contentKind = text(body.content_kind) || "educational";
 
   if (title.length < 3 || title.length > 180 || objective.length < 5 || objective.length > 1000) {
     return { error: "اكتب عنوانًا وهدفًا واضحين للاسكريبت." };
@@ -87,10 +88,13 @@ function parseScript(body: Record<string, unknown>) {
   if (!inputModes.has(inputMode) || !platforms.has(platform) || !Number.isInteger(duration) || duration < 10 || duration > 1800) {
     return { error: "راجع طريقة الإدخال والمنصة ومدة الفيديو." };
   }
+  if (!["chart", "educational", "personal_story", "awareness", "opinion", "advertisement"].includes(contentKind)) {
+    return { error: "اختر نوع محتوى صالحًا." };
+  }
   if (!isOptionalHttpUrl(sourceUrl) || sourceText.length > 30000) {
     return { error: "رابط المصدر غير صالح أو نص المصدر أطول من المسموح." };
   }
-  return { data: { title, inputMode, sourceUrl, sourceText, objective, audience, platform, duration, contentPillar } };
+  return { data: { title, inputMode, sourceUrl, sourceText, objective, audience, platform, duration, contentPillar, contentKind } };
 }
 
 async function createScript(body: Record<string, unknown>, context: Context) {
@@ -103,7 +107,7 @@ async function createScript(body: Record<string, unknown>, context: Context) {
   if (assignedTo !== context!.userClaims!.id) {
     return jsonResponse({ message: "كل عضو ينشئ الاسكريبت داخل مساحته الخاصة فقط." }, 403);
   }
-  const { data, error } = await context!.supabaseAdmin.rpc("create_script_draft", {
+  const { data, error } = await context!.supabaseAdmin.rpc("create_script_with_kind", {
     target_user_id: context!.userClaims!.id,
     target_organization_id: organizationId,
     target_assigned_to: assignedTo,
@@ -116,6 +120,7 @@ async function createScript(body: Record<string, unknown>, context: Context) {
     script_platform: parsed.data.platform,
     script_duration_seconds: parsed.data.duration,
     script_content_pillar: parsed.data.contentPillar,
+    script_content_kind: parsed.data.contentKind,
   });
   return commandError(error, "تعذّر إنشاء الاسكريبت.") ?? jsonResponse({ scriptId: data }, 201);
 }
@@ -131,7 +136,7 @@ async function saveScript(body: Record<string, unknown>, context: Context) {
   if (fields.some((field) => text(body[field]).length > (field === "spoken_script" ? 30000 : field === "editing_notes" ? 10000 : field === "caption" ? 5000 : 5000))) {
     return jsonResponse({ message: "أحد أقسام الاسكريبت أطول من الحد المسموح." }, 400);
   }
-  const { data, error } = await context!.supabaseAdmin.rpc("save_script_draft", {
+  const { data, error } = await context!.supabaseAdmin.rpc("save_script_with_kind", {
     target_user_id: context!.userClaims!.id,
     target_script_id: scriptId,
     expected_edit_version: expectedVersion,
@@ -144,6 +149,7 @@ async function saveScript(body: Record<string, unknown>, context: Context) {
     script_platform: parsed.data.platform,
     script_duration_seconds: parsed.data.duration,
     script_content_pillar: parsed.data.contentPillar,
+    script_content_kind: parsed.data.contentKind,
     script_hook_variants: textArray(body.hook_variants, 8),
     script_spoken_script: text(body.spoken_script),
     script_cta: text(body.cta),
@@ -158,6 +164,20 @@ async function saveScript(body: Record<string, unknown>, context: Context) {
     version_note: text(body.version_note),
   });
   return commandError(error, "تعذّر حفظ الاسكريبت.") ?? jsonResponse({ editVersion: data });
+}
+
+async function autosaveScriptText(body: Record<string, unknown>, context: Context) {
+  const scriptId = text(body.script_id);
+  const expectedVersion = Number(body.expected_edit_version);
+  const draftText = typeof body.spoken_script === "string" ? body.spoken_script : null;
+  if (!scriptId || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1 || draftText === null || draftText.length > 30000) {
+    return jsonResponse({ message: "مسودة النص أو رقم نسختها غير صالح." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("autosave_script_text", {
+    target_user_id: context!.userClaims!.id, target_script_id: scriptId,
+    expected_edit_version: expectedVersion, draft_text: draftText,
+  });
+  return commandError(error, "تعذّر الحفظ التلقائي؛ ما زالت المسودة ظاهرة على جهازك.") ?? jsonResponse({ editVersion: data });
 }
 
 async function changeStatus(body: Record<string, unknown>, context: Context) {
@@ -278,12 +298,48 @@ async function approveVoiceSample(body: Record<string, unknown>, context: Contex
   if (!scriptId || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
     return jsonResponse({ message: "الاسكريبت أو رقم نسخته غير صالح." }, 400);
   }
-  const { data, error } = await context!.supabaseAdmin.rpc("approve_script_as_voice_sample", {
+  const { data, error } = await context!.supabaseAdmin.rpc("approve_script_voice_sample_v2", {
     target_user_id: context!.userClaims!.id,
     target_script_id: scriptId,
     expected_script_version: expectedVersion,
   });
-  return commandError(error, "تعذّر اعتماد الاسكريبت كعينة لصوتك.") ?? jsonResponse({ voiceProfileEditVersion: data });
+  return commandError(error, "تعذّر اعتماد الاسكريبت كعينة لصوتك.") ?? jsonResponse({ sampleId: data });
+}
+
+async function manageVoiceSample(body: Record<string, unknown>, context: Context) {
+  const organizationId = text(body.organization_id);
+  const sampleText = text(body.sample_text);
+  const kind = text(body.content_kind);
+  const enabled = body.active;
+  if (!organizationId || !sampleText || sampleText.length > 5000 || !["chart", "educational", "personal_story", "awareness", "opinion", "advertisement"].includes(kind) || typeof enabled !== "boolean") {
+    return jsonResponse({ message: "أكمل نص العينة ونوع المحتوى وحالتها." }, 400);
+  }
+  const { data, error } = await context!.supabaseAdmin.rpc("manage_script_voice_sample", {
+    target_user_id: context!.userClaims!.id, target_organization_id: organizationId,
+    target_sample_id: text(body.sample_id) || null, target_script_id: null,
+    new_text: sampleText, new_kind: kind, enabled,
+  });
+  return commandError(error, "تعذّر تحديث العينة الخاصة.") ?? jsonResponse({ sampleId: data });
+}
+
+async function reviewCommand(body: Record<string, unknown>, context: Context) {
+  const scriptId = text(body.script_id);
+  if (!scriptId) return jsonResponse({ message: "حدد الاسكريبت أولًا." }, 400);
+  if (body.action === "share_review") {
+    const reviewerId = text(body.reviewer_id);
+    if (!reviewerId || typeof body.allow_review !== "boolean") return jsonResponse({ message: "اختر العضو ونوع المشاركة." }, 400);
+    const { data, error } = await context!.supabaseAdmin.rpc("set_script_review_access", {
+      target_user_id: context!.userClaims!.id, target_script_id: scriptId,
+      target_reviewer_id: reviewerId, allow_review: body.allow_review,
+    });
+    return commandError(error, "تعذّر تعديل صلاحية المراجعة.") ?? jsonResponse({ saved: data });
+  }
+  const comment = text(body.comment);
+  if (!comment || comment.length > 4000) return jsonResponse({ message: "اكتب تعليقًا لا يتجاوز 4000 حرف." }, 400);
+  const { data, error } = await context!.supabaseAdmin.rpc("add_script_review_comment", {
+    target_user_id: context!.userClaims!.id, target_script_id: scriptId, comment_body: comment,
+  });
+  return commandError(error, "تعذّر حفظ التعليق.") ?? jsonResponse({ commentId: data }, 201);
 }
 
 async function handoff(body: Record<string, unknown>, context: Context) {
@@ -320,6 +376,7 @@ export default {
 
     if (body.action === "create_script") return createScript(body, context);
     if (body.action === "save_script") return saveScript(body, context);
+    if (body.action === "autosave_script_text") return autosaveScriptText(body, context);
     if (body.action === "change_status") return changeStatus(body, context);
     if (body.action === "delete_script") return deleteScript(body, context);
     if (body.action === "create_research") return createResearch(body, context);
@@ -327,6 +384,8 @@ export default {
     if (body.action === "research_variant_to_script") return researchVariantToScript(body, context);
     if (body.action === "save_voice") return saveVoice(body, context);
     if (body.action === "approve_voice_sample") return approveVoiceSample(body, context);
+    if (body.action === "manage_voice_sample") return manageVoiceSample(body, context);
+    if (body.action === "share_review" || body.action === "comment_review") return reviewCommand(body, context);
     if (body.action === "handoff") return handoff(body, context);
     return jsonResponse({ message: "أمر قسم الاسكريبتات غير معروف." }, 400);
   },

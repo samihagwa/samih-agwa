@@ -405,7 +405,7 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(archiveDelete, /from public, anon, authenticated/);
   assert.match(archiveDelete, /to service_role/);
   assert.match(types, /delete_archived_script:/);
-  assert.match(workspace, /لا يستطيع أي عضو آخر، بما في ذلك مدير المنصة/);
+  assert.match(workspace, /اسكريبتاتك خاصة بك؛ وقد يظهر هنا اسكريبت شاركه صاحبه معك للمراجعة فقط/);
   assert.match(workspace, /كل المطلوب والروابط/);
   assert.match(workspace, /script-request-textarea/);
   assert.match(workspace, /source_url: ""/);
@@ -418,7 +418,7 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(ai, /json_schema/);
   assert.match(ai, /store: false/);
   assert.match(ai, /أضف مزوّد AI من الإعدادات/);
-  assert.match(ai, /extractCalibratedSamples/);
+  assert.match(ai, /script_voice_samples/);
   assert.match(ai, /selected_story/);
   assert.match(ai, /generation_direction/);
   assert.match(ai, /story_use/);
@@ -463,7 +463,8 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(editor, /generation_direction/);
   assert.match(editor, /selected_story/);
   assert.match(editor, /اعتمد النص كعينة لصوتي/);
-  assert.match(editor, /ولّد 3 بدائل للاسكريبت/);
+  assert.match(editor, /اقترح 3 زوايا للفكرة/);
+  assert.match(editor, /3 بدائل كاملة/);
   assert.match(editor, /الحارس استبعد/);
   assert.match(editor, /3 اقتراحات للغلاف/);
   assert.match(editor, /3 اقتراحات للكابشن/);
@@ -481,7 +482,7 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(editor, /CTA جزء من النص النهائي/);
   assert.doesNotMatch(editor, /<span>الدعوة للإجراء CTA<\/span>/);
   assert.match(commands, /approve_voice_sample/);
-  assert.match(commands, /approve_script_as_voice_sample/);
+  assert.match(commands, /approve_script_voice_sample_v2/);
   assert.match(calibration, /function public\.approve_script_as_voice_sample/);
   assert.match(calibration, /latest_source is distinct from 'manual_save'/);
   assert.match(calibration, /script_voice\.sample_approved/);
@@ -493,6 +494,57 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(team, /workspaceSectionDefinitions/);
   assert.match(config, /\[functions\.script-commands\][\s\S]*verify_jwt = true/);
   assert.match(config, /\[functions\.script-ai\][\s\S]*verify_jwt = true/);
+});
+
+test("script focus-first review and categorized voice preserve private data-layer boundaries", async () => {
+  const [migration, editor, workspace, ai, commands] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260913173307_script_studio_focus_first_preview.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/script-commands/index.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(migration, /script_review_access.*enable row level security/s);
+  assert.match(migration, /script_review_comments.*enable row level security/s);
+  assert.match(migration, /script_voice_samples.*enable row level security/s);
+  assert.match(migration, /script_voice_samples_self[\s\S]*owner_id = \(select auth\.uid\(\)\)/);
+  assert.match(migration, /Only the script writer can share it for review/);
+  assert.match(migration, /Reviewer must be an active member with Scripts access/);
+  assert.match(migration, /if allow_review then\s+if target_reviewer_id = target_user_id/);
+  assert.match(migration, /script_review_access_read[\s\S]*actor_can_access_any_section\(\(select auth\.uid\(\)\), organization_id, array\['scripts'\]/);
+  assert.match(migration, /Private script review is not available/);
+  assert.match(migration, /autosave_script_text[\s\S]*expected_edit_version/);
+  assert.match(migration, /script\.autosave_reopened/);
+  assert.match(migration, /latest_version_number is distinct from script_record\.edit_version/);
+  assert.match(migration, /script\.review_shared/);
+  assert.match(migration, /script\.review_revoked/);
+  assert.match(migration, /script\.voice_sample_approved/);
+  assert.match(migration, /on conflict \(owner_id, source_script_id\)/);
+  assert.match(editor, /workspace\.versions\[0\]\?\.version_number === workspace\.script\.edit_version/);
+  assert.match(editor, /inert=\{saving\}/);
+  assert.match(editor, /setReviewAccess\(grant\.reviewer_id, false\)/);
+  assert.match(editor, /refreshReviews\(\)/);
+  assert.match(workspace, /myScript && script\.status === "draft"/);
+  assert.match(workspace, /أمثلة قديمة غير مصنفة/);
+  assert.match(ai, /\.eq\("owner_id", context\.userClaims\.id\)\.eq\("content_kind", text\(contextScript\.content_kind\)\)/);
+  assert.doesNotMatch(ai, /extractCalibratedSamples\(rawProfile\.approved_examples\)/);
+  assert.match(ai, /source_notes: excerptOnly \? ""/);
+  assert.match(commands, /action === "share_review" \|\| body\.action === "comment_review"/);
+});
+
+test("CRM intake defaults to self and permits delegation only within active Sales roster", async () => {
+  const [migration, dialog, directory] = await Promise.all([
+    readFile(new URL("../supabase/migrations/20260914120000_crm_self_default_sales_delegation.sql", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmCreateLeadDialog.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/crm/CrmCustomerDirectory.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(migration, /list_crm_assignable_owners[\s\S]*member\.user_id = \(select auth\.uid\(\)\) or exists/);
+  assert.match(migration, /CRM file can be assigned only to an active Sales team member/);
+  assert.match(migration, /route\.user_id = contact_owner_id/);
+  assert.match(dialog, /<select name="owner_id" defaultValue=\{actorId\}/);
+  assert.match(dialog, /const ownerId = text\(form, "owner_id"\) \|\| actorId/);
+  assert.match(directory, /list_crm_assignable_owners/);
+  assert.match(directory, /assignableOwnerIds\.includes\(person\.id\)/);
 });
 
 test("script lifecycle filters use persisted script states and linked production facts", async () => {
@@ -1227,6 +1279,28 @@ test("manual CRM intake stays in the directory and retries cannot duplicate the 
   assert.match(migration, /This conversation already belongs to a CRM customer/);
   assert.match(migration, /alter table public\.crm_creation_requests enable row level security/);
   assert.doesNotMatch(migration, /grant (insert|update|delete) on public\.crm_creation_requests to authenticated/i);
+});
+
+test("script preview keeps writing private, autosaves without version spam, and accepts AI excerpts explicitly", async () => {
+  const [editor, ai, commands, migration] = await Promise.all([
+    readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/script-commands/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260913173307_script_studio_focus_first_preview.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(editor, /formRef\.current\?\.spoken_script !== base/);
+  assert.match(editor, /formRef\.current\?\.spoken_script !== rewritePreview\.base/);
+  assert.match(editor, /استعادة مسودتي/);
+  assert.match(editor, /وضع التصوير/);
+  assert.match(ai, /scope === "rewrite_excerpt"/);
+  assert.match(ai, /selected_text: selectedText/);
+  assert.match(ai, /introducedNumber \|\| introducesStory/);
+  assert.match(commands, /action === "autosave_script_text"/);
+  assert.match(migration, /script_record\.assigned_to <> target_user_id/);
+  assert.match(migration, /private\.can_access_script_actor/);
+  assert.match(migration, /script_record\.edit_version <> expected_edit_version/);
+  assert.doesNotMatch(migration, /add_script_version/);
+  assert.match(migration, /grant execute on function public\.autosave_script_text.*to service_role/);
 });
 
 test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task system", async () => {

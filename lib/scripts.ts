@@ -11,11 +11,27 @@ export const scriptStatusConfig: Record<ScriptStatus, { label: string; tone: "ne
   archived: { label: "مؤرشف", tone: "info" },
 };
 
+export function scriptDisplayStatus(script: { status: ScriptStatus; spoken_script: string }) {
+  return script.status === "draft" && script.spoken_script.trim().length < 20
+    ? { label: "فكرة", tone: "neutral" as const }
+    : scriptStatusConfig[script.status];
+}
+
 export const scriptInputModeConfig: Record<ScriptInputMode, string> = {
   idea: "فكرة من عندي",
   reference: "إعادة بناء مرجع بطريقتي",
   manual: "كتابة يدوية",
 };
+
+export const scriptContentKindConfig = {
+  chart: "شرح شارت",
+  educational: "تعليمي",
+  personal_story: "قصة شخصية",
+  awareness: "توعوي",
+  opinion: "رأي",
+  advertisement: "إعلان",
+} as const;
+export type ScriptContentKind = keyof typeof scriptContentKindConfig;
 
 export const scriptResearchKindConfig: Record<ScriptResearchKind, string> = {
   idea: "فكرة",

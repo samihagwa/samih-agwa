@@ -3708,6 +3708,25 @@ export type Database = {
           },
         ]
       }
+      script_review_access: {
+        Row: { script_id: string; organization_id: string; reviewer_id: string; granted_by: string; created_at: string }
+        Insert: { script_id: string; organization_id: string; reviewer_id: string; granted_by: string; created_at?: string }
+        Update: { script_id?: string; organization_id?: string; reviewer_id?: string; granted_by?: string; created_at?: string }
+        Relationships: [
+          { foreignKeyName: "script_review_access_script_id_organization_id_fkey"; columns: ["script_id", "organization_id"]; isOneToOne: false; referencedRelation: "scripts"; referencedColumns: ["id", "organization_id"] },
+          { foreignKeyName: "script_review_access_reviewer_id_fkey"; columns: ["reviewer_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "script_review_access_granted_by_fkey"; columns: ["granted_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      script_review_comments: {
+        Row: { id: string; script_id: string; organization_id: string; author_id: string; body: string; created_at: string }
+        Insert: { id?: string; script_id: string; organization_id: string; author_id: string; body: string; created_at?: string }
+        Update: { id?: string; script_id?: string; organization_id?: string; author_id?: string; body?: string; created_at?: string }
+        Relationships: [
+          { foreignKeyName: "script_review_comments_script_id_organization_id_fkey"; columns: ["script_id", "organization_id"]; isOneToOne: false; referencedRelation: "scripts"; referencedColumns: ["id", "organization_id"] },
+          { foreignKeyName: "script_review_comments_author_id_fkey"; columns: ["author_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
       script_versions: {
         Row: {
           created_at: string
@@ -3764,6 +3783,16 @@ export type Database = {
             referencedRelation: "scripts"
             referencedColumns: ["id", "organization_id"]
           },
+        ]
+      }
+      script_voice_samples: {
+        Row: { id: string; organization_id: string; owner_id: string; source_script_id: string | null; content_kind: string; sample_text: string; active: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; organization_id: string; owner_id: string; source_script_id?: string | null; content_kind: string; sample_text: string; active?: boolean; created_at?: string; updated_at?: string }
+        Update: { id?: string; organization_id?: string; owner_id?: string; source_script_id?: string | null; content_kind?: string; sample_text?: string; active?: boolean; created_at?: string; updated_at?: string }
+        Relationships: [
+          { foreignKeyName: "script_voice_samples_organization_id_fkey"; columns: ["organization_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
+          { foreignKeyName: "script_voice_samples_owner_id_fkey"; columns: ["owner_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "script_voice_samples_source_script_id_fkey"; columns: ["source_script_id"]; isOneToOne: false; referencedRelation: "scripts"; referencedColumns: ["id"] },
         ]
       }
       script_voice_profiles: {
@@ -3845,6 +3874,7 @@ export type Database = {
           caption: string
           claims_notes: string
           content_item_id: string | null
+          content_kind: string
           content_pillar: string | null
           created_at: string
           created_by: string
@@ -3884,6 +3914,7 @@ export type Database = {
           caption?: string
           claims_notes?: string
           content_item_id?: string | null
+          content_kind?: string
           content_pillar?: string | null
           created_at?: string
           created_by: string
@@ -3923,6 +3954,7 @@ export type Database = {
           caption?: string
           claims_notes?: string
           content_item_id?: string | null
+          content_kind?: string
           content_pillar?: string | null
           created_at?: string
           created_by?: string

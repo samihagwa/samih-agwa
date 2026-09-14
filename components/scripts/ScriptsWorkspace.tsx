@@ -4,7 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { Archive, Bot, CheckCircle2, FilePenLine, Lightbulb, LoaderCircle, LockKeyhole, Plus, Radar, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, UserRound, UsersRound } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentUuidDeepLink } from "../../lib/deep-links";
-import { formatScriptDate, lines, scriptInputModeConfig, scriptResearchKindConfig, scriptStatusConfig } from "../../lib/scripts";
+import { formatScriptDate, lines, scriptContentKindConfig, type ScriptContentKind, scriptDisplayStatus, scriptInputModeConfig, scriptResearchKindConfig } from "../../lib/scripts";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
@@ -16,6 +16,7 @@ type Organization = Tables<"organizations">;
 type Script = Tables<"scripts">;
 type Research = Tables<"script_research_items">;
 type VoiceProfile = Tables<"script_voice_profiles">;
+type VoiceSample = Tables<"script_voice_samples">;
 type Task = Tables<"tasks">;
 type Person = { id: string; name: string; role: Membership["role"] };
 type ScriptVariant = { label: string; hook: string; spoken_script: string; cta: string };
@@ -26,6 +27,7 @@ type Workspace = {
   scripts: Script[];
   research: Research[];
   voice: VoiceProfile | null;
+  voiceSamples: VoiceSample[];
   productionTasks: Task[];
 };
 type Tab = "scripts" | "radar" | "voice";
@@ -46,7 +48,7 @@ const scriptFilters: { value: ScriptFilter; label: string }[] = [
 ];
 
 const initialScriptForm = {
-  title: "", input_mode: "idea", source_text: "", objective: "",
+  title: "", content_kind: "educational" as ScriptContentKind, input_mode: "idea", source_text: "", objective: "",
   audience: "متداولون عرب", platform: "instagram", duration_seconds: "60", content_pillar: "",
 };
 
@@ -55,7 +57,7 @@ function personName(people: Person[], id: string) {
 }
 
 function scriptCardStatus(script: Script, tasks: Task[]) {
-  if (script.status !== "handed_off" || !script.content_item_id) return scriptStatusConfig[script.status];
+  if (script.status !== "handed_off" || !script.content_item_id) return scriptDisplayStatus(script);
   const linked = tasks.filter((task) => task.content_item_id === script.content_item_id);
   const step = (name: Task["content_step"]) => linked.find((task) => task.content_step === name);
   const publishing = step("publishing"); const editing = step("editing"); const recording = step("recording");
@@ -119,7 +121,7 @@ async function invokeScriptAi(body: Record<string, unknown>) {
   return data as Record<string, unknown>;
 }
 
-function VoiceProfileForm({ profile, organizationId, onSaved, readOnly }: { profile: VoiceProfile | null; organizationId: string; onSaved: () => Promise<void>; readOnly: boolean }) {
+function VoiceProfileForm({ profile, samples, organizationId, onSaved, readOnly }: { profile: VoiceProfile | null; samples: VoiceSample[]; organizationId: string; onSaved: () => Promise<void>; readOnly: boolean }) {
   const [summary, setSummary] = useState(profile?.voice_summary ?? "");
   const [rules, setRules] = useState((profile?.writing_rules ?? []).join("\n"));
   const [banned, setBanned] = useState((profile?.banned_phrases ?? []).join("\n"));
@@ -128,6 +130,23 @@ function VoiceProfileForm({ profile, organizationId, onSaved, readOnly }: { prof
   const [notes, setNotes] = useState(profile?.source_notes ?? "");
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sampleId, setSampleId] = useState("");
+  const [sampleText, setSampleText] = useState("");
+  const [sampleKind, setSampleKind] = useState<ScriptContentKind>("educational");
+  const [sampleEnabled, setSampleEnabled] = useState(true);
+
+  async function saveSample(event: FormEvent) {
+    event.preventDefault(); if (readOnly) return;
+    setSaving(true); setNotice(null);
+    try {
+      await invokeCommand({ action: "manage_voice_sample", organization_id: organizationId,
+        sample_id: sampleId || null, content_kind: sampleKind, sample_text: sampleText, active: sampleEnabled });
+      setSampleId(""); setSampleText(""); setSampleEnabled(true);
+      setNotice("تم حفظ المثال بتصنيفه. لن يستخدمه AI إلا عند كتابة نفس النوع، وفقط لو كان مفعّلًا.");
+      await onSaved();
+    } catch (cause) { setNotice(cause instanceof Error ? cause.message : "تعذّر حفظ المثال."); }
+    finally { setSaving(false); }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -146,7 +165,7 @@ function VoiceProfileForm({ profile, organizationId, onSaved, readOnly }: { prof
   }
 
   return <section className="panel voice-profile-panel">
-    <div className="section-heading"><div><p className="overline">بصمتي الخاصة</p><h2>كيف أكتب وأتكلم أنا؟</h2><p>ملف شخصي مشفّر بالصلاحيات؛ لا يراه أي عضو آخر، ولا تظهر لك بصمة سميح أو بصمات الفريق.</p></div><StatusBadge tone="success">خاص بك فقط</StatusBadge></div>
+    <div className="section-heading"><div><p className="overline">بصمتي الخاصة</p><h2>كيف أكتب وأتكلم أنا؟</h2><p>ملف شخصي محمي بالصلاحيات؛ لا يراه أي عضو آخر، ولا تظهر لك بصمات الفريق.</p></div><StatusBadge tone="success">خاص بك فقط</StatusBadge></div>
     <aside className="script-trust-note"><ShieldCheck size={18} /><div><strong>الـAI لا يتعلم وحده من الإنترنت</strong><p>يستخدم هذه البصمة ومراجع البراند المعتمدة فقط عند ضغطك على زر التوليد. لا يوجد Apify أو سحب منافسين تلقائي في هذه المرحلة.</p></div></aside>
     <form className="voice-profile-form" onSubmit={(event) => void submit(event)}>
       <label className="span-2"><span>ملخص صوتك وشخصيتك</span><textarea disabled={readOnly} value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="طبيعي، مباشر، عملي، وطريقتي في شرح الفكرة..." /></label>
@@ -154,10 +173,15 @@ function VoiceProfileForm({ profile, organizationId, onSaved, readOnly }: { prof
       <label><span>كلمات وعبارات لا أستخدمها</span><textarea disabled={readOnly} value={banned} onChange={(event) => setBanned(event.target.value)} placeholder={"عبارة لا تشبهني\nوعد لا أقوله"} /></label>
       <label><span>بنك قصصي — موقف في كل سطر</span><textarea disabled={readOnly} value={stories} onChange={(event) => setStories(event.target.value)} placeholder="مواقف شخصية حقيقية يمكن الرجوع لها..." /></label>
       <label><span>مصادر تعلّمي وملاحظاتي</span><textarea disabled={readOnly} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="المراجع التي تمثل منهجي وما لا يجب نسبه لي..." /></label>
-      <label className="span-2"><span>أمثلة معتمدة من كتابتي</span><textarea className="voice-examples" disabled={readOnly} value={examples} onChange={(event) => setExamples(event.target.value)} placeholder="أضف نصوصًا حقيقية كتبتها، أو اعتمد اسكريبتًا من محرره بعد تعديله يدويًا." /><small>الـAI يستخدم أمثلتك أنت فقط عند توليد اسكريبت مسند إليك.</small></label>
+      <label className="span-2"><span>أمثلة قديمة غير مصنفة — محفوظة كما هي</span><textarea className="voice-examples" disabled={readOnly} value={examples} onChange={(event) => setExamples(event.target.value)} placeholder="أمثلتك القديمة محفوظة هنا." /><small>الأمثلة القديمة لم نغيّر تصنيفها تلقائيًا، ولا تُرسل لـAI حتى تنسخ المثال المناسب إلى الأمثلة المصنفة أدناه.</small></label>
       {notice ? <p className={`form-notice ${notice.startsWith("تم") ? "success" : "error"}`}>{notice}</p> : null}
       {!readOnly ? <div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />} حفظ بصمتي الخاصة</Button></div> : null}
     </form>
+    <div className="script-voice-sample-list"><h3>الأمثلة المصنفة</h3>{samples.length ? samples.map((sample) => {
+      const conflicts = (profile?.banned_phrases ?? []).filter((phrase) => sample.sample_text.toLocaleLowerCase().includes(phrase.toLocaleLowerCase()));
+      return <article key={sample.id}><strong>{scriptContentKindConfig[sample.content_kind as ScriptContentKind] ?? sample.content_kind} · {sample.active ? "مفعّل" : "مستبعد"}</strong><p>{sample.sample_text.slice(0, 350)}</p>{conflicts.length ? <small className="form-notice error">قد يتعارض مع كلمات ممنوعة في قواعدك: {conflicts.join("، ")}. القاعدة الحديثة تتقدم على المثال؛ راجعه بنفسك.</small> : null}{!readOnly ? <Button type="button" variant="ghost" onClick={() => { setSampleId(sample.id); setSampleText(sample.sample_text); setSampleKind(sample.content_kind as ScriptContentKind); setSampleEnabled(sample.active); }}>تعديل التصنيف أو الاستبعاد</Button> : null}</article>;
+    }) : <p>لم تصنف أي مثال بعد. اختر مثالًا حقيقيًا من كتابتك وحدد نوعه بنفسك.</p>}</div>
+    {!readOnly ? <form className="script-voice-sample-form" onSubmit={(event) => void saveSample(event)}><label><span>نوع المثال</span><select value={sampleKind} onChange={(event) => setSampleKind(event.target.value as ScriptContentKind)}>{Object.entries(scriptContentKindConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="span-2"><span>{sampleId ? "تعديل المثال" : "إضافة مثال من كتابتك"}</span><textarea required minLength={20} maxLength={5000} value={sampleText} onChange={(event) => setSampleText(event.target.value)} /></label><label className="script-sample-active"><input type="checkbox" checked={sampleEnabled} onChange={(event) => setSampleEnabled(event.target.checked)} /> استخدم المثال في التوليد</label><Button type="submit" disabled={saving || sampleText.trim().length < 20}>{sampleId ? "حفظ التعديل" : "اعتماد المثال"}</Button>{sampleId ? <Button type="button" variant="ghost" onClick={() => { setSampleId(""); setSampleText(""); setSampleEnabled(true); }}>إلغاء</Button> : null}</form> : null}
   </section>;
 }
 
@@ -188,23 +212,25 @@ export function ScriptsWorkspace() {
   const clearWorkspace = useCallback(() => setWorkspace(null), []);
   const clearTransientState = useCallback(() => { setError(null); setNotice(null); }, []);
 
-  const loadRows = useCallback(async (base: Omit<Workspace, "scripts" | "research" | "voice" | "productionTasks">) => {
+  const loadRows = useCallback(async (base: Omit<Workspace, "scripts" | "research" | "voice" | "voiceSamples" | "productionTasks">) => {
     const supabase = getSupabaseBrowserClient();
-    const [scriptsResult, researchResult, voiceResult] = await Promise.all([
-      supabase.from("scripts").select("*").eq("organization_id", base.organization.id).eq("assigned_to", base.membership.user_id).order("updated_at", { ascending: false }),
+    const [scriptsResult, researchResult, voiceResult, voiceSamplesResult] = await Promise.all([
+      supabase.from("scripts").select("*").eq("organization_id", base.organization.id).order("updated_at", { ascending: false }),
       supabase.from("script_research_items").select("*").eq("organization_id", base.organization.id).eq("assigned_to", base.membership.user_id).order("updated_at", { ascending: false }),
       supabase.from("script_voice_profiles").select("*").eq("organization_id", base.organization.id).eq("user_id", base.membership.user_id).maybeSingle(),
+      supabase.from("script_voice_samples").select("*").eq("organization_id", base.organization.id).eq("owner_id", base.membership.user_id).order("updated_at", { ascending: false }),
     ]);
     if (scriptsResult.error) throw scriptsResult.error;
     if (researchResult.error) throw researchResult.error;
     if (voiceResult.error) throw voiceResult.error;
+    if (voiceSamplesResult.error) throw voiceSamplesResult.error;
     const scripts = scriptsResult.data ?? [];
     const contentIds = scripts.map((script) => script.content_item_id).filter((id): id is string => Boolean(id));
     const tasksResult = contentIds.length
       ? await supabase.from("tasks").select("*").in("content_item_id", contentIds)
       : { data: [], error: null };
     if (tasksResult.error) throw tasksResult.error;
-    setWorkspace({ ...base, scripts, research: researchResult.data ?? [], voice: voiceResult.data, productionTasks: tasksResult.data ?? [] });
+    setWorkspace({ ...base, scripts, research: researchResult.data ?? [], voice: voiceResult.data, voiceSamples: voiceSamplesResult.data ?? [], productionTasks: tasksResult.data ?? [] });
   }, []);
 
   const loadWorkspace = useCallback(async (activeSession: Session) => {
@@ -285,11 +311,7 @@ export function ScriptsWorkspace() {
   async function createScript(event: FormEvent) {
     event.preventDefault(); if (!workspace || !session || !canWriteScripts) return;
     const requestText = scriptForm.source_text.trim();
-    if (requestText.length < 10) {
-      setError("اكتب كل المطلوب والروابط بوضوح؛ النص لازم يكون 10 حروف على الأقل.");
-      return;
-    }
-    const objective = scriptForm.objective.trim() || requestText.slice(0, 1000);
+    const objective = scriptForm.objective.trim() || requestText.slice(0, 1000) || scriptForm.title.trim();
     setSaving(true); setError(null); setNotice(null);
     try {
       const result = await invokeCommand({
@@ -418,7 +440,7 @@ export function ScriptsWorkspace() {
 
     {tab === "scripts" ? <>
       <section className="panel scripts-control-panel">
-        <div className="section-heading"><div><p className="overline">المساحة الخاصة</p><h2>اسكريبتاتي</h2><p>لا يستطيع أي عضو آخر، بما في ذلك مدير المنصة، فتح اسكريبتاتك أو بصمتك. عند التسليم فقط تُنشأ منه نسخة مشتركة داخل طلبات التنفيذ.</p></div>{canWriteScripts ? <Button type="button" onClick={() => setShowCreateScript((value) => !value)}><Plus size={15} /> اسكريبت جديد</Button> : null}</div>
+        <div className="section-heading"><div><p className="overline">المساحة الخاصة</p><h2>اسكريبتاتي</h2><p>اسكريبتاتك خاصة بك؛ وقد يظهر هنا اسكريبت شاركه صاحبه معك للمراجعة فقط. البصمة لا تنتقل بالمشاركة.</p></div>{canWriteScripts ? <Button type="button" onClick={() => setShowCreateScript((value) => !value)}><Plus size={15} /> اسكريبت جديد</Button> : null}</div>
         <div className="scripts-filters">
           <label className="search-field"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث في العنوان أو النص أو الكابشن..." /></label>
           <div className="script-status-filters" role="group" aria-label="تصفية الاسكريبتات حسب الحالة">
@@ -434,14 +456,15 @@ export function ScriptsWorkspace() {
           <small className="script-filter-note">«تم التصوير» و«جاهز للنشر» و«تم النشر» تتحدث تلقائيًا من مهام التنفيذ؛ لا يغيّرها أي عضو يدويًا.</small>
         </div>
         {showCreateScript && canWriteScripts ? <form className="script-create-form" onSubmit={(event) => void createScript(event)}>
-          <label className="span-2"><span>عنوان الاسكريبت</span><input required minLength={3} maxLength={180} value={scriptForm.title} onChange={(event) => setScriptForm((form) => ({ ...form, title: event.target.value }))} placeholder="مثال: ليه بتتوتر وإنت كسبان؟" /></label>
-          <label className="span-2"><span>كل المطلوب والروابط</span><textarea className="script-request-textarea" required minLength={10} maxLength={30000} rows={14} value={scriptForm.source_text} onChange={(event) => setScriptForm((form) => ({ ...form, source_text: event.target.value }))} placeholder="اكتب الفكرة، المطلوب، ملاحظاتك، وأي روابط في نفس الخانة…" /><small>النص والروابط سيظلان معًا كما كتبتهما، وهما المرجع الأساسي للاسكريبت.</small></label>
+          <label className="span-2"><span>الفكرة</span><input required minLength={5} maxLength={180} value={scriptForm.title} onChange={(event) => setScriptForm((form) => ({ ...form, title: event.target.value }))} placeholder="مثال: ليه بتتوتر وإنت كسبان؟" /></label>
+          <label><span>نوع المحتوى</span><select value={scriptForm.content_kind} onChange={(event) => setScriptForm((form) => ({ ...form, content_kind: event.target.value as ScriptContentKind }))}>{Object.entries(scriptContentKindConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label><span>المدة المستهدفة — ثانية</span><input type="number" min={10} max={1800} value={scriptForm.duration_seconds} onChange={(event) => setScriptForm((form) => ({ ...form, duration_seconds: event.target.value }))} /></label>
           <details className="content-request-advanced span-2">
-            <summary>إعدادات اختيارية: المنصة والمدة والجمهور</summary>
+            <summary>تفاصيل ومرجع — اختياري</summary>
             <div className="content-request-advanced-body script-fields-grid">
+              <label className="span-2"><span>كل المطلوب والروابط — اختياري وفي خانة واحدة</span><textarea className="script-request-textarea" maxLength={30000} rows={5} value={scriptForm.source_text} onChange={(event) => setScriptForm((form) => ({ ...form, source_text: event.target.value }))} placeholder="ملاحظاتك وأي روابط داعمة للفكرة…" /><small>الفكرة تكفي لتبدأ الكتابة. أي روابط تضيفها تظل هنا.</small></label>
               <label><span>طريقة البداية</span><select value={scriptForm.input_mode} onChange={(event) => setScriptForm((form) => ({ ...form, input_mode: event.target.value }))}>{Object.entries(scriptInputModeConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label><span>المنصة</span><select value={scriptForm.platform} onChange={(event) => setScriptForm((form) => ({ ...form, platform: event.target.value }))}><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="telegram">Telegram</option><option value="other">أخرى</option></select></label>
-              <label><span>المدة المتوقعة بالثواني</span><input type="number" min={10} max={1800} value={scriptForm.duration_seconds} onChange={(event) => setScriptForm((form) => ({ ...form, duration_seconds: event.target.value }))} /></label>
               <label><span>سلسلة أو عمود محتوى — اختياري</span><input value={scriptForm.content_pillar} onChange={(event) => setScriptForm((form) => ({ ...form, content_pillar: event.target.value }))} /></label>
               <label className="span-2"><span>الهدف — اختياري</span><textarea maxLength={1000} value={scriptForm.objective} onChange={(event) => setScriptForm((form) => ({ ...form, objective: event.target.value }))} placeholder="اتركه فارغًا وسيستخرج النظام الهدف من خانة كل المطلوب." /></label>
               <label className="span-2"><span>الجمهور — اختياري</span><input maxLength={500} value={scriptForm.audience} onChange={(event) => setScriptForm((form) => ({ ...form, audience: event.target.value }))} /></label>
@@ -456,16 +479,17 @@ export function ScriptsWorkspace() {
         const stage = scriptStage(script, workspace.productionTasks);
         const working = workingScriptId === script.id;
         const canArchive = script.status !== "archived";
+        const myScript = script.assigned_to === workspace.membership.user_id;
         return <article className="script-card" data-status={script.status} data-stage={stage} key={script.id}>
-          <header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{script.objective}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header>
+          <header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{myScript ? script.objective : `مشاركة للمراجعة من ${personName(workspace.people, script.assigned_to)}`}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header>
           <dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl>
           <footer><span>{formatScriptDate(script.updated_at)}</span><div className="script-card-actions">
             <a className="button button-secondary" href={`/scripts/${script.id}`}>{script.status === "handed_off" ? "متابعة التنفيذ" : "فتح الاسكريبت"}</a>
-            {canWriteScripts && script.status === "draft" && script.spoken_script.trim().length >= 20 ? <button type="button" className="text-button script-quick-transition" disabled={working} onClick={() => void changeScriptStatus(script, "ready_to_record")}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} جاهز للتصوير</button> : null}
-            {canWriteScripts && script.status === "ready_to_record" ? <button type="button" className="text-button script-quick-transition" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} إرجاع للكتابة</button> : null}
-            {canWriteScripts && canArchive ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "archived")}>{working ? <LoaderCircle className="spin" size={14} /> : <Archive size={14} />} أرشفة</button> : null}
-            {canWriteScripts && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} استرجاع</button> : null}
-            {canWriteScripts && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button danger-text" disabled={working} onClick={() => void deleteScript(script)}><Trash2 size={14} /> حذف نهائي</button> : null}
+            {canWriteScripts && myScript && script.status === "draft" && script.spoken_script.trim().length >= 20 ? <button type="button" className="text-button script-quick-transition" disabled={working} onClick={() => void changeScriptStatus(script, "ready_to_record")}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} جاهز للتصوير</button> : null}
+            {canWriteScripts && myScript && script.status === "ready_to_record" ? <button type="button" className="text-button script-quick-transition" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} إرجاع للكتابة</button> : null}
+            {canWriteScripts && myScript && canArchive ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "archived")}>{working ? <LoaderCircle className="spin" size={14} /> : <Archive size={14} />} أرشفة</button> : null}
+            {canWriteScripts && myScript && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} استرجاع</button> : null}
+            {canWriteScripts && myScript && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button danger-text" disabled={working} onClick={() => void deleteScript(script)}><Trash2 size={14} /> حذف نهائي</button> : null}
           </div></footer>
         </article>;
       }) : emptyState(Archive, "لا توجد اسكريبتات مطابقة", statusFilter === "active" ? "ابدأ باسكريبت جديد أو غيّر البحث والفلترة." : "غيّر الفلترة لرؤية العمل الحالي أو الأرشيف.")}</div>
@@ -507,6 +531,6 @@ export function ScriptsWorkspace() {
       }) : emptyState(Lightbulb, "الرادار فارغ", "أضف رابط منافس أو فكرة أو مرجع مفيد، ثم استخرج منه زاوية أصلية.")}</div>
     </> : null}
 
-    {tab === "voice" ? <VoiceProfileForm key={workspace.voice?.edit_version ?? 0} profile={workspace.voice} organizationId={workspace.organization.id} onSaved={refresh} readOnly={!canWriteScripts} /> : null}
+    {tab === "voice" ? <VoiceProfileForm key={workspace.voice?.edit_version ?? 0} profile={workspace.voice} samples={workspace.voiceSamples} organizationId={workspace.organization.id} onSaved={refresh} readOnly={!canWriteScripts} /> : null}
   </section>;
 }

@@ -11,8 +11,9 @@ import {
 
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const modes = new Set(["idea", "reference", "improve"]);
-const scopes = new Set(["script_variants", "hooks", "production_pack", "recording", "editing", "thumbnail", "caption"]);
+const scopes = new Set(["script_variants", "hooks", "angles", "single_draft", "rewrite_excerpt", "production_pack", "recording", "editing", "thumbnail", "caption"]);
 const writingScopes = new Set(["script_variants", "hooks"]);
+const rewriteActions = new Set(["my_voice", "shorten", "simplify", "chart_example", "stronger_hook", "target_duration"]);
 const productionScopes = new Set(["production_pack", "recording", "editing", "thumbnail", "caption"]);
 const selectableProductionScopes = new Set(["thumbnail", "caption"]);
 
@@ -29,6 +30,22 @@ type ProductionOutput = {
 };
 
 const schemas: Record<string, Record<string, unknown>> = {
+  angles: {
+    type: "object", additionalProperties: false, required: ["angles"],
+    properties: { angles: { type: "array", minItems: 3, maxItems: 3, items: {
+      type: "object", additionalProperties: false, required: ["title", "hook", "core_idea"],
+      properties: { title: { type: "string", maxLength: 80 }, hook: { type: "string", maxLength: 500 }, core_idea: { type: "string", maxLength: 1000 } },
+    } } },
+  },
+  single_draft: {
+    type: "object", additionalProperties: false, required: ["draft"],
+    properties: { draft: { type: "object", additionalProperties: false, required: ["spoken_script", "hook"],
+      properties: { spoken_script: { type: "string", maxLength: 30000 }, hook: { type: "string", maxLength: 500 } } } },
+  },
+  rewrite_excerpt: {
+    type: "object", additionalProperties: false, required: ["rewritten_text"],
+    properties: { rewritten_text: { type: "string", minLength: 1, maxLength: 30000 } },
+  },
   script_variants: {
     type: "object", additionalProperties: false, required: ["variants", "hook_variants"],
     properties: {
@@ -138,17 +155,13 @@ function normalizeArabic(value: string) {
   return value.toLocaleLowerCase("ar").replace(/[\u064B-\u065F\u0670]/g, "").replace(/[أإآٱ]/g, "ا")
     .replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/[^\p{L}\p{N}.]+/gu, " ").replace(/\s+/g, " ").trim();
 }
-function extractCalibratedSamples(value: unknown) {
-  const examples = text(value);
-  const matches = examples.match(/\[عينة معتمدة من سميح \| script:[^\]]+\][\s\S]*?\[نهاية العينة\]/g) ?? [];
-  return matches.slice(-6).map((sample) => sample.slice(0, 5000));
-}
 
 function scriptInput(rawScript: Record<string, unknown>, mode: string, scope: string) {
   const base = {
     id: rawScript.id, title: rawScript.title, input_mode: rawScript.input_mode,
     source_url: rawScript.source_url, source_text: rawScript.source_text, objective: rawScript.objective,
     audience: rawScript.audience, platform: rawScript.platform, duration_seconds: rawScript.duration_seconds,
+    content_kind: rawScript.content_kind,
     content_pillar: rawScript.content_pillar, edit_version: rawScript.edit_version,
   };
   if (productionScopes.has(scope) || mode === "improve") {
@@ -166,22 +179,27 @@ function scriptInput(rawScript: Record<string, unknown>, mode: string, scope: st
   return base;
 }
 
-function prepareAiContext(rawContext: unknown, mode: string, scope: string, selectedStory: string, generationDirection: string) {
+function prepareAiContext(rawContext: unknown, mode: string, scope: string, selectedStory: string, generationDirection: string, relevantSamples: string[]) {
   const context = record(rawContext); const rawProfile = record(context.voice_profile); const stories = textList(rawProfile.story_bank);
   if (selectedStory && !stories.includes(selectedStory)) return { error: "القصة المختارة لم تعد موجودة في بصمتك. حدّث الصفحة واخترها من جديد." };
+  const excerptOnly = scope === "rewrite_excerpt";
+  const rules = textList(rawProfile.writing_rules, 50);
+  const banned = textList(rawProfile.banned_phrases, 50);
   return {
     context: {
       script: scriptInput(record(context.script), mode, scope),
       voice_profile: {
-        voice_summary: text(rawProfile.voice_summary), writing_rules: textList(rawProfile.writing_rules, 50),
-        banned_phrases: textList(rawProfile.banned_phrases, 50), source_notes: text(rawProfile.source_notes),
-        calibrated_samples: extractCalibratedSamples(rawProfile.approved_examples),
+        voice_summary: text(rawProfile.voice_summary).slice(0, excerptOnly ? 600 : 1200),
+        writing_rules: excerptOnly ? rules.slice(-12) : rules,
+        banned_phrases: excerptOnly ? banned.slice(0, 25) : banned,
+        source_notes: excerptOnly ? "" : text(rawProfile.source_notes).slice(0, 1200),
+        calibrated_samples: excerptOnly ? relevantSamples.slice(0, 1) : relevantSamples,
       },
       story_use: selectedStory ? { allowed: true, selected_story: selectedStory } : { allowed: false, selected_story: null },
       generation_direction: generationDirection || null,
       brand_articles: Array.isArray(context.brand_articles) ? context.brand_articles : [],
     },
-    guard: { bannedPhrases: textList(rawProfile.banned_phrases, 50), stories, selectedStory },
+    guard: { bannedPhrases: banned, stories, selectedStory },
   };
 }
 
@@ -353,7 +371,11 @@ function productionInstructions(scope: string) {
 بدائل الغلاف لازم تختلف في الزاوية البصرية والنص، وكل بديل يشرح صلته بجملة أو فكرة حقيقية من الاسكريبت. بدائل الكابشن لازم تكون جاهزة للنشر، بصوت البراند، ومن غير اختراع ادعاءات أو أرقام. ممنوع «مش مجرد... ده/دي...» وكل banned_phrases. المستخدم سيختار بديلًا بعلامة صح؛ لا تعتبر أي بديل معتمدًا. التعليمات عملية ومختصرة وواضحة لصاحب التسجيل والمونتير والمصمم. CTA المنفصل بيانات تقنية مستخرجة من نهاية النص، وليس نصًا ثانيًا على المستخدم مراجعته. أعد JSON فقط حسب المخطط.`;
 }
 function providerBody(provider: AiProviderRuntime, mode: string, scope: string, aiContext: unknown) {
-  const instructions = writingScopes.has(scope) ? writingInstructions(mode, scope) : productionInstructions(scope);
+  const instructions = scope === "rewrite_excerpt"
+    ? "أنت مساعد كتابة للاسكريبتات العربية. أعد صياغة النص المحدد وحده حسب rewrite_action، مع إبقاء المعنى والحقائق وروح الكاتب. إن كان الإجراء chart_example ولا يوجد مثال موثّق في المدخل، قدم مثالًا افتراضيًا واضحًا بلا رقم أو نتيجة تداول، ولا تقدمه كواقعة حقيقية. لا تضف قصة شخصية أو نتائج أو أرقامًا أو وعودًا. لا تكتب الاسكريبت كاملًا إن كان المدخل فقرة. لا تعتمد النص أو تحفظه؛ أعِد rewritten_text فقط. قواعد البصمة الصريحة تتقدم على العينات. أعد JSON فقط."
+    : scope === "angles" ? "من الفكرة فقط اقترح ثلاث زوايا مختلفة فعلًا: عنوان قصير، هوك، والفكرة الأساسية لكل واحدة. لا تكتب مسودة كاملة أو كابشنًا أو مشهدًا. ممنوع اختراع قصص شخصية أو أرقام تداول أو نتائج. راع قواعد صوت الكاتب، وأعد JSON حسب المخطط."
+      : scope === "single_draft" ? "اكتب مسودة واحدة فقط باللهجة المصرية الطبيعية وفق الزاوية المختارة selected_angle. الكلام قابل للتعديل أمام الكاميرا، بلا نتائج أو قصص أو أرقام مختلقة. لا تنتج ثلاث بدائل ولا تحفظ أو تعتمد أي شيء. لا تنسخ النص من مرجع خارجي، وأعد JSON حسب المخطط."
+    : writingScopes.has(scope) ? writingInstructions(mode, scope) : productionInstructions(scope);
   const schema = schemas[scope]; const input = `السياق المعتمد:\n${JSON.stringify(aiContext).slice(0, 70000)}`;
   if (provider.protocol === "openai_responses") {
     return { model: provider.model, store: false, instructions, input, text: { format: { type: "json_schema", name: `market_whales_${scope}`, strict: true, schema } } };
@@ -377,9 +399,14 @@ export default {
     const scriptId = text(body.script_id); const researchId = text(body.research_id); const contentId = text(body.content_id);
     const mode = text(body.mode) || "idea"; const scope = text(body.scope) || "script_variants";
     const selectedStory = text(body.selected_story); const generationDirection = text(body.generation_direction);
+    const selectedText = text(body.selected_text); const rewriteAction = text(body.rewrite_action);
+    const selectedAngle = text(body.selected_angle);
     const expectedVersion = Number(body.expected_edit_version);
     const targetCount = [scriptId, researchId, contentId].filter(Boolean).length;
     if (targetCount !== 1 || !modes.has(mode) || !scopes.has(scope)) return jsonResponse({ message: "حدد الفكرة ونوع مساعدة AI المطلوب." }, 400);
+    if (scope === "rewrite_excerpt" && (!scriptId || !rewriteActions.has(rewriteAction) || selectedText.length < 2 || selectedText.length > 30000)) return jsonResponse({ message: "حدد نصًا وإجراءً مناسبين لمساعد الكتابة." }, 400);
+    if (scope === "single_draft" && (!scriptId || selectedAngle.length < 5 || selectedAngle.length > 1700)) return jsonResponse({ message: "اختر زاوية كتابة أولًا." }, 400);
+    if (scope === "angles" && !scriptId) return jsonResponse({ message: "احفظ فكرتك أولًا لتختار زاوية الكتابة." }, 400);
     if (researchId && !writingScopes.has(scope)) return jsonResponse({ message: "تعليمات التنفيذ لا تبدأ إلا بعد حفظ واعتماد الاسكريبت." }, 400);
     if (contentId && !selectableProductionScopes.has(scope)) return jsonResponse({ message: "داخل مصنع المحتوى يتاح توليد بدائل الكابشن أو الغلاف فقط." }, 400);
     if ((scriptId || contentId) && (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1)) return jsonResponse({ message: "حدّث العنصر قبل استخدام AI." }, 400);
@@ -406,8 +433,27 @@ export default {
     const provider = parseProviderRuntime(providerData);
     if (providerError || !provider) return jsonResponse({ message: "أضف مزوّد AI من الإعدادات واجعله افتراضيًا قبل التوليد." }, 503);
 
-    const prepared = prepareAiContext(aiContext, mode, scope, selectedStory, generationDirection);
+    let relevantSamples: string[] = [];
+    if (scriptId) {
+      const { data: samples, error: samplesError } = await context.supabaseAdmin.from("script_voice_samples")
+        .select("sample_text").eq("organization_id", text(contextScript.organization_id))
+        .eq("owner_id", context.userClaims.id).eq("content_kind", text(contextScript.content_kind))
+        .eq("active", true).order("updated_at", { ascending: false }).limit(2);
+      if (samplesError) return jsonResponse({ message: "تعذّر تحميل أمثلة صوتك الخاصة؛ لم نرسل الطلب إلى AI." }, 503);
+      relevantSamples = (samples ?? []).map((sample) => text(sample.sample_text));
+    }
+    const prepared = prepareAiContext(aiContext, mode, scope, selectedStory, generationDirection, relevantSamples);
     if ("error" in prepared) return jsonResponse({ message: prepared.error }, 400);
+    if (scope === "single_draft") Object.assign(prepared.context, { selected_angle: selectedAngle });
+    if (scope === "rewrite_excerpt") {
+      prepared.context.script = {
+        id: contextScript.id, title: contextScript.title, objective: contextScript.objective,
+        duration_seconds: contextScript.duration_seconds,
+      };
+      prepared.context.generation_direction = null;
+      Object.assign(prepared.context, { selected_text: selectedText, rewrite_action: rewriteAction });
+      prepared.context.voice_profile.calibrated_samples = prepared.context.voice_profile.calibrated_samples.slice(-2);
+    }
     const { error: requestAuditError } = await context.supabaseAdmin.from("audit_events").insert({
       organization_id: text(contextScript.organization_id), actor_id: context.userClaims.id,
       action: "script.ai_request_started", entity_type: researchId ? "script_research" : contentId ? "content_item" : "script",
@@ -424,7 +470,39 @@ export default {
     let generated: unknown;
     try { generated = JSON.parse(stripJsonFence(extractProviderText(providerResult.json, provider.protocol))); } catch { generated = null; }
     let quality: GenerationQuality | null = null;
-    if (writingScopes.has(scope)) {
+    if (scope === "angles") {
+      const angles = record(generated).angles;
+      if (!Array.isArray(angles) || angles.length !== 3 || angles.some((raw) => {
+        const angle = record(raw);
+        return !text(angle.title) || !text(angle.hook) || !text(angle.core_idea);
+      })) return jsonResponse({ message: "الزوايا وصلت ناقصة؛ لم يتغير الاسكريبت." }, 502);
+      const clean = angles.filter((raw) => {
+        const angle = record(raw);
+        return !generationIssues({ hook_variants: [text(angle.hook)], variants: [
+          { label: text(angle.title), hook: "", spoken_script: text(angle.core_idea), cta: "" },
+        ] }, prepared.guard, mode).length;
+      });
+      if (clean.length !== 3) return jsonResponse({ message: "واحدة أو أكثر من الزوايا لم تطابق ضوابط الكتابة؛ حاول مرة أخرى." }, 422);
+      generated = { angles: clean };
+    } else if (scope === "single_draft") {
+      const draft = record(record(generated).draft);
+      const script = text(draft.spoken_script); const hook = text(draft.hook);
+      if (script.length < 20 || script.length > 30000 || !hook || generationIssues({
+        hook_variants: [hook], variants: [{ label: "", hook: "", spoken_script: script, cta: "" }],
+      }, prepared.guard, mode).length) return jsonResponse({ message: "المسودة لم تطابق ضوابط الكتابة؛ لم نغيّر نصك." }, 422);
+      generated = { draft: { spoken_script: script, hook } };
+    } else if (scope === "rewrite_excerpt") {
+      const candidate = text(record(generated).rewritten_text);
+      const originalNumbers = new Set(selectedText.match(/\d+(?:[.,]\d+)?/g) ?? []);
+      const introducedNumber = (candidate.match(/\d+(?:[.,]\d+)?/g) ?? []).some((value) => !originalNumbers.has(value));
+      const issues = generationIssues({ variants: [{ label: "", hook: "", spoken_script: candidate, cta: "" }], hook_variants: [] }, prepared.guard, "improve");
+      const introducesStory = /انا (الشخص ده|حصل معايا|مريت|خسرت|كسبت|ربحت)/.test(normalizeArabic(candidate))
+        && !/انا (الشخص ده|حصل معايا|مريت|خسرت|كسبت|ربحت)/.test(normalizeArabic(selectedText));
+      if (!candidate || candidate.length > 30000 || introducedNumber || introducesStory || issues.length) {
+        return jsonResponse({ message: "اقتراح التعديل أضاف رقمًا أو صياغة غير مطابقة، لذلك لم نعتمد شيئًا. جرّب مرة أخرى." }, 422);
+      }
+      generated = { rewritten_text: candidate };
+    } else if (writingScopes.has(scope)) {
       if (!validWritingOutput(generated, scope)) return jsonResponse({ message: "وصلت نتيجة كتابة غير مكتملة ولم نحفظ شيئًا." }, 502);
       const filtered = filterWritingOutput(generated, prepared.guard, mode, scope);
       generated = filtered.generated;
