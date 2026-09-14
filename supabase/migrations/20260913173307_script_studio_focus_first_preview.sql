@@ -155,7 +155,8 @@ grant select on public.script_review_access to authenticated;
 create policy script_review_access_read on public.script_review_access for select to authenticated
 using (
   (reviewer_id = (select auth.uid()) or granted_by = (select auth.uid()))
-  and private.is_active_script_actor((select auth.uid()), organization_id)
+  -- This granted helper also checks active membership. The internal writer
+  -- helper is deliberately not executable by authenticated browser roles.
   and private.actor_can_access_any_section((select auth.uid()), organization_id, array['scripts']::text[])
 );
 
