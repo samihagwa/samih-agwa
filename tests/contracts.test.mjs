@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+const scriptLibrary = await readFile(new URL("../components/scripts/ScriptLibrary.tsx", import.meta.url), "utf8");
 
 test("shared navigation exposes grouped permission-aware operating areas while every route remains valid", async () => {
   const [navigation, shell, access] = await Promise.all([
@@ -452,9 +453,9 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(workspace, /الأفكار والرادار/);
   assert.match(workspace, /بصمتي/);
   assert.match(workspace, /Apify/);
-  assert.match(workspace, /حذف نهائي/);
+  assert.match(scriptLibrary, /حذف نهائي/);
   assert.match(workspace, /window\.confirm/);
-  assert.match(workspace, /changeScriptStatus\(script, "archived"\)/);
+  assert.match(scriptLibrary, /props\.onStatus\(script, "archived"\)/);
   assert.match(editor, /إنشاء طلب تنفيذ/);
   assert.match(editor, /حذف نهائي/);
   assert.match(editor, /إما تُنشأ المهام كلها معًا/);
@@ -479,7 +480,7 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(content, /محفوظ مع ملف الريلز وسيظهر تلقائيًا لمسؤول النشر/);
   assert.match(types, /caption_brief: string/);
   assert.match(editor, /إنشاء حزمة التنفيذ/);
-  assert.match(editor, /CTA جزء من النص النهائي/);
+  assert.match(editor, /aria-label="عنوان السكريبت"/);
   assert.doesNotMatch(editor, /<span>الدعوة للإجراء CTA<\/span>/);
   assert.match(commands, /approve_voice_sample/);
   assert.match(commands, /approve_script_voice_sample_v2/);
@@ -524,7 +525,8 @@ test("script focus-first review and categorized voice preserve private data-laye
   assert.match(editor, /inert=\{saving\}/);
   assert.match(editor, /setReviewAccess\(grant\.reviewer_id, false\)/);
   assert.match(editor, /refreshReviews\(\)/);
-  assert.match(workspace, /myScript && script\.status === "draft"/);
+  assert.match(scriptLibrary, /const own = props\.canWrite && script\.assigned_to === props\.userId/);
+  assert.match(scriptLibrary, /own && script\.status === "draft"/);
   assert.match(workspace, /أمثلة قديمة غير مصنفة/);
   assert.match(ai, /\.eq\("owner_id", context\.userClaims\.id\)\.eq\("content_kind", text\(contextScript\.content_kind\)\)/);
   assert.doesNotMatch(ai, /extractCalibratedSamples\(rawProfile\.approved_examples\)/);
@@ -560,8 +562,9 @@ test("script lifecycle filters use persisted script states and linked production
   assert.match(workspace, /script\.spoken_script\.trim\(\)\.length < 20 \? "idea" : "draft"/);
   assert.match(workspace, /linkedStep\(tasks, script, "recording"\)\?\.status === "done"/);
   assert.match(workspace, /linkedStep\(tasks, script, "publishing"\)\?\.status === "done"/);
-  assert.match(workspace, /aria-pressed=\{statusFilter === filter\.value\}/);
-  assert.match(workspace, /changeScriptStatus\(script, "ready_to_record"\)/);
+  assert.match(scriptLibrary, /select value=\{props\.statusFilter\}/);
+  assert.match(scriptLibrary, /props\.onFilter\(event\.target\.value as Filter\)/);
+  assert.match(scriptLibrary, /props\.onStatus\(script, "ready_to_record"\)/);
   assert.match(workspace, /expected_edit_version: script\.edit_version/);
   assert.doesNotMatch(workspace, /changeScriptStatus\(script, "(?:recorded|published|handed_off)"\)/);
 

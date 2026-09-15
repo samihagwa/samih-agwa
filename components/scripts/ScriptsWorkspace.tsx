@@ -1,14 +1,15 @@
 "use client";
 
 import type { Session } from "@supabase/supabase-js";
-import { Archive, Bot, CheckCircle2, FilePenLine, Lightbulb, LoaderCircle, LockKeyhole, Plus, Radar, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, UserRound, UsersRound } from "lucide-react";
+import { Bot, FilePenLine, Lightbulb, LoaderCircle, LockKeyhole, Plus, Radar, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentUuidDeepLink } from "../../lib/deep-links";
-import { formatScriptDate, lines, scriptContentKindConfig, type ScriptContentKind, scriptDisplayStatus, scriptInputModeConfig, scriptResearchKindConfig } from "../../lib/scripts";
+import { lines, scriptContentKindConfig, type ScriptContentKind, scriptDisplayStatus, scriptInputModeConfig, scriptResearchKindConfig } from "../../lib/scripts";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
+import { ScriptLibrary } from "./ScriptLibrary";
 import { StatusBadge } from "../ui/StatusBadge";
 
 type Membership = Tables<"memberships">;
@@ -194,11 +195,13 @@ export function ScriptsWorkspace() {
   const [linkedResearchId] = useState(() => currentUuidDeepLink("research", "research"));
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return "scripts";
-    return new URL(window.location.href).searchParams.get("tab") === "radar" || currentUuidDeepLink("research", "research") ? "radar" : "scripts";
+    const requested = new URL(window.location.href).searchParams.get("tab");
+    return requested === "voice" ? "voice" : requested === "radar" || currentUuidDeepLink("research", "research") ? "radar" : "scripts";
   });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ScriptFilter>("active");
   const [showCreateScript, setShowCreateScript] = useState(false);
+  const createInFlight = useRef(false);
   const [showCreateResearch, setShowCreateResearch] = useState(false);
   const [scriptForm, setScriptForm] = useState(initialScriptForm);
   const [researchForm, setResearchForm] = useState({ kind: "idea", title: "", source_url: "", raw_notes: "", transcript: "", hook: "", transferable_principle: "", why_it_works: "", original_angles: "", performance_signal: "", brand_fit: "", freshness: "" });
@@ -309,7 +312,8 @@ export function ScriptsWorkspace() {
   }, [workspace]);
 
   async function createScript(event: FormEvent) {
-    event.preventDefault(); if (!workspace || !session || !canWriteScripts) return;
+    event.preventDefault(); if (!workspace || !session || !canWriteScripts || createInFlight.current) return;
+    createInFlight.current = true;
     const requestText = scriptForm.source_text.trim();
     const objective = scriptForm.objective.trim() || requestText.slice(0, 1000) || scriptForm.title.trim();
     setSaving(true); setError(null); setNotice(null);
@@ -325,12 +329,12 @@ export function ScriptsWorkspace() {
         duration_seconds: Number(scriptForm.duration_seconds),
       });
       setScriptForm(initialScriptForm); setShowCreateScript(false);
-      await refresh();
       const id = String(result.scriptId ?? "");
       setNotice("تم إنشاء المسودة بنسختها الأولى.");
-      if (id) window.location.assign(`/scripts/${id}`);
+      if (id) { window.location.assign(`/scripts/${id}`); return; }
+      await refresh();
     } catch (createError) { setError(createError instanceof Error ? createError.message : "تعذّر إنشاء الاسكريبت."); }
-    finally { setSaving(false); }
+    finally { createInFlight.current = false; setSaving(false); }
   }
 
   async function changeScriptStatus(script: Script, status: "draft" | "ready_to_record" | "archived") {
@@ -427,7 +431,8 @@ export function ScriptsWorkspace() {
   if (!session) return <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><h2>سجّل الدخول أولًا</h2><p>الاسكريبتات خاصة ومحمية بحساب كل عضو.</p></div><Button href="/tasks">تسجيل الدخول</Button></section>;
   if (!workspace) return <section className="workspace-state"><UsersRound size={27} /><div><h2>لا توجد مساحة عمل</h2><p>أنشئ مساحة الشركة من قسم المهام أولًا.</p></div></section>;
 
-  return <section className="scripts-workspace">
+  return <section className="scripts-workspace script-library-workspace">
+    <details className="script-privacy-note"><summary><ShieldCheck size={14} /> الخصوصية</summary><p>اسكريبتاتك خاصة بك؛ وقد يظهر هنا اسكريبت شاركه صاحبه معك للمراجعة فقط. البصمة لا تنتقل بالمشاركة.</p></details>
     <div className="scripts-tabs" role="tablist" aria-label="أقسام استوديو الاسكريبتات">
       <button type="button" role="tab" aria-selected={tab === "scripts"} className={tab === "scripts" ? "active" : ""} onClick={() => setTab("scripts")}><FilePenLine size={16} /> اسكريبتاتي</button>
       <button type="button" role="tab" aria-selected={tab === "radar"} className={tab === "radar" ? "active" : ""} onClick={() => setTab("radar")}><Radar size={16} /> الأفكار والرادار</button>
@@ -438,62 +443,23 @@ export function ScriptsWorkspace() {
     {!canWriteScripts ? <aside className="script-readonly-note"><ShieldCheck size={18} /><div><strong>صلاحية مشاهدة فقط</strong><p>يمكنك قراءة محتواك، لكن إنشاء الاسكريبتات أو تعديلها أو استخدام AI أو تغيير الحالات غير متاح لحساب viewer.</p></div></aside> : null}
     {linkedResearchId && workspace.research.some((item) => item.id === linkedResearchId) ? <p className="direct-link-notice" role="status"><Radar size={15} /> تم فتح الفكرة أو البحث المطلوب مباشرة.</p> : linkedResearchId ? <p className="form-notice error">العنصر المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
 
-    {tab === "scripts" ? <>
-      <section className="panel scripts-control-panel">
-        <div className="section-heading"><div><p className="overline">المساحة الخاصة</p><h2>اسكريبتاتي</h2><p>اسكريبتاتك خاصة بك؛ وقد يظهر هنا اسكريبت شاركه صاحبه معك للمراجعة فقط. البصمة لا تنتقل بالمشاركة.</p></div>{canWriteScripts ? <Button type="button" onClick={() => setShowCreateScript((value) => !value)}><Plus size={15} /> اسكريبت جديد</Button> : null}</div>
-        <div className="scripts-filters">
-          <label className="search-field"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث في العنوان أو النص أو الكابشن..." /></label>
-          <div className="script-status-filters" role="group" aria-label="تصفية الاسكريبتات حسب الحالة">
-            {scriptFilters.map((filter) => <button
-              key={filter.value}
-              type="button"
-              aria-pressed={statusFilter === filter.value}
-              className={statusFilter === filter.value ? "active" : ""}
-              onClick={() => setStatusFilter(filter.value)}
-              title={["recorded", "ready_to_publish", "published"].includes(filter.value) ? "تتحدث تلقائيًا من مهام التنفيذ المرتبطة" : undefined}
-            >{filter.label}<span>{(scriptFilterCounts.get(filter.value) ?? 0).toLocaleString("ar-EG")}</span></button>)}
-          </div>
-          <small className="script-filter-note">«تم التصوير» و«جاهز للنشر» و«تم النشر» تتحدث تلقائيًا من مهام التنفيذ؛ لا يغيّرها أي عضو يدويًا.</small>
-        </div>
-        {showCreateScript && canWriteScripts ? <form className="script-create-form" onSubmit={(event) => void createScript(event)}>
-          <label className="span-2"><span>الفكرة</span><input required minLength={5} maxLength={180} value={scriptForm.title} onChange={(event) => setScriptForm((form) => ({ ...form, title: event.target.value }))} placeholder="مثال: ليه بتتوتر وإنت كسبان؟" /></label>
-          <label><span>نوع المحتوى</span><select value={scriptForm.content_kind} onChange={(event) => setScriptForm((form) => ({ ...form, content_kind: event.target.value as ScriptContentKind }))}>{Object.entries(scriptContentKindConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label><span>المدة المستهدفة — ثانية</span><input type="number" min={10} max={1800} value={scriptForm.duration_seconds} onChange={(event) => setScriptForm((form) => ({ ...form, duration_seconds: event.target.value }))} /></label>
-          <details className="content-request-advanced span-2">
-            <summary>تفاصيل ومرجع — اختياري</summary>
-            <div className="content-request-advanced-body script-fields-grid">
-              <label className="span-2"><span>كل المطلوب والروابط — اختياري وفي خانة واحدة</span><textarea className="script-request-textarea" maxLength={30000} rows={5} value={scriptForm.source_text} onChange={(event) => setScriptForm((form) => ({ ...form, source_text: event.target.value }))} placeholder="ملاحظاتك وأي روابط داعمة للفكرة…" /><small>الفكرة تكفي لتبدأ الكتابة. أي روابط تضيفها تظل هنا.</small></label>
-              <label><span>طريقة البداية</span><select value={scriptForm.input_mode} onChange={(event) => setScriptForm((form) => ({ ...form, input_mode: event.target.value }))}>{Object.entries(scriptInputModeConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-              <label><span>المنصة</span><select value={scriptForm.platform} onChange={(event) => setScriptForm((form) => ({ ...form, platform: event.target.value }))}><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="telegram">Telegram</option><option value="other">أخرى</option></select></label>
-              <label><span>سلسلة أو عمود محتوى — اختياري</span><input value={scriptForm.content_pillar} onChange={(event) => setScriptForm((form) => ({ ...form, content_pillar: event.target.value }))} /></label>
-              <label className="span-2"><span>الهدف — اختياري</span><textarea maxLength={1000} value={scriptForm.objective} onChange={(event) => setScriptForm((form) => ({ ...form, objective: event.target.value }))} placeholder="اتركه فارغًا وسيستخرج النظام الهدف من خانة كل المطلوب." /></label>
-              <label className="span-2"><span>الجمهور — اختياري</span><input maxLength={500} value={scriptForm.audience} onChange={(event) => setScriptForm((form) => ({ ...form, audience: event.target.value }))} /></label>
-            </div>
-          </details>
-          <div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <FilePenLine size={15} />} إنشاء وفتح المحرر</Button><Button type="button" variant="ghost" onClick={() => setShowCreateScript(false)}>إلغاء</Button><small>المسودة تُحفظ في مساحتك الخاصة فقط.</small></div>
-        </form> : null}
-      </section>
-      {statusFilter === "archived" ? <aside className="script-archive-note"><Archive size={17} /><div><strong>الأرشيف خارج ضغط الشغل اليومي</strong><p>تقدر تسترجع أو تحذف نهائيًا اسكريبتاتك غير المرتبطة بالإنتاج أو بمرجع محفوظ.</p></div></aside> : null}
-      <div className="scripts-grid">{filteredScripts.length ? filteredScripts.map((script) => {
-        const config = scriptCardStatus(script, workspace.productionTasks);
-        const stage = scriptStage(script, workspace.productionTasks);
-        const working = workingScriptId === script.id;
-        const canArchive = script.status !== "archived";
-        const myScript = script.assigned_to === workspace.membership.user_id;
-        return <article className="script-card" data-status={script.status} data-stage={stage} key={script.id}>
-          <header><div><span className="script-card-icon"><FilePenLine size={18} /></span><div><h3>{script.title}</h3><p>{myScript ? script.objective : `مشاركة للمراجعة من ${personName(workspace.people, script.assigned_to)}`}</p></div></div><StatusBadge tone={config.tone}>{config.label}</StatusBadge></header>
-          <dl><div><dt>الكاتب</dt><dd><UserRound size={12} /> {personName(workspace.people, script.assigned_to)}</dd></div><div><dt>المدة</dt><dd>{script.duration_seconds.toLocaleString("ar-EG")} ثانية</dd></div><div><dt>آخر نسخة</dt><dd>v{script.edit_version.toLocaleString("ar-EG")}</dd></div></dl>
-          <footer><span>{formatScriptDate(script.updated_at)}</span><div className="script-card-actions">
-            <a className="button button-secondary" href={`/scripts/${script.id}`}>{script.status === "handed_off" ? "متابعة التنفيذ" : "فتح الاسكريبت"}</a>
-            {canWriteScripts && myScript && script.status === "draft" && script.spoken_script.trim().length >= 20 ? <button type="button" className="text-button script-quick-transition" disabled={working} onClick={() => void changeScriptStatus(script, "ready_to_record")}>{working ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} جاهز للتصوير</button> : null}
-            {canWriteScripts && myScript && script.status === "ready_to_record" ? <button type="button" className="text-button script-quick-transition" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} إرجاع للكتابة</button> : null}
-            {canWriteScripts && myScript && canArchive ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "archived")}>{working ? <LoaderCircle className="spin" size={14} /> : <Archive size={14} />} أرشفة</button> : null}
-            {canWriteScripts && myScript && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button" disabled={working} onClick={() => void changeScriptStatus(script, "draft")}>{working ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} استرجاع</button> : null}
-            {canWriteScripts && myScript && script.status === "archived" && !script.content_item_id ? <button type="button" className="text-button danger-text" disabled={working} onClick={() => void deleteScript(script)}><Trash2 size={14} /> حذف نهائي</button> : null}
-          </div></footer>
-        </article>;
-      }) : emptyState(Archive, "لا توجد اسكريبتات مطابقة", statusFilter === "active" ? "ابدأ باسكريبت جديد أو غيّر البحث والفلترة." : "غيّر الفلترة لرؤية العمل الحالي أو الأرشيف.")}</div>
-    </> : null}
+    {tab === "scripts" ? <ScriptLibrary
+      scripts={filteredScripts} tasks={workspace.productionTasks} userId={workspace.membership.user_id}
+      canWrite={canWriteScripts} search={search} onSearch={setSearch}
+      filters={scriptFilters} statusFilter={statusFilter} onFilter={setStatusFilter}
+      counts={scriptFilterCounts} stageOf={scriptStage} statusOf={scriptCardStatus}
+      workingId={workingScriptId} onStatus={changeScriptStatus} onDelete={deleteScript}
+      onCreate={() => setShowCreateScript(true)}
+      createForm={showCreateScript && canWriteScripts ? <form className="script-inline-create" onSubmit={(event) => void createScript(event)} aria-busy={saving}>
+        <div className="script-inline-create-main"><Plus size={18} /><input ref={(node) => { if (node && !saving && !node.value) node.focus(); }} aria-label="فكرة السكريبت الجديد" required minLength={5} maxLength={180} value={scriptForm.title} onChange={(event) => setScriptForm((form) => ({ ...form, title: event.target.value }))} placeholder="اكتب فكرة السكريبت…" disabled={saving} /><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={16} /> : null} إنشاء</Button><Button type="button" variant="ghost" disabled={saving} onClick={() => setShowCreateScript(false)}>إلغاء</Button></div>
+        <details className="script-create-properties"><summary>خصائص ومرجع — اختياري</summary><div className="script-fields-grid">
+          <label><span>النوع</span><select value={scriptForm.content_kind} onChange={(event) => setScriptForm((form) => ({ ...form, content_kind: event.target.value as ScriptContentKind }))}>{Object.entries(scriptContentKindConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label><span>المدة بالثواني</span><input type="number" min={10} max={1800} value={scriptForm.duration_seconds} onChange={(event) => setScriptForm((form) => ({ ...form, duration_seconds: event.target.value }))} /></label>
+          <label className="span-2"><span>كل المطلوب والروابط</span><textarea className="script-request-textarea" maxLength={30000} value={scriptForm.source_text} onChange={(event) => setScriptForm((form) => ({ ...form, source_text: event.target.value }))} /></label>
+          <label><span>طريقة البداية</span><select value={scriptForm.input_mode} onChange={(event) => setScriptForm((form) => ({ ...form, input_mode: event.target.value }))}>{Object.entries(scriptInputModeConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        </div></details>
+      </form> : null}
+    /> : null}
 
     {tab === "radar" ? <>
       <section className="panel scripts-control-panel">

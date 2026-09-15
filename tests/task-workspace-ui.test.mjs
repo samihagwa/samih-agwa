@@ -94,7 +94,8 @@ test("script work filters separate ready-to-publish and keep finished work out o
   assert.match(workspace, /value: "ready_to_publish", label: "جاهز للنشر"/);
   assert.match(workspace, /linkedStep\(tasks, script, "publishing"\)\?\.status === "done"[\s\S]*\["ready", "in_progress", "review"\]\.includes\(linkedStep\(tasks, script, "publishing"\)\?\.status \?\? ""\)[\s\S]*linkedStep\(tasks, script, "recording"\)\?\.status === "done"/);
   assert.match(workspace, /if \(filter === "active"\) return !\["published", "archived"\]\.includes\(stage\)/);
-  assert.match(workspace, /\["recorded", "ready_to_publish", "published"\]\.includes\(filter\.value\)/);
+  const library = await readFile(new URL("../components/scripts/ScriptLibrary.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(library, /props\.onStatus\(script, "(?:recorded|ready_to_publish|published)"\)/);
 });
 
 test("chosen cover instructions remain visible and reach the designer after refresh", async () => {
