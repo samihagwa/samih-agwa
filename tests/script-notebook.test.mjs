@@ -64,4 +64,9 @@ test("document tools are on demand, accessible, and retain explicit AI acceptanc
   assert.match(panel, /showModal\(\)/);
   assert.match(panel, /trigger\?\.focus\(\)/);
   assert.match(panel, /role="alert"/);
+  assert.match(editor, /new ResizeObserver/);
+  assert.match(editor, /document\.fonts\.ready\.then\(fitText\)/);
+  const css = await readFile(new URL("../app/scripts-notebook.css", import.meta.url), "utf8");
+  assert.match(css, /scripts-tabs button\.active \{ color: var\(--ink-950\)/);
+  assert.match(css, /border: 0 !important; border-radius: 0 !important/);
 });

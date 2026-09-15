@@ -3,7 +3,7 @@
 .script-library-workspace { position: relative; gap: 16px; }
 .script-library-workspace .scripts-tabs { background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0; justify-content: flex-start; gap: 20px; }
 .script-library-workspace .scripts-tabs button { border: 0; background: none; border-radius: 0; padding: 10px 0; font-size: 14px; min-height: 44px; }
-.script-library-workspace .scripts-tabs button.active { background: none; box-shadow: inset 0 -3px var(--brand-yellow, #ffde00); }
+.script-library-workspace .scripts-tabs button.active { color: var(--ink-950); background: none; box-shadow: inset 0 -3px var(--brand-yellow, #ffde00); }
 .script-privacy-note { color: var(--ink-600); font-size: 13px; justify-self: end; }
 .script-privacy-note summary { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 .script-privacy-note p { max-width: 520px; line-height: 1.8; }
@@ -14,7 +14,7 @@
 .script-view-tabs button { display: flex; gap: 8px; align-items: center; min-height: 44px; padding: 8px 12px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--ink-600); font-size: 15px; cursor: pointer; }
 .script-view-tabs button[aria-pressed="true"] { color: var(--ink-950); border-bottom-color: var(--brand-yellow, #ffde00); }
 .script-library-controls .search-field { width: 250px; min-height: 44px; }
-.script-library-controls .search-field input { font-size: 14px; }
+.script-library-controls .search-field input { font-size: 14px; border: 0; box-shadow: none; background: none; min-width: 0; width: 100%; }
 .script-sort { display: flex; gap: 5px; align-items: center; }
 .script-sort select { max-width: 110px; border: none; background: none; min-height: 44px; font-size: 14px; }
 .script-library-filters { display: flex; gap: 16px; align-items: end; flex-wrap: wrap; padding: 16px; border: 1px solid var(--line); margin-bottom: 16px; background: var(--canvas); border-radius: 6px; }
@@ -90,6 +90,10 @@
 .script-document .spoken-script-textarea:focus-visible { outline: 1px solid var(--line); outline-offset: 8px; }
 .script-document .spoken-script-textarea::placeholder { color: var(--ink-600); }
 .script-document .spoken-script-textarea[readonly] { background: transparent; }
+/* Override legacy global !important form borders only for the notebook surface. */
+.script-document .script-document-title, .script-document .spoken-script-textarea,
+.script-library-controls .search-field input, .script-library-controls .script-sort select,
+.script-inline-create-main > input { border: 0 !important; border-radius: 0 !important; }
 .script-document-add { position: absolute; inset-inline-start: -36px; top: 0; width: 32px; min-height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--ink-600); cursor: pointer; }
 .script-slash-menu { position: absolute; z-index: 8; inset-inline-start: 0; top: 44px; width: 220px; display: grid; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 6px; box-shadow: var(--shadow); }
 .script-slash-menu .button { justify-content: flex-start; }

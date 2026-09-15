@@ -537,7 +537,21 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
 
   useEffect(() => {
     const input = spokenTextInput.current;
-    if (input) { input.style.height = "auto"; input.style.height = Math.max(320, input.scrollHeight) + "px"; }
+    if (!input) return;
+    let cancelled = false;
+    let width = input.clientWidth;
+    const fitText = () => {
+      if (cancelled) return;
+      input.style.height = "auto";
+      input.style.height = Math.max(320, input.scrollHeight + 2) + "px";
+    };
+    fitText();
+    const observer = new ResizeObserver(() => {
+      if (input.clientWidth !== width) { width = input.clientWidth; fitText(); }
+    });
+    observer.observe(input);
+    void document.fonts.ready.then(fitText);
+    return () => { cancelled = true; observer.disconnect(); };
   }, [form?.spoken_script, loading]);
 
   useEffect(() => {
