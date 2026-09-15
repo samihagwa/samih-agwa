@@ -6,6 +6,7 @@ import "@fontsource/ibm-plex-sans-arabic/700.css";
 import { AppShell } from "../components/layout/AppShell";
 import "./globals.css";
 import "./scripts-notebook.css";
+import "./content-workspace.css";
 
 export const metadata: Metadata = {
   title: {

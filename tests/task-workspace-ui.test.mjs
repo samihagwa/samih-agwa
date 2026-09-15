@@ -7,7 +7,7 @@ test("content requests stay grouped and compact across team and personal task vi
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/ContentFileWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentRequestView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/QuickIntakeForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/content/PublishScheduleAdvisor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/deep-links.ts", import.meta.url), "utf8"),
@@ -42,15 +42,15 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.match(css, /\.content-workflow-subtasks > section\.completed strong \{[^}]*text-decoration: line-through/);
   assert.match(css, /\.task-card\.task-closed h3 \{[^}]*text-decoration: line-through/);
 
-  assert.match(intake, /تعليمات المونتاج — اختيارية/);
-  assert.match(intake, /تعليمات الغلاف — اختيارية/);
+  assert.match(intake, /نص الطلب والروابط/);
+  assert.match(intake, /للمصمم — اختياري/);
   assert.match(intake, /buildContentRequest\(requestText, editingBrief, thumbnailBrief\)/);
   assert.match(intake, /MAX_CONTENT_REQUEST_LENGTH = 30_000/);
-  assert.match(intake, /function withoutDuplicateHeadings/);
-  assert.match(intake, /seen\.has\(heading\)/);
+  assert.doesNotMatch(intake, /function withoutDuplicateHeadings/);
+  assert.match(intake, /return \[\s*request,/);
   assert.match(intake, /buildContentRequest\(requestText, editingBrief, thumbnailBrief\)\.length > MAX_CONTENT_REQUEST_LENGTH/);
-  assert.match(intake, /setEditingBrief\(event\.target\.value\); setStepError\(null\)/);
-  assert.match(intake, /setThumbnailBrief\(event\.target\.value\); setStepError\(null\)/);
+  assert.match(intake, /setRequestText\(text\); setStepError\(null\)/);
+  assert.match(intake, /setThumbnailBrief\(text\); setStepError\(null\)/);
   assert.match(intake, /PublishScheduleAdvisor/);
   assert.match(scheduleAdvisor, /محتوى مجدول/);
   assert.match(scheduleAdvisor, /cairoDateKey/);
@@ -76,9 +76,8 @@ test("content requests stay grouped and compact across team and personal task vi
   assert.match(detail, /task-full-request/);
   assert.match(detail, /thumbnail: \["brief", "recording", "thumbnail"\]/);
   assert.match(detail, /task\.content_item_id \? `\/tasks\/content\/\$\{task\.content_item_id\}`/);
-  assert.match(contentFile, /مسار التنفيذ/);
-  assert.match(contentFile, /taskDeepLink\(task\.id\)/);
-  assert.match(contentFile, /contentSourceDeepLink\(item\.id, item\.intake_source_url\)/);
+  assert.match(contentFile, /<ContentWorkspace contentId=\{contentId\} backHref="\/tasks"/);
+  assert.match(contentWorkspace, /taskDeepLink\(task\.id\)/);
   assert.match(contentWorkspace, /contentSourceDeepLink\(item\.id, item\.intake_source_url\)/);
   assert.match(detail, /contentSourceDeepLink\(workspace\.contentRequest\.id, workspace\.contentRequest\.intake_source_url\)/);
   assert.match(deepLinks, /workspaceContentHosts/);
@@ -100,14 +99,14 @@ test("script work filters separate ready-to-publish and keep finished work out o
 
 test("chosen cover instructions remain visible and reach the designer after refresh", async () => {
   const [content, css] = await Promise.all([
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/content/ContentRequestView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(content, /الاختيار المعتمد: \$\{option\.label\}/);
-  assert.match(content, /canUseThumbnailAi \|\| item\.thumbnail_brief\.trim\(\)/);
-  assert.match(content, /تعليمات الغلاف المحفوظة/);
-  assert.match(content, /LinkifiedText text=\{item\.thumbnail_brief\}/);
+  assert.doesNotMatch(content, /canUseThumbnailAi|apply_ai_choice/);
+  assert.match(content, /item\.thumbnail_brief, item\.design_brief/);
+  assert.match(content, /<summary>للمصمم<\/summary>/);
+  assert.match(content, /RequestText text=\{designerText\}/);
   assert.match(css, /\.content-ai-saved-choice/);
 });
 

@@ -3,6 +3,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 const scriptLibrary = await readFile(new URL("../components/scripts/ScriptLibrary.tsx", import.meta.url), "utf8");
 
+// Content presentation is now shared by /content and /tasks/content/:id.
+async function readContentSurface() {
+  return (await Promise.all([
+    "../components/content/ContentWorkspace.tsx", "../components/content/ContentRequestView.tsx",
+    "../components/content/ContentLibrary.tsx", "../lib/content-presentation.ts",
+    "../components/content/QuickIntakeForm.tsx",
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")))).join("\n");
+}
+
 test("shared navigation exposes grouped permission-aware operating areas while every route remains valid", async () => {
   const [navigation, shell, access] = await Promise.all([
     readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
@@ -98,7 +107,7 @@ test("workflow execution is assignee-scoped, voice profiles are private, and mob
     readFile(new URL("../supabase/migrations/20260822032608_fix_cancel_launch_reason_ambiguity.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
@@ -113,7 +122,7 @@ test("workflow execution is assignee-scoped, voice profiles are private, and mob
   assert.match(hardening, /Only the assigned task owner can execute or update this task/);
   assert.match(taskContract, /role === "owner" \|\| role === "admin"/);
   assert.match(tasks, /canManageAllTaskExecution/);
-  assert.match(content, /contentCoordinator/);
+  assert.match(content, /item\.created_by === userId/);
   assert.match(hardening, /content_items_select_involved_members/);
   assert.match(hardening, /content_assets_select_involved_members/);
 
@@ -350,7 +359,7 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
     readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../lib/scripts.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/layout/SidebarNav.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/auth/PresenceReporter.tsx", import.meta.url), "utf8"),
@@ -477,7 +486,7 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(captionHandoff, /caption_brief_carried/);
   assert.match(captionHandoff, /to service_role/);
   assert.match(content, /item\.caption_brief/);
-  assert.match(content, /محفوظ مع ملف الريلز وسيظهر تلقائيًا لمسؤول النشر/);
+  assert.match(content, /نص النشر المحفوظ/);
   assert.match(types, /caption_brief: string/);
   assert.match(editor, /إنشاء حزمة التنفيذ/);
   assert.match(editor, /aria-label="عنوان السكريبت"/);
@@ -819,7 +828,7 @@ test("content intake accepts generic raw-material web links while legacy Telegra
     readFile(new URL("../supabase/migrations/20260831032124_allow_generic_raw_material_links.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/content-intake.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/content/QuickIntakeForm.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../components/tasks/TaskDetailWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
@@ -905,7 +914,7 @@ test("content intake accepts generic raw-material web links while legacy Telegra
   assert.doesNotMatch(quickForm, /raw_material_sent/);
   assert.match(quickForm, /crypto\.randomUUID/);
   assert.doesNotMatch(quickForm, /content_goal|content_hook|content_cta|content_editing_brief/);
-  assert.match(workspace, /طلب محتوى جديد/);
+  assert.match(workspace, /طلب جديد/);
   assert.doesNotMatch(workspace, /طلب كامل من Telegram|إدخال يدوي/);
   assert.match(workspace, /content_timeline_cues/);
   assert.match(taskDetail, /content_items/);
@@ -921,7 +930,7 @@ test("content intake accepts generic raw-material web links while legacy Telegra
   assert.match(createCommand, /!isWebUrl\(url\)/);
   assert.match(createCommand, /!isTelegramUrl\(telegramSource\)/);
   assert.match(createCommand, /create_reel_from_intake/);
-  assert.match(workspace, /رابط المصدر الأصلي/);
+  assert.match(workspace, /المصدر الأصلي/);
   assert.match(contentCommands, /body\.request_source_url \?\? body\.telegram_source_url/);
   assert.doesNotMatch(contentCommands, /telegram\.me/);
   assert.match(contentCommands, /change_timeline_cue/);
@@ -972,7 +981,7 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
     readFile(new URL("../supabase/migrations/20260819033000_compact_reel_workflow.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260819165954_remove_blocking_content_approval.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
   ]);
 
@@ -992,11 +1001,11 @@ test("content workflow creates one guarded dependency graph shared with tasks", 
   assert.match(edgeFunction, /create_direct_reel_workflow_v2/);
   assert.match(edgeFunction, /create_reel_production_workflow_v3/);
   assert.match(workspace, /functions\.invoke\("create-content-workflow"/);
-  assert.match(workspace, /payload\.raw_materials\.length/);
+  assert.match(workspace, /raw_materials: Array/);
   assert.match(workspace, /كل المطلوب والروابط/);
-  assert.match(workspace, /الكابشن النهائي/);
-  assert.match(workspace, /const activeTasks = workTasks\.filter/);
-  assert.match(workspace, /التنفيذ والتسليم من صفحة المهمة داخل «مهامي»/);
+  assert.match(workspace, /item\.caption_brief/);
+  assert.match(workspace, /const active = work\.filter/);
+  assert.match(workspace, /taskDeliveryDeepLink\(task\.id\)/);
   assert.doesNotMatch(contentContract, /"brief", "recording", "editing", "thumbnail", "caption", "approval", "publishing"/);
   assert.match(nonBlockingMigration, /task_record\.content_step = 'publishing'/);
   assert.match(nonBlockingMigration, /update public\.tasks set status = 'done'/);
@@ -1040,7 +1049,7 @@ test("content production briefs, assets, and revision rounds share one secured w
     readFile(new URL("../supabase/migrations/20260819165954_remove_blocking_content_approval.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
@@ -1068,12 +1077,13 @@ test("content production briefs, assets, and revision rounds share one secured w
   assert.match(createCommand, /create_reel_production_workflow/);
   assert.match(workspace, /كل المطلوب والروابط/);
   assert.match(commands, /update_content_request_v1/);
-  assert.match(workspace, /مركز الأصول/);
-  assert.match(workspace, /جولات التعديل/);
+  assert.doesNotMatch(workspace, /مركز الأصول/);
+  assert.match(workspace, /المادة الخام والتسليمات/);
+  assert.match(workspace, /سجل التسليمات والتعديلات/);
   assert.match(workspace, /functions\.invoke\("content-commands"/);
   assert.match(workspace, /taskDeliveryDeepLink/);
-  assert.match(workspace, /تم التنفيذ — أضف التسليم/);
-  assert.match(workspace, /تم النشر — أضف الرابط/);
+  assert.match(workspace, /تسليم/);
+  assert.match(workspace, /فتح المنشور/);
   assert.doesNotMatch(workspace, /deliveryFormTaskId|submitStepDelivery/);
   assert.match(taskWorkspace, /تم تنفيذ المهمة — أضف التسليم/);
   assert.doesNotMatch(taskWorkspace, /status-select compact/);
@@ -1097,7 +1107,7 @@ test("social post deliverables expand into parallel copy and design workflows wi
     readFile(new URL("../supabase/functions/launch-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/content.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/supabase/database.types.ts", import.meta.url), "utf8"),
@@ -1127,7 +1137,7 @@ test("social post deliverables expand into parallel copy and design workflows wi
   assert.match(contentCommand, /update_social_post_brief/);
   assert.match(campaignWorkspace, /إنشاء البند ومصنع البوستات/);
   assert.match(campaignWorkspace, /الكابشن والتصميم بالتوازي/);
-  assert.match(contentWorkspace, /التنفيذ والتسليم من صفحة المهمة داخل «مهامي»/);
+  assert.match(contentWorkspace, /taskDeliveryDeepLink\(task\.id\)/);
   assert.match(contentWorkspace, /كل المطلوب والروابط/);
   assert.match(contentWorkspace, /item\.copy_brief/);
   assert.match(contentWorkspace, /item\.design_brief/);
@@ -1225,7 +1235,7 @@ test("brand knowledge is versioned, owner-approved, and linked to content by an 
     readFile(new URL("../supabase/functions/brand-commands/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/create-content-workflow/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/brand/BrandWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../docs/architecture.md", import.meta.url), "utf8"),
   ]);
 
@@ -1247,8 +1257,8 @@ test("brand knowledge is versioned, owner-approved, and linked to content by an 
   assert.match(commands, /createSupabaseContext/);
   assert.match(commands, /auth: "user"/);
   assert.match(brandWorkspace, /المسودة لا تؤثر على الشغل الحالي/);
-  assert.match(contentWorkspace, /approvedBrandArticles/);
-  assert.match(contentWorkspace, /مراجع البراند/);
+  assert.doesNotMatch(contentWorkspace, /approvedBrandArticles/);
+  assert.doesNotMatch(contentWorkspace, /مراجع البراند/);
   assert.match(createWorkflow, /create_reel_production_workflow_v3/);
   assert.match(createWorkflow, /create_reel_from_intake_v3/);
   assert.match(architecture, /approved body is immutable/i);
@@ -1466,7 +1476,7 @@ test("Edge Function errors expose safe server messages through one shared parser
   const [parser, ...workspaces] = await Promise.all([
     readFile(new URL("../lib/supabase/function-errors.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../components/campaigns/CampaignsWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
   ]);
@@ -1539,7 +1549,7 @@ test("task and content workspaces default to focused current work with clear Ara
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../components/ui/CollapsibleText.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/tasks.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -1554,8 +1564,8 @@ test("task and content workspaces default to focused current work with clear Ara
   assert.match(taskWorkspace, /CollapsibleText/);
   assert.match(collapsibleText, /إظهار المزيد/);
   assert.match(taskContract, /تنتظر خطوة سابقة/);
-  assert.match(contentWorkspace, /contentFilter/);
-  assert.match(contentWorkspace, /فتح التفاصيل/);
+  assert.match(contentWorkspace, /filterContent/);
+  assert.match(contentWorkspace, /فتح الطلب/);
   assert.match(contentWorkspace, /published.*cancelled/s);
 });
 
@@ -2137,7 +2147,7 @@ test("content team AI choices remain explicit, version fenced, role scoped, and 
     readFile(new URL("../supabase/migrations/20260821132327_content_team_ai_choices_and_research_notifications.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/script-ai/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/functions/content-commands/index.ts", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"),
   ]);
 
@@ -2159,9 +2169,9 @@ test("content team AI choices remain explicit, version fenced, role scoped, and 
   assert.match(aiFunction, /brand_notes: rawScript\.brand_notes/);
   assert.match(commandFunction, /apply_ai_choice/);
   assert.match(commandFunction, /apply_content_ai_choice/);
-  assert.match(workspace, /3 اقتراحات كابشن بالـAI/);
-  assert.match(workspace, /3 اقتراحات غلاف/);
-  assert.match(workspace, /لا يُحفظ اقتراح قبل اختيارك/);
+  assert.doesNotMatch(workspace, /3 اقتراحات كابشن بالـAI/);
+  assert.doesNotMatch(workspace, /3 اقتراحات غلاف/);
+  assert.doesNotMatch(workspace, /action: "apply_ai_choice"/);
   assert.match(workspace, /expected_content_version/);
   assert.match(config, /\[functions\.script-ai\][\s\S]*verify_jwt = true/);
   assert.doesNotMatch(migration, /status\s*=\s*'done'/);
@@ -2173,7 +2183,7 @@ test("entity links open the exact card across notifications, tasks, revisions, c
     readFile(new URL("../supabase/migrations/20260825160911_task_detail_revision_workflow.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/deep-links.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/tasks/TasksWorkspace.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../components/content/ContentWorkspace.tsx", import.meta.url), "utf8"),
+    readContentSurface(),
     readFile(new URL("../components/crm/CrmWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/scripts/ScriptsWorkspace.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/publishing/PublishingWorkspace.tsx", import.meta.url), "utf8"),
@@ -2195,7 +2205,7 @@ test("entity links open the exact card across notifications, tasks, revisions, c
 
   assert.match(taskDetailMigration, /when 'task' then[\s\S]*new\.url := '\/tasks\/' \|\| new\.entity_id/);
   assert.match(deepLinks, /\/tasks\/\$\{id\}/);
-  for (const workspace of [tasks, content, crm, scripts, publishing, campaigns, chat, team]) {
+  for (const workspace of [tasks, crm, scripts, publishing, campaigns, chat, team]) {
     assert.match(workspace, /data-direct-target/);
   }
   assert.match(tasks, /taskDomId\(task\.id\)/);

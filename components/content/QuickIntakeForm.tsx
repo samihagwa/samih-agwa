@@ -18,9 +18,9 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { formatDateTime } from "../../lib/date-time";
 import { Button } from "../ui/Button";
 import { PublishScheduleAdvisor } from "./PublishScheduleAdvisor";
+import { EmojiTextarea } from "../ui/EmojiTextarea";
 
 type TeamPerson = { id: string; name: string };
-type ApprovedBrandArticle = { id: string; title: string; version: number; categoryLabel: string };
 type RawMaterialKind = "raw_video" | "audio" | "source";
 type RawMaterialDraft = { id: string; kind: RawMaterialKind; url: string };
 
@@ -42,7 +42,6 @@ type Props = {
   defaultOwnerIds: Record<string, string>;
   defaultPublish: string;
   people: TeamPerson[];
-  approvedBrandArticles: ApprovedBrandArticle[];
   working: boolean;
   onCancel: () => void;
   onCreate: (payload: QuickIntakePayload) => Promise<boolean>;
@@ -66,11 +65,6 @@ const rawMaterialLabels: Record<RawMaterialKind, string> = {
 };
 
 const MAX_CONTENT_REQUEST_LENGTH = 30_000;
-const contentRequestHeadings = new Set([
-  "الطلب العام",
-  "تعليمات المونتاج",
-  "تعليمات الغلاف",
-]);
 
 function isWebUrl(value: string) {
   try {
@@ -84,29 +78,11 @@ function isWebUrl(value: string) {
   }
 }
 
-function withoutDuplicateHeadings(value: string, headingsToRemove: Set<string>) {
-  const seen = new Set<string>();
-  return value.split(/\r?\n/).filter((line) => {
-    const heading = line.trim().replace(/[:：]\s*$/, "");
-    if (!contentRequestHeadings.has(heading)) return true;
-    if (headingsToRemove.has(heading) || seen.has(heading)) return false;
-    seen.add(heading);
-    return true;
-  }).join("\n").trim();
-}
-
 function buildContentRequest(request: string, editing: string, thumbnail: string) {
-  const editingText = withoutDuplicateHeadings(editing, contentRequestHeadings);
-  const thumbnailText = withoutDuplicateHeadings(thumbnail, contentRequestHeadings);
-  const generatedHeadings = new Set(["الطلب العام"]);
-  if (editingText) generatedHeadings.add("تعليمات المونتاج");
-  if (thumbnailText) generatedHeadings.add("تعليمات الغلاف");
-  const requestText = withoutDuplicateHeadings(request, generatedHeadings);
-
   return [
-    `الطلب العام:\n${requestText}`,
-    editingText ? `تعليمات المونتاج:\n${editingText}` : "",
-    thumbnailText ? `تعليمات الغلاف:\n${thumbnailText}` : "",
+    request,
+    editing.trim() ? `تعليمات المونتاج:\n${editing}` : "",
+    thumbnail.trim() ? `تعليمات الغلاف:\n${thumbnail}` : "",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -116,7 +92,6 @@ export function QuickIntakeForm({
   defaultOwnerIds,
   defaultPublish,
   people,
-  approvedBrandArticles,
   working,
   onCancel,
   onCreate,
@@ -136,7 +111,7 @@ export function QuickIntakeForm({
   const [title, setTitle] = useState("");
   const [publishAt, setPublishAt] = useState(defaultPublish);
   const [requestText, setRequestText] = useState("");
-  const [editingBrief, setEditingBrief] = useState("");
+  const editingBrief = "";
   const [thumbnailBrief, setThumbnailBrief] = useState("");
   const [rawMaterials, setRawMaterials] = useState<RawMaterialDraft[]>([
     { id: "raw-material-1", kind: "raw_video", url: "" },
@@ -145,7 +120,6 @@ export function QuickIntakeForm({
   const [thumbnailOwnerId, setThumbnailOwnerId] = useState(() => ownerDefault("thumbnail_owner_id"));
   const [publishingMode, setPublishingMode] = useState<"self" | "member">("self");
   const [publishingOwnerId, setPublishingOwnerId] = useState(defaultTeamPublisher);
-  const [brandArticleIds, setBrandArticleIds] = useState<string[]>([]);
   const [stepError, setStepError] = useState<string | null>(null);
   const requestId = useRef<string | null>(null);
   const rawMaterialCounter = useRef(1);
@@ -226,20 +200,9 @@ export function QuickIntakeForm({
     setStepError(null);
   }
 
-  function toggleBrandArticle(articleId: string) {
-    setBrandArticleIds((current) => {
-      if (current.includes(articleId)) return current.filter((id) => id !== articleId);
-      if (current.length >= 8) {
-        setStepError("يمكن ربط 8 مراجع براند كحد أقصى.");
-        return current;
-      }
-      setStepError(null);
-      return [...current, articleId];
-    });
-  }
-
   async function createRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (working) return;
     if (step < wizardSteps.length - 1) {
       goNext();
       return;
@@ -264,7 +227,7 @@ export function QuickIntakeForm({
       editing_owner_id: editingOwnerId,
       thumbnail_owner_id: thumbnailOwnerId,
       publishing_owner_id: publishingMode === "self" ? currentUserId : publishingOwnerId,
-      brand_article_ids: brandArticleIds,
+      brand_article_ids: [],
     };
 
     const created = await onCreate(payload);
@@ -297,11 +260,8 @@ export function QuickIntakeForm({
 
         {step === 2 ? <>
           <div className="quick-intake-step-heading"><MessageSquareText size={20} /><div><p className="overline">المرجع الأساسي</p><h3 id="quick-intake-step-2" ref={stepHeadingRef} tabIndex={-1}>اكتب كل المطلوب والروابط</h3><p>الصق نفس الرسالة التي كنت سترسلها في جروب الشغل؛ ستظل كما هي للجميع.</p></div></div>
-          <label className="quick-intake-main-field quick-intake-request"><span>الطلب العام وكل الروابط</span><textarea value={requestText} onChange={(event) => { setRequestText(event.target.value); setStepError(null); }} minLength={10} maxLength={26000} rows={11} required placeholder="السكريبت أو الفكرة، روابط الصور والمصادر، وأي ملاحظات مشتركة…" /><small>أي رابط داخل النص سيظل في مكانه ويظهر قابلًا للفتح.</small></label>
-          <div className="quick-intake-specialized-briefs">
-            <label><span>تعليمات المونتاج — اختيارية</span><textarea value={editingBrief} onChange={(event) => { setEditingBrief(event.target.value); setStepError(null); }} maxLength={4000} rows={5} placeholder="الحذف، الثواني، الزوم، الكتابة على الشاشة، والمراجع الخاصة بالمونتاج…" /><small>ستظهر مباشرة لمسؤول المونتاج كـ«المطلوب منك».</small></label>
-            <label><span>تعليمات الغلاف — اختيارية</span><textarea value={thumbnailBrief} onChange={(event) => { setThumbnailBrief(event.target.value); setStepError(null); }} maxLength={4000} rows={5} placeholder="النص على الغلاف، الفكرة البصرية، الصور أو الألوان المطلوبة…" /><small>ستظهر مباشرة للمصمم، ويمكن اعتماد اقتراح AI عليها لاحقًا.</small></label>
-          </div>
+          <EmojiTextarea label="نص الطلب والروابط" name="request_text" value={requestText} onValueChange={(text) => { setRequestText(text); setStepError(null); }} minLength={10} maxLength={26000} rows={15} required placeholder="الصق الطلب كاملًا: الكلام والتوقيتات والتعليمات والروابط في نفس المكان..." />
+          <details className="request-disclosure"><summary>للمصمم — اختياري</summary><EmojiTextarea label="تعليمات المصمم" value={thumbnailBrief} onValueChange={(text) => { setThumbnailBrief(text); setStepError(null); }} maxLength={4000} rows={5} placeholder="اكتب الجزء الخاص بالغلاف هنا لو محتاج..." /></details>
         </> : null}
 
         {step === 3 ? <>
@@ -352,7 +312,6 @@ export function QuickIntakeForm({
             {editingBrief ? <ReviewItem label="تعليمات المونتاج" value={editingBrief} onEdit={() => goToStep(2)} wide /> : null}
             {thumbnailBrief ? <ReviewItem label="تعليمات الغلاف" value={thumbnailBrief} onEdit={() => goToStep(2)} wide /> : null}
           </div>
-          <BrandReferenceSelector articles={approvedBrandArticles} selectedIds={brandArticleIds} onToggle={toggleBrandArticle} />
           <p className="quick-intake-submit-proof"><CheckCircle2 size={15} /> بمجرد الإنشاء سيصل للمونتاج والغلاف طلبان واضحان، والنشر ينتظر اكتمالهما.</p>
         </> : null}
       </section>
@@ -371,11 +330,4 @@ export function QuickIntakeForm({
 
 function ReviewItem({ label, value, onEdit, wide = false }: { label: string; value: string; onEdit: () => void; wide?: boolean }) {
   return <article className={wide ? "wide" : undefined}><div><span>{label}</span><p>{value || "—"}</p></div><button type="button" onClick={onEdit}>تعديل</button></article>;
-}
-
-function BrandReferenceSelector({ articles, selectedIds, onToggle }: { articles: ApprovedBrandArticle[]; selectedIds: string[]; onToggle: (articleId: string) => void }) {
-  return <section className="brand-reference-selector quick-intake-brand-references">
-    <div><p className="overline">اختياري</p><h3>مراجع البراند</h3><p>اربط مرجعًا فقط إذا كان هذا الطلب يحتاج قواعد محددة.</p></div>
-    {articles.length ? <div>{articles.map((article) => <label key={article.id}><input type="checkbox" checked={selectedIds.includes(article.id)} onChange={() => onToggle(article.id)} aria-label={`ربط مرجع ${article.title}`} /><span><strong>{article.title}</strong><small>{article.categoryLabel} · النسخة {article.version}</small></span></label>)}</div> : <p className="brand-reference-empty"><Link2 size={13} /> لا توجد مراجع معتمدة بعد، ويمكن إنشاء الطلب بدونها.</p>}
-  </section>;
 }
