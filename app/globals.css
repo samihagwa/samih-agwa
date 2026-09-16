@@ -4034,4 +4034,28 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 .script-voice-sample-form > label:not(.script-sample-active) { flex: 1 1 250px; min-width: 0; }
 .script-voice-sample-form > label.span-2 { flex-basis: 100%; }
 .script-sample-active { display: inline-flex; align-items: center; gap: 8px; }
+/* Shared task-attention controls: same actions on the board and task detail. */
+.task-attention { min-width: 0; display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+.task-attention-actions, .task-attention-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.task-attention-badges:empty { display: none; }
+.task-attention-badges .status-badge { white-space: normal; }
+.task-attention-actions:empty { display: none; }
+.task-attention .button { min-height: 44px; height: auto; white-space: normal; text-align: center; }
+.task-attention-form { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.task-attention-form label { min-width: 0; display: grid; gap: 6px; font-size: 14px; }
+.task-attention-form input, .task-attention-form select, .task-attention-form textarea { width: 100%; min-width: 0; max-width: 100%; font-size: 16px; }
+.task-attention-form input[type="datetime-local"] { direction: ltr; }
+.task-attention-message { min-width: 0; padding-inline-start: 12px; border-inline-start: 3px solid var(--line); }
+.task-attention-message[data-tone="urgent"] { border-inline-start-color: #d64a45; }
+.task-attention-message[data-tone="help"] { border-inline-start-color: #c69115; }
+.task-attention-message strong { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.task-attention-message p { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.task-attention small { display: block; font-size: 13px; color: var(--ink-600); }
+.task-attention .form-notice { margin: 0; }
+.content-workflow-subtasks > section > .task-attention { grid-column: 1 / -1; margin-top: 8px; }
+.task-report-expanded > .task-attention { margin-block: 12px; }
+@media (max-width: 540px) {
+  .task-attention { padding: 12px; }
+  .task-attention-actions > .button { flex: 1 1 180px; }
+}
 @media (max-width: 760px) { .script-shooting-grid { grid-template-columns: 1fr; } .script-review-share > label, .script-review-panel form > label, .script-voice-sample-form > label:not(.script-sample-active) { flex-basis: 100%; min-width: 0; } }

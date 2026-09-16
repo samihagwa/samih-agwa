@@ -48,6 +48,7 @@ import { SegmentedProgress, type SegmentedProgressStep } from "../ui/SegmentedPr
 import { StatusBadge } from "../ui/StatusBadge";
 import { TaskScheduleCalendar } from "./TaskScheduleCalendar";
 import { WeeklyContentRoutineForm } from "./WeeklyContentRoutineForm";
+import { TaskAttentionBadge, TaskAttentionControls } from "./TaskAttentionControls";
 
 type Task = Tables<"tasks">;
 type Membership = Tables<"memberships">;
@@ -291,6 +292,7 @@ export function TasksWorkspace() {
   const configured = isSupabaseConfigured();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [attentionByTask, setAttentionByTask] = useState<Record<string, Tables<"task_attention">>>({});
   const [recurringTemplates, setRecurringTemplates] = useState<RecurringTaskTemplate[]>([]);
   const [loading, setLoading] = useState(configured);
   const [working, setWorking] = useState(false);
@@ -317,6 +319,7 @@ export function TasksWorkspace() {
   const clearWorkspace = useCallback(() => {
     setWorkspace(null);
     setTasks([]);
+    setAttentionByTask({});
     setRecurringTemplates([]);
     setCapacityWarning(null);
     setShowCreate(false);
@@ -344,6 +347,10 @@ export function TasksWorkspace() {
       .order("id", { ascending: true });
 
     if (tasksError) throw tasksError;
+    const { data: attentionRows, error: attentionError } = await supabase
+      .from("task_attention").select("*").eq("organization_id", organizationId);
+    if (attentionError) throw attentionError;
+    setAttentionByTask(Object.fromEntries((attentionRows ?? []).map((row) => [row.task_id, row])));
     setTasks(data ?? []);
   }, []);
 
@@ -450,6 +457,7 @@ export function TasksWorkspace() {
         },
         () => void refreshTasks(workspace.organization.id),
       )
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_attention", filter: `organization_id=eq.${workspace.organization.id}` }, () => void refreshTasks(workspace.organization.id))
       .subscribe();
 
     return () => {
@@ -1053,7 +1061,7 @@ export function TasksWorkspace() {
                         <span className="task-report-title"><small>طلب محتوى · {entry.tasks.length} مراحل</small><strong>{contentGroupTitle(entry.tasks[0])}</strong></span>
                         <span className="task-report-owner"><small>المرحلة الحالية</small><strong>{reportOwner}</strong></span>
                         <span className="task-report-deadline"><small>الموعد</small><bdi dir="ltr">{formatDateTime(reportDueAt)}</bdi></span>
-                        <span className="task-report-state"><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل" : lane.label}</StatusBadge><small>{completedTasks}/{entry.tasks.length}</small></span>
+                        <span className="task-report-state"><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل" : lane.label}</StatusBadge><small>{completedTasks}/{entry.tasks.length}</small>{entry.tasks.filter((task) => attentionByTask[task.id]).map((task) => <TaskAttentionBadge key={task.id} task={task} attention={attentionByTask[task.id]} />)}</span>
                       </summary>
                       <div className="task-report-expanded">
                       <div className="task-card-top"><span className="workflow-task-label"><Film aria-hidden="true" size={12} /> تفاصيل طلب المحتوى</span><StatusBadge tone={lane.id === "blocked" ? "danger" : lane.id === "review" ? "warning" : completedTasks === entry.tasks.length ? "success" : "info"}>{completedTasks === entry.tasks.length ? "اكتمل" : lane.label}</StatusBadge></div>
@@ -1100,12 +1108,14 @@ export function TasksWorkspace() {
                             <div><strong>{task.content_step ? contentStepConfig[task.content_step].label : task.title}</strong><small>{owner?.name ?? "عضو فريق"} · <bdi dir="ltr">{formatDateTime(task.due_at)}</bdi>{isMine ? <b> · مهمتك الآن</b> : null}</small>{directTarget ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}</div>
                           </div>
                           <div className="content-subtask-action">
+                            <TaskAttentionBadge task={task} attention={attentionByTask[task.id]} />
                             <StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge>
                             {canOpenDetails && task.status !== "backlog"
                               ? <a href={actionHref}><FileText size={12} /> {actionLabel}</a>
                               : !completed ? <small>{task.status === "backlog" ? "تفتح تلقائيًا بعد الخطوة السابقة" : "هذه المرحلة عند صاحبها"}</small> : null}
                             {canRequestRevisionShortcut ? <a className="content-subtask-revision" href={`${taskDeepLink(task.id)}?action=revise#revision`}><MessageSquareText size={12} /> طلب تعديل</a> : null}
                           </div>
+                          <TaskAttentionControls task={task} attention={attentionByTask[task.id]} userId={session.user.id} readOnly={readOnly} onChanged={() => refreshTasks(workspace.organization.id)} />
                         </section>;
                         })}</div>
                       </details>
@@ -1156,10 +1166,11 @@ export function TasksWorkspace() {
                         <span className="task-report-title"><small>{taskReference(task.id)}{task.content_step ? ` · ${contentStepConfig[task.content_step].label}` : ""}</small><strong>{task.title}</strong></span>
                         <span className="task-report-owner"><small>{personalView ? "طالب المهمة" : "المسؤول"}</small><strong>{personalView ? requester?.name ?? "عضو فريق" : owner?.name ?? "عضو فريق"}</strong></span>
                         <span className="task-report-deadline"><small>الموعد</small><bdi dir="ltr">{formatDateTime(task.due_at)}</bdi></span>
-                        <span className="task-report-state"><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge></span>
+                        <span className="task-report-state"><StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><TaskAttentionBadge task={task} attention={attentionByTask[task.id]} /></span>
                       </summary>
                       <div className="task-report-expanded">
                       <div className="task-card-top">{!personalView || ["high", "urgent"].includes(task.priority) ? <span className={`priority priority-${task.priority}`}>{taskPriorityConfig[task.priority].mark} {taskPriorityConfig[task.priority].label}</span> : null}<StatusBadge tone={taskStatusConfig[task.status].tone}>{taskStatusLabel(task.status, task.content_step)}</StatusBadge><small className="task-reference">{taskReference(task.id)}</small></div>
+                      <TaskAttentionControls task={task} attention={attentionByTask[task.id]} userId={session.user.id} readOnly={readOnly} onChanged={() => refreshTasks(workspace.organization.id)} />
                       {linkedTaskId === task.id ? <span className="direct-target-label"><Route size={11} /> دي المهمة المطلوبة</span> : null}
                       {task.content_step ? <span className="workflow-task-label"><Film size={12} /> محتوى · {contentStepConfig[task.content_step].label}</span> : null}
                       {task.launch_gate ? <span className="workflow-task-label launch-task-label"><Route size={12} /> إطلاق · {launchGateConfig[task.launch_gate].label}</span> : null}

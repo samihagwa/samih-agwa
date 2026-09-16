@@ -4126,6 +4126,12 @@ export type Database = {
           },
         ]
       }
+      task_attention: {
+        Row: { task_id: string; organization_id: string; assignee_id: string; revision: number; urgency: Json; blocker: Json; updated_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       task_discussion_messages: {
         Row: {
           author_id: string
@@ -4697,6 +4703,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      change_task_attention: {
+        Args: { target_task_id: string; target_action: string; expected_revision: number; message?: string | null; reason?: string | null; promised_at?: string | null }
+        Returns: Database["public"]["Tables"]["task_attention"]["Row"]
+      }
       approve_workspace_access_request: {
         Args: {
           target_actor_id: string

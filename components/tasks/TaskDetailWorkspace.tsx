@@ -34,6 +34,7 @@ import { getSupabaseFunctionErrorMessage } from "../../lib/supabase/function-err
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
+import { TaskAttentionControls } from "./TaskAttentionControls";
 
 type Task = Tables<"tasks">;
 type TaskEvent = Tables<"task_events">;
@@ -55,6 +56,7 @@ type Workspace = {
   membership: Membership;
   people: Person[];
   task: Task;
+  attention: Tables<"task_attention"> | null;
   events: TaskEvent[];
   discussion: TaskDiscussionMessage[];
   revisions: TaskRevisionRequest[];
@@ -263,6 +265,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         { data: assets, error: assetsError },
         { data: deliveries, error: deliveriesError },
         { data: contentRequest, error: contentRequestError },
+        { data: attention, error: attentionError },
       ] = await Promise.all([
         supabase.from("task_events").select("*").eq("task_id", task.id).order("occurred_at", { ascending: false }).limit(100),
         supabase.from("task_discussion_messages").select("*").eq("task_id", task.id).order("created_at", { ascending: true }).limit(200),
@@ -282,6 +285,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         task.content_item_id
           ? supabase.from("content_items").select("id, version, intake_request, intake_source_url, caption_brief, editing_brief, thumbnail_brief, copy_brief, design_brief").eq("id", task.content_item_id).maybeSingle()
           : Promise.resolve({ data: null as ContentRequest | null, error: null }),
+        supabase.from("task_attention").select("*").eq("task_id", task.id).maybeSingle(),
       ]);
       if (eventsError) throw eventsError;
       if (discussionError) throw discussionError;
@@ -291,6 +295,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       if (assetsError) throw assetsError;
       if (deliveriesError) throw deliveriesError;
       if (contentRequestError) throw contentRequestError;
+      if (attentionError) throw attentionError;
 
       const profileIds = [...new Set([
         ...(memberRows ?? []).map((member) => member.user_id),
@@ -327,6 +332,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         membership,
         people,
         task,
+        attention,
         events: events ?? [],
         discussion: discussion ?? [],
         revisions: revisions ?? [],
@@ -374,6 +380,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
       .channel(`task-detail:${taskId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_events", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_attention", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_discussion_messages", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_revision_requests", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false))
       .on("postgres_changes", { event: "*", schema: "public", table: "task_deliveries", filter: `task_id=eq.${taskId}` }, () => void loadTaskData(session, false));
@@ -719,6 +726,8 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
 
       {notice ? <p className="form-notice success" role="status"><CheckCircle2 size={14} /> {notice}</p> : null}
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
+
+      <TaskAttentionControls task={task} attention={workspace.attention} userId={session.user.id} readOnly={readOnly} onChanged={() => loadTaskData(session, false)} />
 
       <div className="task-detail-layout">
         <aside className="panel task-detail-action">
