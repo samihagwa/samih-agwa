@@ -1,15 +1,16 @@
 "use client";
 
 import type { Session } from "@supabase/supabase-js";
-import { Bot, FilePenLine, Lightbulb, LoaderCircle, LockKeyhole, Plus, Radar, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
+import { FilePenLine, LoaderCircle, LockKeyhole, Plus, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentUuidDeepLink } from "../../lib/deep-links";
-import { lines, scriptContentKindConfig, type ScriptContentKind, scriptDisplayStatus, scriptInputModeConfig, scriptResearchKindConfig } from "../../lib/scripts";
+import { lines, scriptContentKindConfig, type ScriptContentKind, scriptDisplayStatus, scriptDraftStage, type WritableScriptStage, scriptInputModeConfig } from "../../lib/scripts";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
 import { ScriptLibrary } from "./ScriptLibrary";
+import { ScriptToolPanel } from "./ScriptToolPanel";
 import { StatusBadge } from "../ui/StatusBadge";
 
 type Membership = Tables<"memberships">;
@@ -20,7 +21,6 @@ type VoiceProfile = Tables<"script_voice_profiles">;
 type VoiceSample = Tables<"script_voice_samples">;
 type Task = Tables<"tasks">;
 type Person = { id: string; name: string; role: Membership["role"] };
-type ScriptVariant = { label: string; hook: string; spoken_script: string; cta: string };
 type Workspace = {
   organization: Organization;
   membership: Membership;
@@ -31,7 +31,7 @@ type Workspace = {
   voiceSamples: VoiceSample[];
   productionTasks: Task[];
 };
-type Tab = "scripts" | "radar" | "voice";
+type Tab = "scripts" | "voice";
 type ScriptStage = "idea" | "draft" | "ready_to_record" | "production" | "recorded" | "ready_to_publish" | "published" | "archived";
 type ScriptFilter = "active" | ScriptStage | "all";
 
@@ -53,10 +53,6 @@ const initialScriptForm = {
   audience: "متداولون عرب", platform: "instagram", duration_seconds: "60", content_pillar: "",
 };
 
-function personName(people: Person[], id: string) {
-  return people.find((person) => person.id === id)?.name ?? "عضو فريق";
-}
-
 function scriptCardStatus(script: Script, tasks: Task[]) {
   if (script.status !== "handed_off" || !script.content_item_id) return scriptDisplayStatus(script);
   const linked = tasks.filter((task) => task.content_item_id === script.content_item_id);
@@ -77,7 +73,7 @@ function linkedStep(tasks: Task[], script: Script, step: Task["content_step"]) {
 
 function scriptStage(script: Script, tasks: Task[]): ScriptStage {
   if (script.status === "archived") return "archived";
-  if (script.status === "draft") return script.spoken_script.trim().length < 20 ? "idea" : "draft";
+  if (script.status === "draft") return scriptDraftStage(script) === "idea" ? "idea" : "draft";
   if (script.status === "ready_to_record") return "ready_to_record";
   if (linkedStep(tasks, script, "publishing")?.status === "done") return "published";
   if (["ready", "in_progress", "review"].includes(linkedStep(tasks, script, "publishing")?.status ?? "")) return "ready_to_publish";
@@ -92,30 +88,12 @@ function matchesScriptFilter(script: Script, tasks: Task[], filter: ScriptFilter
   return stage === filter;
 }
 
-function emptyState(icon: typeof FilePenLine, title: string, body: string) {
-  const Icon = icon;
-  return <div className="scripts-empty"><Icon size={25} /><strong>{title}</strong><p>{body}</p></div>;
-}
-
 async function invokeCommand(body: Record<string, unknown>) {
   const { data, error } = await getSupabaseBrowserClient().functions.invoke("script-commands", { body });
   if (error) {
     const context = error.context as Response | undefined;
     if (context) {
       try { const payload = await context.clone().json() as { message?: string }; if (payload.message) throw new Error(payload.message); } catch (parseError) { if (parseError instanceof Error && parseError.message !== "Unexpected end of JSON input") throw parseError; }
-    }
-    throw error;
-  }
-  return data as Record<string, unknown>;
-}
-
-async function invokeScriptAi(body: Record<string, unknown>) {
-  const { data, error } = await getSupabaseBrowserClient().functions.invoke("script-ai", { body });
-  if (error) {
-    const context = error.context as Response | undefined;
-    if (context) {
-      try { const payload = await context.clone().json() as { message?: string }; if (payload.message) throw new Error(payload.message); }
-      catch (parseError) { if (parseError instanceof Error && !/JSON|Unexpected|body stream/i.test(parseError.message)) throw parseError; }
     }
     throw error;
   }
@@ -196,20 +174,17 @@ export function ScriptsWorkspace() {
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return "scripts";
     const requested = new URL(window.location.href).searchParams.get("tab");
-    return requested === "voice" ? "voice" : requested === "radar" || currentUuidDeepLink("research", "research") ? "radar" : "scripts";
+    return requested === "voice" ? "voice" : "scripts";
   });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ScriptFilter>("active");
   const [showCreateScript, setShowCreateScript] = useState(false);
+  const [createStage, setCreateStage] = useState<WritableScriptStage>("idea");
+  const [createText, setCreateText] = useState("");
   const createInFlight = useRef(false);
-  const [showCreateResearch, setShowCreateResearch] = useState(false);
   const [scriptForm, setScriptForm] = useState(initialScriptForm);
-  const [researchForm, setResearchForm] = useState({ kind: "idea", title: "", source_url: "", raw_notes: "", transcript: "", hook: "", transferable_principle: "", why_it_works: "", original_angles: "", performance_signal: "", brand_fit: "", freshness: "" });
   const [saving, setSaving] = useState(false);
   const [workingScriptId, setWorkingScriptId] = useState<string | null>(null);
-  const [researchAiLoading, setResearchAiLoading] = useState<string | null>(null);
-  const [researchPreview, setResearchPreview] = useState<{ researchId: string; variants: ScriptVariant[]; hooks: string[] } | null>(null);
-  const [researchAiDirection, setResearchAiDirection] = useState("");
   const openedResearchLink = useRef<string | null>(null);
 
   const clearWorkspace = useCallback(() => setWorkspace(null), []);
@@ -315,21 +290,16 @@ export function ScriptsWorkspace() {
     event.preventDefault(); if (!workspace || !session || !canWriteScripts || createInFlight.current) return;
     createInFlight.current = true;
     const requestText = scriptForm.source_text.trim();
-    const objective = scriptForm.objective.trim() || requestText.slice(0, 1000) || scriptForm.title.trim();
     setSaving(true); setError(null); setNotice(null);
     try {
-      const result = await invokeCommand({
-        action: "create_script",
-        organization_id: workspace.organization.id,
-        assigned_to: session.user.id,
-        ...scriptForm,
-        source_url: "",
-        source_text: requestText,
-        objective,
-        duration_seconds: Number(scriptForm.duration_seconds),
+      const { data: createdId, error: createError } = await getSupabaseBrowserClient().rpc("create_board_script", {
+        organization: workspace.organization.id, title: scriptForm.title, stage: createStage,
+        script_text: createText, kind: scriptForm.content_kind, source_text: requestText,
+        duration: Number(scriptForm.duration_seconds), input_mode: scriptForm.input_mode as Script["input_mode"],
       });
+      if (createError) throw createError;
       setScriptForm(initialScriptForm); setShowCreateScript(false);
-      const id = String(result.scriptId ?? "");
+      const id = createdId ?? "";
       setNotice("تم إنشاء المسودة بنسختها الأولى.");
       if (id) { window.location.assign(`/scripts/${id}`); return; }
       await refresh();
@@ -337,14 +307,15 @@ export function ScriptsWorkspace() {
     finally { createInFlight.current = false; setSaving(false); }
   }
 
-  async function changeScriptStatus(script: Script, status: "draft" | "ready_to_record" | "archived") {
+  async function changeScriptStatus(script: Script, status: WritableScriptStage) {
     if (!canWriteScripts) return;
     setWorkingScriptId(script.id); setError(null); setNotice(null);
     try {
-      await invokeCommand({ action: "change_status", script_id: script.id, expected_edit_version: script.edit_version, status });
+      const { error: moveError } = await getSupabaseBrowserClient().rpc("move_script_card", { target_script_id: script.id, expected_version: script.edit_version, destination: status });
+      if (moveError) throw moveError;
       setNotice(status === "archived" ? "تم نقل الاسكريبت إلى الأرشيف."
         : status === "ready_to_record" ? "تم نقل الاسكريبت إلى جاهز للتصوير."
-        : "تم نقل الاسكريبت إلى قيد الكتابة.");
+        : status === "idea" ? "تم نقل السكريبت إلى الأفكار." : "تم نقل الاسكريبت إلى قيد الكتابة.");
       await refresh();
     } catch (statusError) { setError(statusError instanceof Error ? statusError.message : "تعذّر تغيير حالة الاسكريبت."); }
     finally { setWorkingScriptId(null); }
@@ -362,17 +333,6 @@ export function ScriptsWorkspace() {
     finally { setWorkingScriptId(null); }
   }
 
-  async function createResearch(event: FormEvent) {
-    event.preventDefault(); if (!workspace || !session || !canWriteScripts) return;
-    setSaving(true); setError(null); setNotice(null);
-    try {
-      await invokeCommand({ action: "create_research", organization_id: workspace.organization.id, assigned_to: session.user.id, ...researchForm, original_angles: lines(researchForm.original_angles) });
-      setResearchForm({ kind: "idea", title: "", source_url: "", raw_notes: "", transcript: "", hook: "", transferable_principle: "", why_it_works: "", original_angles: "", performance_signal: "", brand_fit: "", freshness: "" });
-      setShowCreateResearch(false); setNotice("تم حفظ العنصر في الرادار اليدوي."); await refresh();
-    } catch (createError) { setError(createError instanceof Error ? createError.message : "تعذّر حفظ الفكرة."); }
-    finally { setSaving(false); }
-  }
-
   async function convertResearch(id: string) {
     if (!canWriteScripts) return;
     setSaving(true); setError(null); setNotice(null);
@@ -385,48 +345,6 @@ export function ScriptsWorkspace() {
     finally { setSaving(false); }
   }
 
-  async function generateResearchPreview(item: Research) {
-    if (!canWriteScripts) return;
-    setResearchAiLoading(item.id); setError(null); setNotice(null);
-    try {
-      const result = await invokeScriptAi({
-        research_id: item.id, scope: "script_variants", mode: item.source_url ? "reference" : "idea",
-        generation_direction: researchPreview?.researchId === item.id ? researchAiDirection : "",
-      });
-      const generated = result.generated as { variants?: ScriptVariant[]; hook_variants?: string[] } | undefined;
-      const variants = Array.isArray(generated?.variants) ? generated.variants : [];
-      const quality = result.quality as { removed_variants?: number; removed_hooks?: number } | undefined;
-      const removedVariants = Number(quality?.removed_variants ?? 0);
-      const removedHooks = Number(quality?.removed_hooks ?? 0);
-      setResearchPreview({
-        researchId: item.id,
-        variants,
-        hooks: Array.isArray(generated?.hook_variants) ? generated.hook_variants : [],
-      });
-      const guardNotice = removedVariants || removedHooks
-        ? ` الحارس استبعد ${removedVariants ? `${removedVariants} نسخة` : ""}${removedVariants && removedHooks ? " و" : ""}${removedHooks ? `${removedHooks} هوك` : ""} لعدم مطابقتها، من غير طلب إضافي.`
-        : "";
-      setNotice(`عدد البدائل السليمة: ${variants.length}. دي معاينة فقط؛ الفكرة مازالت في مكانها ولم يُنشأ أي اسكريبت.${guardNotice}`);
-    } catch (previewError) { setError(previewError instanceof Error ? previewError.message : "تعذّر توليد معاينة الفكرة."); }
-    finally { setResearchAiLoading(null); }
-  }
-
-  async function saveResearchVariant(item: Research, variant: ScriptVariant) {
-    if (!canWriteScripts) return;
-    setSaving(true); setError(null); setNotice(null);
-    try {
-      const result = await invokeCommand({
-        action: "research_variant_to_script", research_id: item.id,
-        hook_variants: lines(`${variant.hook}\n${researchPreview?.hooks.join("\n") ?? ""}`),
-        spoken_script: variant.spoken_script, cta: variant.cta,
-      });
-      const scriptId = String(result.scriptId ?? "");
-      setResearchPreview(null); await refresh();
-      if (scriptId) window.location.assign(`/scripts/${scriptId}`);
-    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "تعذّر حفظ النسخة المختارة."); }
-    finally { setSaving(false); }
-  }
-
   if (loading) return <section className="workspace-state"><LoaderCircle className="spin" size={24} /><div><h2>جارٍ فتح الاستوديو</h2><p>نحمّل اسكريبتاتك الخاصة وبنك الأفكار.</p></div></section>;
   if (!session) return <section className="workspace-state workspace-onboarding"><LockKeyhole size={27} /><div><h2>سجّل الدخول أولًا</h2><p>الاسكريبتات خاصة ومحمية بحساب كل عضو.</p></div><Button href="/tasks">تسجيل الدخول</Button></section>;
   if (!workspace) return <section className="workspace-state"><UsersRound size={27} /><div><h2>لا توجد مساحة عمل</h2><p>أنشئ مساحة الشركة من قسم المهام أولًا.</p></div></section>;
@@ -435,13 +353,12 @@ export function ScriptsWorkspace() {
     <details className="script-privacy-note"><summary><ShieldCheck size={14} /> الخصوصية</summary><p>اسكريبتاتك خاصة بك؛ وقد يظهر هنا اسكريبت شاركه صاحبه معك للمراجعة فقط. البصمة لا تنتقل بالمشاركة.</p></details>
     <div className="scripts-tabs" role="tablist" aria-label="أقسام استوديو الاسكريبتات">
       <button type="button" role="tab" aria-selected={tab === "scripts"} className={tab === "scripts" ? "active" : ""} onClick={() => setTab("scripts")}><FilePenLine size={16} /> اسكريبتاتي</button>
-      <button type="button" role="tab" aria-selected={tab === "radar"} className={tab === "radar" ? "active" : ""} onClick={() => setTab("radar")}><Radar size={16} /> الأفكار والرادار</button>
       <button type="button" role="tab" aria-selected={tab === "voice"} className={tab === "voice" ? "active" : ""} onClick={() => setTab("voice")}><Sparkles size={16} /> بصمتي</button>
     </div>
     {error ? <p className="form-notice error">{error}</p> : null}
     {notice ? <p className="form-notice success">{notice}</p> : null}
     {!canWriteScripts ? <aside className="script-readonly-note"><ShieldCheck size={18} /><div><strong>صلاحية مشاهدة فقط</strong><p>يمكنك قراءة محتواك، لكن إنشاء الاسكريبتات أو تعديلها أو استخدام AI أو تغيير الحالات غير متاح لحساب viewer.</p></div></aside> : null}
-    {linkedResearchId && workspace.research.some((item) => item.id === linkedResearchId) ? <p className="direct-link-notice" role="status"><Radar size={15} /> تم فتح الفكرة أو البحث المطلوب مباشرة.</p> : linkedResearchId ? <p className="form-notice error">العنصر المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
+    {linkedResearchId && workspace.research.some((item) => item.id === linkedResearchId) ? <p className="direct-link-notice" role="status">تم فتح الفكرة المطلوبة. {workspace.research.find((item) => item.id === linkedResearchId)?.linked_script_id ? <a href={`/scripts/${workspace.research.find((item) => item.id === linkedResearchId)?.linked_script_id}`}>فتح السكريبت المرتبط</a> : null}</p> : linkedResearchId ? <p className="form-notice error">العنصر المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
 
     {tab === "scripts" ? <ScriptLibrary
       scripts={filteredScripts} tasks={workspace.productionTasks} userId={workspace.membership.user_id}
@@ -449,53 +366,21 @@ export function ScriptsWorkspace() {
       filters={scriptFilters} statusFilter={statusFilter} onFilter={setStatusFilter}
       counts={scriptFilterCounts} stageOf={scriptStage} statusOf={scriptCardStatus}
       workingId={workingScriptId} onStatus={changeScriptStatus} onDelete={deleteScript}
-      onCreate={() => setShowCreateScript(true)}
-      createForm={showCreateScript && canWriteScripts ? <form className="script-inline-create" onSubmit={(event) => void createScript(event)} aria-busy={saving}>
+      ideaItems={workspace.research.filter((item) => !item.linked_script_id && ["inbox", "selected"].includes(item.status)).map((item) => <article className="script-board-card" key={item.id} id={`research-${item.id}`} data-direct-target={linkedResearchId === item.id || undefined} tabIndex={-1}><strong>{item.title}</strong><Button type="button" variant="ghost" disabled={saving || !canWriteScripts} onClick={() => void convertResearch(item.id)}>فتح الفكرة للكتابة</Button></article>)}
+      onCreate={(stage = "idea") => { setCreateStage(stage); setCreateText(""); setShowCreateScript(true); }}
+      createForm={showCreateScript && canWriteScripts ? <ScriptToolPanel title="صفحة سكريبت جديدة" error={error} notice={notice} onClose={() => { if (!saving) setShowCreateScript(false); }}><form className="script-inline-create" onSubmit={(event) => void createScript(event)} aria-busy={saving}>
         <div className="script-inline-create-main"><Plus size={18} /><input ref={(node) => { if (node && !saving && !node.value) node.focus(); }} aria-label="فكرة السكريبت الجديد" required minLength={5} maxLength={180} value={scriptForm.title} onChange={(event) => setScriptForm((form) => ({ ...form, title: event.target.value }))} placeholder="اكتب فكرة السكريبت…" disabled={saving} /><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={16} /> : null} إنشاء</Button><Button type="button" variant="ghost" disabled={saving} onClick={() => setShowCreateScript(false)}>إلغاء</Button></div>
+        <p>صفحة جديدة في: {scriptFilters.find((filter) => filter.value === createStage)?.label}</p>
+        {createStage === "ready_to_record" ? <label>نص السكريبت الجاهز<textarea required minLength={20} maxLength={30000} value={createText} onChange={(event) => setCreateText(event.target.value)} /></label> : null}
         <details className="script-create-properties"><summary>خصائص ومرجع — اختياري</summary><div className="script-fields-grid">
           <label><span>النوع</span><select value={scriptForm.content_kind} onChange={(event) => setScriptForm((form) => ({ ...form, content_kind: event.target.value as ScriptContentKind }))}>{Object.entries(scriptContentKindConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label><span>المدة بالثواني</span><input type="number" min={10} max={1800} value={scriptForm.duration_seconds} onChange={(event) => setScriptForm((form) => ({ ...form, duration_seconds: event.target.value }))} /></label>
           <label className="span-2"><span>كل المطلوب والروابط</span><textarea className="script-request-textarea" maxLength={30000} value={scriptForm.source_text} onChange={(event) => setScriptForm((form) => ({ ...form, source_text: event.target.value }))} /></label>
           <label><span>طريقة البداية</span><select value={scriptForm.input_mode} onChange={(event) => setScriptForm((form) => ({ ...form, input_mode: event.target.value }))}>{Object.entries(scriptInputModeConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div></details>
-      </form> : null}
+      </form></ScriptToolPanel> : null}
     /> : null}
 
-    {tab === "radar" ? <>
-      <section className="panel scripts-control-panel">
-        <div className="section-heading"><div><p className="overline">الرادار اليدوي الآن</p><h2>مصدر → مبدأ → زاوية أصلية</h2><p>نسجل الفكرة المفيدة ولا ننسخ المنافس. جلب Instagram وTranscript عبر Apify مؤجل لمرحلة مستقلة بعد تحديد الميزانية والحدود.</p></div>{canWriteScripts ? <Button type="button" onClick={() => setShowCreateResearch((value) => !value)}><Plus size={15} /> إضافة فكرة أو مرجع</Button> : null}</div>
-        <aside className="script-trust-note"><Bot size={18} /><div><strong>لا يوجد اشتراك مدفوع أو سحب خفي</strong><p>الصق الرابط أو الفكرة يدويًا الآن. سنضيف الأتمتة لاحقًا بدون تغيير شكل بنك الأفكار أو خصوصيته.</p></div></aside>
-        {showCreateResearch && canWriteScripts ? <form className="research-create-form" onSubmit={(event) => void createResearch(event)}>
-          <label><span>النوع</span><select value={researchForm.kind} onChange={(event) => setResearchForm((form) => ({ ...form, kind: event.target.value }))}>{Object.entries(scriptResearchKindConfig).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label className="span-2"><span>عنوان الفكرة</span><input required minLength={3} value={researchForm.title} onChange={(event) => setResearchForm((form) => ({ ...form, title: event.target.value }))} /></label>
-          <label className="span-2"><span>رابط المصدر — اختياري</span><input type="url" value={researchForm.source_url} onChange={(event) => setResearchForm((form) => ({ ...form, source_url: event.target.value }))} /></label>
-          <label><span>الهوك الأصلي</span><textarea value={researchForm.hook} onChange={(event) => setResearchForm((form) => ({ ...form, hook: event.target.value }))} /></label>
-          <label><span>المبدأ القابل للنقل</span><textarea value={researchForm.transferable_principle} onChange={(event) => setResearchForm((form) => ({ ...form, transferable_principle: event.target.value }))} /></label>
-          <label><span>ليه الفكرة شغالة؟</span><textarea value={researchForm.why_it_works} onChange={(event) => setResearchForm((form) => ({ ...form, why_it_works: event.target.value }))} /></label>
-          <label><span>3 زوايا أصلية — زاوية في كل سطر</span><textarea value={researchForm.original_angles} onChange={(event) => setResearchForm((form) => ({ ...form, original_angles: event.target.value }))} /></label>
-          <label><span>ملاحظات أو فكرة عامة</span><textarea value={researchForm.raw_notes} onChange={(event) => setResearchForm((form) => ({ ...form, raw_notes: event.target.value }))} /></label>
-          <label><span>Transcript — اختياري</span><textarea value={researchForm.transcript} onChange={(event) => setResearchForm((form) => ({ ...form, transcript: event.target.value }))} /></label>
-          <div className="research-score-row"><label><span>إشارة الأداء</span><input type="number" min={0} max={100} value={researchForm.performance_signal} onChange={(event) => setResearchForm((form) => ({ ...form, performance_signal: event.target.value }))} /></label><label><span>ملاءمة البراند</span><input type="number" min={0} max={100} value={researchForm.brand_fit} onChange={(event) => setResearchForm((form) => ({ ...form, brand_fit: event.target.value }))} /></label><label><span>حداثة الفكرة</span><input type="number" min={0} max={100} value={researchForm.freshness} onChange={(event) => setResearchForm((form) => ({ ...form, freshness: event.target.value }))} /></label></div>
-          <div className="form-actions"><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={15} /> : <Lightbulb size={15} />} حفظ في الرادار</Button><Button type="button" variant="ghost" onClick={() => setShowCreateResearch(false)}>إلغاء</Button></div>
-        </form> : null}
-      </section>
-      <div className="research-grid">{workspace.research.length ? workspace.research.map((item) => {
-        const preview = researchPreview?.researchId === item.id ? researchPreview : null;
-        const canUse = canWriteScripts && item.status !== "archived" && item.status !== "used";
-        return <article className={`research-card status-${item.status}`} id={`research-${item.id}`} data-direct-target={linkedResearchId === item.id || undefined} tabIndex={linkedResearchId === item.id ? -1 : undefined} key={item.id}>
-          <header><div><Radar size={17} /><div><span>{scriptResearchKindConfig[item.kind]}</span><h3>{item.title}</h3></div></div><StatusBadge tone={item.status === "used" ? "success" : item.status === "archived" ? "info" : "neutral"}>{item.status === "inbox" ? "وارد" : item.status === "selected" ? "مختار" : item.status === "used" ? "تحول لاسكريبت" : "مؤرشف"}</StatusBadge></header>
-          {linkedResearchId === item.id ? <span className="direct-target-label"><Radar size={11} /> ده العنصر المطلوب</span> : null}
-          {item.transferable_principle ? <div className="research-principle"><strong>المبدأ القابل للنقل</strong><p>{item.transferable_principle}</p></div> : null}
-          {item.original_angles.length ? <ul>{item.original_angles.slice(0, 3).map((angle) => <li key={angle}>{angle}</li>)}</ul> : null}
-          {canUse ? <div className="research-ai-preview">
-            <label><span>توجيه للـAI — اختياري</span><textarea value={preview ? researchAiDirection : ""} onFocus={() => { if (!preview) setResearchPreview({ researchId: item.id, variants: [], hooks: [] }); }} onChange={(event) => setResearchAiDirection(event.target.value)} placeholder="عايز أوصل الفكرة من زاوية..." /></label>
-            <div className="research-ai-actions"><Button type="button" disabled={Boolean(researchAiLoading) || saving} onClick={() => void generateResearchPreview(item)}>{researchAiLoading === item.id ? <LoaderCircle className="spin" size={14} /> : <Sparkles size={14} />} اكتب 3 بدائل بالـAI</Button><Button type="button" variant="ghost" disabled={saving} onClick={() => void convertResearch(item.id)}>إنشاء مسودة يدوية</Button></div>
-            {preview?.variants.length ? <div className="research-variant-list">{preview.variants.map((variant, index) => <article key={`${variant.label}-${index}`}><header><strong>{variant.label}</strong><span>نسخة {index + 1}</span></header><p>{variant.spoken_script}</p><Button type="button" variant="secondary" disabled={saving} onClick={() => void saveResearchVariant(item, variant)}>اختيار وحفظ كاسكريبت</Button></article>)}</div> : <small>لن تظهر الفكرة في «اسكريبتاتي» إلا بعد اختيار نسخة والضغط على الحفظ.</small>}
-          </div> : null}
-          <footer><div>{item.source_url ? <a href={item.source_url} target="_blank" rel="noreferrer">فتح المصدر</a> : <span>فكرة داخلية</span>}<small>{personName(workspace.people, item.assigned_to)}</small></div>{item.status === "used" && item.linked_script_id ? <a className="button button-secondary" href={`/scripts/${item.linked_script_id}`}>فتح الاسكريبت</a> : null}</footer>
-        </article>;
-      }) : emptyState(Lightbulb, "الرادار فارغ", "أضف رابط منافس أو فكرة أو مرجع مفيد، ثم استخرج منه زاوية أصلية.")}</div>
-    </> : null}
 
     {tab === "voice" ? <VoiceProfileForm key={workspace.voice?.edit_version ?? 0} profile={workspace.voice} samples={workspace.voiceSamples} organizationId={workspace.organization.id} onSaved={refresh} readOnly={!canWriteScripts} /> : null}
   </section>;

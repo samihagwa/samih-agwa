@@ -418,8 +418,8 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(workspace, /اسكريبتاتك خاصة بك؛ وقد يظهر هنا اسكريبت شاركه صاحبه معك للمراجعة فقط/);
   assert.match(workspace, /كل المطلوب والروابط/);
   assert.match(workspace, /script-request-textarea/);
-  assert.match(workspace, /source_url: ""/);
-  assert.match(workspace, /scriptForm\.objective\.trim\(\) \|\| requestText\.slice\(0, 1000\)/);
+  assert.match(workspace, /rpc\("create_board_script"/);
+  assert.match(workspace, /source_text: requestText/);
   assert.doesNotMatch(workspace, /<span>مسؤول الاسكريبت<\/span>/);
   assert.match(editor, /assignedWriter/);
   assert.match(ai, /get_script_ai_provider_runtime/);
@@ -456,10 +456,10 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(ai, /script_variants/);
   assert.match(ai, /production_pack/);
   assert.match(ai, /writingScopes/);
-  assert.match(workspace, /اختيار وحفظ كاسكريبت/);
-  assert.match(workspace, /الفكرة مازالت في مكانها ولم يُنشأ أي اسكريبت/);
+  assert.match(workspace, /!item\.linked_script_id/);
+  assert.match(workspace, /فتح الفكرة للكتابة/);
   assert.match(workspace, /اسكريبتاتي/);
-  assert.match(workspace, /الأفكار والرادار/);
+  assert.doesNotMatch(workspace, /الأفكار والرادار/);
   assert.match(workspace, /بصمتي/);
   assert.match(workspace, /Apify/);
   assert.match(scriptLibrary, /حذف نهائي/);
@@ -568,7 +568,7 @@ test("script lifecycle filters use persisted script states and linked production
   for (const filter of ["idea", "draft", "ready_to_record", "production", "recorded", "published", "archived"]) {
     assert.match(workspace, new RegExp(`value: "${filter}"`));
   }
-  assert.match(workspace, /script\.spoken_script\.trim\(\)\.length < 20 \? "idea" : "draft"/);
+  assert.match(workspace, /scriptDraftStage\(script\) === "idea"/);
   assert.match(workspace, /linkedStep\(tasks, script, "recording"\)\?\.status === "done"/);
   assert.match(workspace, /linkedStep\(tasks, script, "publishing"\)\?\.status === "done"/);
   assert.match(scriptLibrary, /select value=\{props\.statusFilter\}/);

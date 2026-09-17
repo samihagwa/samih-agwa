@@ -4,11 +4,13 @@ import { DateInput } from "../ui/DateInput";
 
 import type { Session } from "@supabase/supabase-js";
 import {
-  Archive, ArrowRight, Bot, CheckCircle2, ExternalLink, Factory, FilePenLine, MoreHorizontal, Plus,
+  Archive, ArrowRight, Bot, CheckCircle2, Copy, ExternalLink, Factory, FilePenLine, MoreHorizontal, Plus, MessageSquare, Files,
   Lightbulb, LoaderCircle, LockKeyhole, Pause, Play, RefreshCw, Save, Sparkles, Trash2, WandSparkles, X,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { formatScriptDate, lines, scriptContentKindConfig, type ScriptContentKind, scriptDisplayStatus, scriptInputModeConfig, scriptPlatformConfig } from "../../lib/scripts";
+import { formatScriptDate, lines, scriptContentKindConfig, type ScriptContentKind, type WritableScriptStage, scriptDisplayStatus, scriptInputModeConfig, scriptPlatformConfig } from "../../lib/scripts";
+import { ScriptStatusControl } from "./ScriptStatusControl";
+import { ScriptPages } from "./ScriptPages";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
@@ -106,10 +108,13 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   const [thumbnailOwnerId, setThumbnailOwnerId] = useState("");
   const [publishingOwnerId, setPublishingOwnerId] = useState("");
   const [teleprompterOpen, setTeleprompterOpen] = useState(false);
+  const [pagesOpen, setPagesOpen] = useState(false);
+  const [copyNotice, setCopyNotice] = useState("");
   const [teleprompterPlaying, setTeleprompterPlaying] = useState(false);
   const [teleprompterFontSize, setTeleprompterFontSize] = useState(40);
   const [teleprompterSpeed, setTeleprompterSpeed] = useState(28);
   const teleprompterText = useRef<HTMLDivElement>(null);
+  const teleprompterDialog = useRef<HTMLDialogElement>(null);
   const spokenTextInput = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<EditorForm | null>(null);
   const [rewritePreview, setRewritePreview] = useState<{ action: RewriteAction; original: string; suggestion: string; base: string; start: number; end: number } | null>(null);
@@ -127,6 +132,16 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   const [slashOpen, setSlashOpen] = useState(false);
   const [rewriteToolsOpen, setRewriteToolsOpen] = useState(false);
   const editorMenu = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (!teleprompterOpen) return;
+    const dialog = teleprompterDialog.current;
+    const trigger = document.activeElement as HTMLElement | null;
+    dialog?.showModal();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { dialog?.close(); document.body.style.overflow = overflow; trigger?.focus(); };
+  }, [teleprompterOpen]);
 
   useEffect(() => {
     if (!teleprompterOpen || !teleprompterPlaying) return;
@@ -364,14 +379,15 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     finally { setSaving(false); }
   }
 
-  async function changeStatus(status: "draft" | "ready_to_record" | "archived") {
+  async function changeStatus(status: WritableScriptStage) {
     if (!workspace || !form || !canWriteScript) return;
     if (writingHasUnsavedChanges) { setError("احفظ تعديلات النص أولًا قبل تغيير حالته."); return; }
     setSaving(true); setError(null); setNotice(null);
     try {
-      await invokeFunction("script-commands", { action: "change_status", script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version, status });
+      const { error: moveError } = await getSupabaseBrowserClient().rpc("move_script_card", { target_script_id: workspace.script.id, expected_version: workspace.script.edit_version, destination: status });
+      if (moveError) throw moveError;
       setNotice(status === "ready_to_record" ? "تم اعتماد النص النهائي. الآن فقط يمكنك إنشاء حزمة التسجيل والمونتاج والغلاف."
-        : status === "archived" ? "تم نقل الاسكريبت إلى الأرشيف." : "عاد الاسكريبت إلى قيد الكتابة.");
+        : status === "archived" ? "تم نقل الاسكريبت إلى الأرشيف." : status === "idea" ? "تم نقل السكريبت إلى الأفكار." : "عاد الاسكريبت إلى قيد الكتابة.");
       await refresh();
     } catch (statusError) { setError(statusError instanceof Error ? statusError.message : "تعذّر تغيير الحالة."); }
     finally { setSaving(false); }
@@ -614,7 +630,9 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
           {canWriteScript ? <button type="button" onClick={() => openPanel("actions")}>الحالة والأرشفة</button> : null}
           {assignedWriter ? <a href="/scripts?tab=voice">بصمتي</a> : null}
         </div></details>
-        <Button type="button" variant="ghost" disabled={!form.spoken_script.trim()} onClick={() => { setTeleprompterOpen(true); setTeleprompterPlaying(false); }}>وضع التصوير</Button>
+        <Button type="button" variant="ghost" disabled={!form.spoken_script.trim()} onClick={() => { setTeleprompterOpen(true); setTeleprompterPlaying(false); setCopyNotice(""); }}>التليبرومتر</Button>
+        <Button type="button" variant="ghost" onClick={() => openPanel("review")}><MessageSquare size={16} /> التعليقات ({workspace.reviewComments.length})</Button>
+        <Button type="button" variant="ghost" onClick={() => setPagesOpen(true)}><Files size={16} /> صفحات داخلية</Button>
         {!readOnly && workspace.script.status === "draft" ? <Button type="button" disabled={saving || Boolean(aiScope) || writingHasUnsavedChanges || form.spoken_script.trim().length < 20} onClick={() => void changeStatus("ready_to_record")}><CheckCircle2 size={15} /> جاهز للتصوير</Button> : null}
         {!readOnly && workspace.script.status === "ready_to_record" ? <Button type="button" onClick={() => openPanel("production")}><Factory size={15} /> تجهيز التنفيذ</Button> : null}
       </div>
@@ -626,7 +644,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     <form className="script-editor-form" onSubmit={(event) => void save(event)} inert={saving} aria-busy={saving}>
       <section className="panel script-editor-section script-writing-focus">
         <input className="script-document-title" aria-label="عنوان السكريبت" required minLength={3} maxLength={180} readOnly={readOnly} value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="عنوان السكريبت" />
-        <div className="script-document-properties"><StatusBadge tone={status.tone}>{status.label}</StatusBadge><span>{scriptContentKindConfig[form.content_kind]}</span><span dir="ltr">{form.duration_seconds}s</span><Button type="button" variant="ghost" onClick={() => openPanel("properties")}>خصائص</Button></div>
+        <div className="script-document-properties">{canWriteScript ? <ScriptStatusControl script={workspace.script} label={status.label} disabled={saving || writingHasUnsavedChanges || autosaveState === "saving"} onChange={(stage) => void changeStatus(stage)} /> : <StatusBadge tone={status.tone}>{status.label}</StatusBadge>}<span>{scriptContentKindConfig[form.content_kind]}</span><span dir="ltr">{form.duration_seconds}s</span><Button type="button" variant="ghost" onClick={() => openPanel("properties")}>خصائص</Button></div>
         {recoverableText !== null ? <aside className="script-local-recovery"><strong>لقيت مسودة على هذا الجهاز تختلف عن آخر نسخة على الموقع.</strong><p>راجعها قبل الاستعادة؛ مش هنكتب فوق النسخة الموجودة تلقائيًا.</p><div><Button type="button" variant="secondary" onClick={() => { update("spoken_script", recoverableText); setRecoverableText(null); }}>استعادة مسودتي</Button><Button type="button" variant="ghost" onClick={() => { setRecoverableText(null); try { localStorage.removeItem(`market-whales-script-draft:${workspace.membership.user_id}:${scriptId}`); } catch { /* Ignore unavailable browser storage. */ } }}>تجاهل</Button></div></aside> : null}
         <div className="script-document-writing">
           <label className="script-main-text-label"><span className="sr-only">نص السكريبت</span><textarea ref={spokenTextInput} className="spoken-script-textarea" readOnly={readOnly} value={form.spoken_script}
@@ -785,10 +803,12 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         <ol>{workspace.versions.map((version) => <li key={version.id}><span><strong>v{version.version_number.toLocaleString("ar-EG")}</strong><small>{version.source === "ai_generation" ? "حزمة AI" : version.source === "handoff" ? "إرسال للتنفيذ" : "حفظ يدوي"}</small></span><div><strong>{version.note || "بدون ملاحظة"}</strong><small>{formatScriptDate(version.created_at)}</small></div>{!readOnly ? <Button type="button" variant="ghost" disabled={saving || autosaveState === "saving"} onClick={() => { setEditorPanel(null); setRestorePending(true); update("spoken_script", versionText(version)); setVersionNote(`استعادة نص النسخة ${version.version_number}`); setNotice("أعدنا النص للمحرر فقط؛ راجعه ثم اضغط «حفظ نسخة مهمة» ليبقى التاريخ محفوظًا."); window.scrollTo({ top: 0, behavior: "smooth" }); }}>استعادة النص</Button> : null}</li>)}</ol>
       </> : <p className="tool-empty">لا توجد نسخ مسجلة.</p>}
     </ScriptToolPanel> : null}
-    {teleprompterOpen ? <div className="script-teleprompter" role="dialog" aria-modal="true" aria-label="وضع قراءة الاسكريبت">
+    {pagesOpen ? <ScriptPages scriptId={scriptId} readOnly={readOnly} onClose={() => setPagesOpen(false)} /> : null}
+    {teleprompterOpen ? <dialog ref={teleprompterDialog} className="script-teleprompter" aria-modal="true" aria-label="وضع قراءة الاسكريبت" onCancel={(event) => { event.preventDefault(); setTeleprompterPlaying(false); setTeleprompterOpen(false); }}>
       <div className="script-teleprompter-toolbar">
         <strong>وضع التصوير · {wordCount.toLocaleString("ar-EG")} كلمة</strong>
         <div>
+          <button type="button" onClick={() => { void navigator.clipboard.writeText(form.spoken_script).then(() => setCopyNotice("تم نسخ النص")).catch(() => setCopyNotice("تعذّر النسخ؛ حدّد النص وانسخه يدويًا")); }}><Copy size={18} /> نسخ النص</button><span role="status">{copyNotice}</span>
           <label>حجم الخط <input aria-label="حجم خط وضع التصوير" type="range" min="24" max="72" value={teleprompterFontSize} onChange={(event) => setTeleprompterFontSize(Number(event.target.value))} /></label>
           <label>سرعة التمرير <input aria-label="سرعة التمرير" type="range" min="0" max="100" value={teleprompterSpeed} onChange={(event) => setTeleprompterSpeed(Number(event.target.value))} /></label>
           <button type="button" onClick={() => setTeleprompterPlaying((playing) => !playing)}>{teleprompterPlaying ? <Pause size={18} /> : <Play size={18} />}{teleprompterPlaying ? "إيقاف" : "ابدأ"}</button>
@@ -796,6 +816,6 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         </div>
       </div>
       <div className="script-teleprompter-reading" ref={teleprompterText} style={{ fontSize: teleprompterFontSize }}>{form.spoken_script}</div>
-    </div> : null}
+    </dialog> : null}
   </section>;
 }

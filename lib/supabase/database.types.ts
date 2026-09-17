@@ -3871,8 +3871,15 @@ export type Database = {
           },
         ]
       }
+      script_pages: {
+        Row: { id: string; script_id: string; parent_id: string | null; title: string; body: string; edit_version: number; created_at: string; updated_at: string }
+        Insert: { id: string; script_id: string; parent_id?: string | null; title: string; body?: string; edit_version?: number; created_at?: string; updated_at?: string }
+        Update: { title?: string; body?: string; edit_version?: number; updated_at?: string }
+        Relationships: []
+      }
       scripts: {
         Row: {
+          draft_stage: string | null
           ai_last_generated_at: string | null
           ai_last_generated_by: string | null
           archived_at: string | null
@@ -4712,6 +4719,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_board_script: {
+        Args: { organization: string; title: string; stage: string; script_text: string; kind: string; source_text: string; duration: number; input_mode: Database["public"]["Enums"]["script_input_mode"] }
+        Returns: string
+      }
+      move_script_card: {
+        Args: { target_script_id: string; expected_version: number; destination: string }
+        Returns: number
+      }
+      save_script_page: {
+        Args: { target_script_id: string; page_id: string; parent_page_id: string | null; page_title: string; page_body: string; expected_version: number }
+        Returns: Database["public"]["Tables"]["script_pages"]["Row"][]
+      }
       move_content_calendar_group: {
         Args: { source_kind: string; source_id: string; changes: Json }
         Returns: Database["public"]["Tables"]["content_calendar_slots"]["Row"][]

@@ -16,7 +16,7 @@ async function sourceModule(url) {
     let target;
     if (specifier.startsWith(".")) {
       const resolved = new URL(specifier, url);
-      const extension = specifier.includes("/scripts") ? ".ts" : ".tsx";
+      const extension = specifier.endsWith("/lib/scripts") ? ".ts" : ".tsx";
       target = await sourceModule(new URL(resolved.href + extension));
     } else target = import.meta.resolve(specifier);
     code = code.replaceAll(`from "${specifier}"`, `from "${target}"`);
@@ -24,6 +24,7 @@ async function sourceModule(url) {
   return `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
 }
 const { ScriptLibrary } = await import(await sourceModule(new URL("../components/scripts/ScriptLibrary.tsx", import.meta.url)));
+const { scriptDraftStage, scriptDisplayStatus } = await import(await sourceModule(new URL("../lib/scripts.ts", import.meta.url)));
 const fixtures = Array.from({ length: 18 }, (_, index) => ({
   id: `qa-${index + 1}`, title: `فكرة سكريبت ${index + 1}`, content_kind: "educational",
   status: "draft", spoken_script: "", assigned_to: "writer", duration_seconds: 60,
@@ -43,13 +44,44 @@ test("notebook opens as compact numbered rows with direct document links and bou
   assert.match(html, /سكريبت جديد/);
   assert.match(html, /aria-label="الصفحة التالية"/);
   assert.doesNotMatch(html, /class="script-row-menu"/);
-  assert.doesNotMatch(html, /حذف نهائي|جاهز للتصوير/);
+  assert.doesNotMatch(html, /حذف نهائي/);
+  assert.match(html, /تغيير حالة فكرة سكريبت 1/);
+  assert.match(html, /value="ready_to_record" disabled/);
 });
 test("review-only and empty lists do not expose creation", () => {
   const html = renderToStaticMarkup(React.createElement(ScriptLibrary, { ...props, scripts: [], canWrite: false }));
   assert.match(html, /لا توجد سكريبتات مطابقة/);
   assert.doesNotMatch(html, /class="script-inline-add"/);
   assert.match(html, /0–0 \/ 0/);
+});
+test("explicit idea/writing choice is persisted without deriving a destructive text change", () => {
+  assert.equal(scriptDraftStage({ spoken_script: "" }), "idea");
+  assert.equal(scriptDraftStage({ spoken_script: "", draft_stage: "draft" }), "draft");
+  const longText = "نص محفوظ طويل لا يجب مسحه عند إعادة السكريبت للأفكار";
+  assert.equal(scriptDraftStage({ spoken_script: longText, draft_stage: "idea" }), "idea");
+  assert.equal(scriptDisplayStatus({ status: "draft", spoken_script: longText, draft_stage: "idea" }).label, "فكرة");
+});
+test("reviewers get a label instead of status writes and writer selectors expose keyboard alternatives", () => {
+  const html = renderToStaticMarkup(React.createElement(ScriptLibrary, { ...props, userId: "reviewer" }));
+  assert.doesNotMatch(html, /تغيير حالة/);
+  assert.match(html, /مشاركة للمراجعة/);
+});
+test("board, nested pages and copy use scoped commands with conflict and leave protection", async () => {
+  const [board, pages, editor, migration] = await Promise.all([
+    readFile(new URL("../components/scripts/ScriptLibrary.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptPages.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260917184952_script_board_and_nested_pages.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(board, /onDrop=/);
+  assert.match(board, /canDrop\(script, group\.value\)/);
+  assert.match(pages, /expected_version: active\.edit_version/);
+  assert.match(pages, /window\.addEventListener\("beforeunload"/);
+  assert.match(editor, /navigator\.clipboard\.writeText\(form\.spoken_script\)/);
+  assert.match(migration, /alter table public\.script_pages enable row level security/);
+  assert.match(migration, /security invoker/);
+  assert.match(migration, /p\.parent_id is distinct from parent_page_id/);
+  assert.match(migration, /s\.content_item_id is not null and destination <> 'archived'/);
 });
 test("document tools are on demand, accessible, and retain explicit AI acceptance", async () => {
   const editor = await readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8");

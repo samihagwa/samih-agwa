@@ -11,8 +11,14 @@ export const scriptStatusConfig: Record<ScriptStatus, { label: string; tone: "ne
   archived: { label: "مؤرشف", tone: "info" },
 };
 
-export function scriptDisplayStatus(script: { status: ScriptStatus; spoken_script: string }) {
-  return script.status === "draft" && script.spoken_script.trim().length < 20
+export function scriptDraftStage(script: { spoken_script: string; draft_stage?: string | null }) {
+  return script.draft_stage ?? (script.spoken_script.trim().length < 20 ? "idea" : "draft");
+}
+
+export type WritableScriptStage = "idea" | "draft" | "ready_to_record" | "archived";
+
+export function scriptDisplayStatus(script: { status: ScriptStatus; spoken_script: string; draft_stage?: string | null }) {
+  return script.status === "draft" && scriptDraftStage(script) === "idea"
     ? { label: "فكرة", tone: "neutral" as const }
     : scriptStatusConfig[script.status];
 }
