@@ -1,6 +1,7 @@
 /* Intentionally script-scoped: the approved notebook layout must not restyle CRM or task forms. */
 .script-library-page, .script-document-page { background: var(--paper); min-height: calc(100dvh - 160px); }
-.script-library-workspace { position: relative; gap: 16px; }
+.script-library-workspace { position: relative; gap: 16px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.script-library { min-width: 0; width: 100%; }
 .script-library-workspace .scripts-tabs { background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0; justify-content: flex-start; gap: 20px; }
 .script-library-workspace .scripts-tabs button { border: 0; background: none; border-radius: 0; padding: 10px 0; font-size: 14px; min-height: 44px; }
 .script-library-workspace .scripts-tabs button.active { color: var(--ink-950); background: none; box-shadow: inset 0 -3px var(--brand-yellow, #ffde00); }
