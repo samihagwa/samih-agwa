@@ -10,6 +10,7 @@ export type CalendarEntry = {
   key: string; source: CalendarSource; sourceId: string; platform: string; scheduledAt: string | null;
   revision: number; title: string; kind: string; status: string; ownerId: string; product: string;
   contentId: string | null; planId: string | null; editable: boolean;
+  brief?: string; members?: CalendarEntry[];
 };
 type Content = Tables<"content_items">;
 type PlanItem = Tables<"content_plan_items">;
@@ -69,7 +70,8 @@ export function calendarEntries(contents: Content[], items: PlanItem[], plans: P
         revision: slot?.revision ?? 0, title: item.title, kind: "format" in item ? item.format : item.kind,
         status: item.status, ownerId: "owner_id" in item ? item.owner_id : item.created_by,
         product: plan?.offer?.trim() || plan?.name || "بدون خطة", contentId: source === "content" ? item.id : null,
-        planId: plan?.id ?? null, editable: item.status !== "published" });
+        planId: plan?.id ?? null, editable: item.status !== "published",
+        brief: "objective" in item ? item.objective : item.editing_brief || item.copy_brief });
     }
   };
   contents.forEach((content) => append("content", content, linked.get(content.id)));
@@ -81,6 +83,18 @@ export function calendarState(entry: CalendarEntry) {
   if (entry.status === "scheduled") return { label: "جاهز للنشر", tone: "success" as const };
   if (["production", "review", "in_production"].includes(entry.status)) return { label: "قيد التجهيز", tone: "warning" as const };
   return { label: "مخطط", tone: "neutral" as const };
+}
+// Group only the same source on the same Cairo day. Never merge unrelated
+// content with matching titles or hide a platform scheduled on another day.
+export function groupCalendarEntries(entries: CalendarEntry[]): CalendarEntry[] {
+  const groups = new Map<string, CalendarEntry>();
+  for (const entry of entries) {
+    const key = `${entry.source}:${entry.sourceId}:${entry.scheduledAt ? calendarDay(entry.scheduledAt) : "unscheduled"}`;
+    const group = groups.get(key);
+    if (group) group.members!.push(entry);
+    else groups.set(key, { ...entry, members: [entry] });
+  }
+  return [...groups.values()];
 }
 export function calendarError(error: unknown) {
   const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";

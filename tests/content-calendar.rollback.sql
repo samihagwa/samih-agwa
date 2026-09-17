@@ -5,7 +5,7 @@ declare
  org uuid := (select organization_id from public.memberships where role='owner' and status='active' order by created_at limit 1);
  actor uuid := (select user_id from public.memberships where organization_id=org and role='owner' and status='active' limit 1);
  manager uuid := (select user_id from public.memberships where organization_id=org and role='manager' and status='active' and 'planning'=any(allowed_sections) order by user_id limit 1);
- cid uuid; tid uuid; pid uuid; draft_id uuid:=gen_random_uuid();
+ cid uuid; tid uuid; pid uuid; gid uuid; draft_id uuid:=gen_random_uuid();
  original_time timestamptz := date_trunc('day',now())+interval '2 days 15 hours';
  changed_time timestamptz := date_trunc('day',now())+interval '3 days 17 hours';
  slot public.content_calendar_slots;
@@ -73,6 +73,23 @@ begin
    raise exception 'Out of plan move allowed';
  exception when others then if sqlerrm<>'Calendar time outside plan period' then raise; end if; end;
  -- Linking retains appointment rows; explicit content appointments win.
+ select public.create_calendar_draft(org,gen_random_uuid(),'اختبار النقل الجماعي','social_post','فحص معزول للنقل الجماعي',array['instagram','facebook'],original_time,null) into gid;
+ perform public.move_content_calendar_group('plan',gid,jsonb_build_array(
+  jsonb_build_object('platform','facebook','target_time',changed_time,'revision',0,'expected_time',original_time),
+  jsonb_build_object('platform','instagram','target_time',changed_time,'revision',0,'expected_time',original_time)));
+ if (select count(*) from public.content_calendar_slots where plan_item_id=gid and scheduled_at=changed_time and revision=1)<>2 then raise exception 'Group move failed'; end if;
+ begin
+  perform public.move_content_calendar_group('plan',gid,jsonb_build_array(
+   jsonb_build_object('platform','facebook','target_time',original_time,'revision',1,'expected_time',changed_time),
+   jsonb_build_object('platform','instagram','target_time',original_time,'revision',99,'expected_time',changed_time)));
+  raise exception 'Stale group allowed';
+ exception when others then if sqlerrm<>'Calendar revision changed; refresh and retry' then raise; end if; end;
+ if (select count(*) from public.content_calendar_slots where plan_item_id=gid and scheduled_at=changed_time and revision=1)<>2 then raise exception 'Partial group commit'; end if;
+ perform public.move_content_calendar_group('plan',gid,jsonb_build_array(
+  jsonb_build_object('platform','facebook','target_time',original_time,'revision',1,'expected_time',changed_time),
+  jsonb_build_object('platform','instagram','target_time',original_time,'revision',1,'expected_time',changed_time)));
+ if (select count(*) from public.content_calendar_slots where plan_item_id=gid and scheduled_at=original_time and revision=2)<>2 then raise exception 'Group undo failed'; end if;
+ if (select count(*) from public.tasks where organization_id=org)<>before_count then raise exception 'Group created tasks'; end if;
  update public.content_plan_items set content_item_id=cid where id=pid;
  if (select scheduled_at from public.content_calendar_slots where content_item_id=cid and platform='instagram')<>changed_time then raise exception 'Link overwrote canonical appointment'; end if;
  begin

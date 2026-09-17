@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
@@ -30,7 +32,7 @@ export function ContentCalendarWorkspace() {
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [details, setDetails] = useState<{key:string;data:CalendarDetails} | null>(null);
-  const [undo, setUndo] = useState<{ entry: CalendarEntry; time: string | null } | null>(null);
+  const [undo, setUndo] = useState<{ entry: CalendarEntry; times: (string | null)[] } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createFormKey,setCreateFormKey] = useState(0);
@@ -101,19 +103,22 @@ export function ContentCalendarWorkspace() {
   }, [selected, workspace]);
   useEffect(() => { if(createOpen) dialog.current?.showModal(); else dialog.current?.close(); },[createOpen]);
 
-  async function move(entry: CalendarEntry, time: string | null, isUndo=false) {
+  async function move(entry: CalendarEntry, time: string | null, restoreTimes?: (string | null)[]) {
     if (busy.current || !canEdit || !session) return false;
-    if (time === entry.scheduledAt) return true;
-    busy.current=true;setWorking(true);setError(null);setNotice("جارٍ حفظ موعد المنصة…");
+    const members = entry.members ?? [entry];
+    const targets = members.map((member,index)=>restoreTimes ? restoreTimes[index] : time ? calendarDateInstant(calendarDay(time),member.scheduledAt) : null);
+    if (members.every((member,index)=>targets[index]===member.scheduledAt)) return true;
+    busy.current=true;setWorking(true);setError(null);setNotice("جارٍ حفظ موعد المحتوى…");
     const actor = session.user.id;
     try {
-      const result = await getSupabaseBrowserClient().rpc("move_content_calendar_slot",{source_kind:entry.source,source_id:entry.sourceId,target_platform:entry.platform,target_time:time,expected_revision:entry.revision,expected_time:entry.scheduledAt});
+      const result = await getSupabaseBrowserClient().rpc("move_content_calendar_group",{source_kind:entry.source,source_id:entry.sourceId,changes:members.map((member,index)=>({platform:member.platform,target_time:targets[index],revision:member.revision,expected_time:member.scheduledAt}))});
       if(result.error) throw result.error;
-      const slot = result.data;
+      const slots = result.data;
       // Keep the canonical response, including revision, for a conflict-safe undo.
-      setWorkspace((current)=>current?.membership.user_id===actor?{...current,slots:[...current.slots.filter((row)=>!(row.platform===slot.platform&&(entry.source==="content"?row.content_item_id===entry.sourceId:row.plan_item_id===entry.sourceId))),slot]}:current);
-      setUndo(isUndo?null:{entry:{...entry,scheduledAt:slot.scheduled_at,revision:slot.revision},time:entry.scheduledAt});
-      setNotice(isUndo?"تم التراجع عن النقل.":`تم حفظ موعد ${contentPlatformLabel(entry.platform)} فقط. مهام التنفيذ لم تتغير.`);
+      setWorkspace((current)=>current?.membership.user_id===actor?{...current,slots:[...current.slots.filter((row)=>!slots.some(slot=>slot.id===row.id)),...slots]}:current);
+      const updated = members.map(member=>{const slot=slots.find(row=>row.platform===member.platform)!;return {...member,scheduledAt:slot.scheduled_at,revision:slot.revision};});
+      setUndo(restoreTimes?null:{entry:{...updated[0],members:updated},times:members.map(member=>member.scheduledAt)});
+      setNotice(restoreTimes?"تم التراجع عن النقل.":members.length>1?`تم نقل المحتوى مع ${members.length} منصات. مهام التنفيذ لم تتغير.`:`تم حفظ موعد ${contentPlatformLabel(entry.platform)} فقط. مهام التنفيذ لم تتغير.`);
       await loadWorkspace(session);
       return true;
     } catch (failure) { setError(calendarError(failure));setNotice(null);await loadWorkspace(session);return false; }
@@ -132,11 +137,23 @@ export function ContentCalendarWorkspace() {
     } catch { setCreateError("تعذّر الحفظ. تأكد أن الموعد داخل فترة الخطة وأن حسابك يملك صلاحية التخطيط. بياناتك ما زالت هنا."); }
     finally { busy.current=false;setWorking(false); }
   }
+  async function editDraft(entry: CalendarEntry, title: string, brief: string) {
+    const item=workspace?.items.find(row=>row.id===entry.sourceId);
+    if(!canEdit||!session||busy.current||!item||item.content_item_id)return false;
+    busy.current=true;setWorking(true);setError(null);
+    try {
+      const result=await getSupabaseBrowserClient().from("content_plan_items").update({title,objective:brief}).eq("id",item.id).eq("version",item.version).is("content_item_id",null).select("id").maybeSingle();
+      if(result.error)throw result.error;
+      if(!result.data)throw new Error("changed");
+      setNotice("تم حفظ تفاصيل المحتوى.");await loadWorkspace(session);return true;
+    }catch{setError("لم نحفظ التعديل. قد تكون التفاصيل اتغيّرت؛ حدّث التقويم وحاول مجددًا. النص الذي كتبته ما زال هنا.");return false;}
+    finally{busy.current=false;setWorking(false);}
+  }
   if(!configured)return <p className="form-notice">إعداد الاتصال بمساحة العمل مطلوب.</p>;
   if(loading&&!workspace)return <p role="status">جارٍ تحميل تقويم المحتوى…</p>;
   if(!workspace)return <div><p role="alert">{error??"يلزم تسجيل الدخول بحساب فريق فعّال."}</p><Button href="/login">تسجيل الدخول</Button>{session?<Button onClick={refresh}>إعادة المحاولة</Button>:null}</div>;
   return <>
-    <ContentCalendar entries={entries} canEdit={canEdit} working={working} error={error} notice={notice} details={selected ? details?.key===selected.key ? details.data : {loading:true,progress:0,done:0,total:0,current:"",owner:"",fileUrl:null,requestUrl:""} : null} selectedKey={selectedKey} undoAvailable={Boolean(undo)} onSelect={setSelectedKey} onMove={move} onUndo={()=>{if(undo)void move(undo.entry,undo.time,true);}} onRefresh={refresh} onCreate={()=>{createRequest.current=crypto.randomUUID();setCreateFormKey((value)=>value+1);setCreateError("");setCreateOpen(true);}}/>
-    <dialog ref={dialog} className="calendar-create-dialog" onCancel={(event)=>{if(working)event.preventDefault();else setCreateOpen(false);}} onClose={()=>setCreateOpen(false)}><form key={createFormKey} onSubmit={create}><header><h2>إضافة محتوى للتقويم</h2><button className="icon-button" type="button" disabled={working} aria-label="إغلاق" onClick={()=>setCreateOpen(false)}><X size={18}/></button></header><p>الطلبات الموجودة تظهر هنا تلقائيًا. أضف هنا فكرة جديدة وموعدها فقط.</p><label>عنوان المحتوى<input name="title" minLength={3} maxLength={180} required/></label><div className="calendar-form-pair"><label>نوع المحتوى<select name="kind">{contentPlanItemKinds.map((kind)=><option key={kind} value={kind}>{contentPlanItemKindConfig[kind].label}</option>)}</select></label><label>يوم النشر<input name="time" type="date" defaultValue={initialTime} required/></label></div><label>المطلوب / الفكرة<textarea name="brief" minLength={5} maxLength={2000} rows={3} required placeholder="وصف بسيط للمحتوى المقترح"/></label><fieldset><legend>المنصات</legend><div className="calendar-platform-checkboxes">{platformOptions.map((platform)=><label key={platform}><input type="checkbox" name="platforms" value={platform} defaultChecked={platform==="instagram"}/>{contentPlatformLabel(platform)}</label>)}</div></fieldset><label>المنتج / الخطة<select name="plan"><option value="">بدون خطة محددة — تنظيم تلقائي حسب الربع</option>{workspace.plans.filter((plan)=>plan.status!=="archived").map((plan)=><option key={plan.id} value={plan.id}>{plan.offer||plan.name} ({plan.starts_on} — {plan.ends_on})</option>)}</select></label>{createError?<p className="form-notice error" role="alert">{createError}</p>:null}<div className="calendar-dialog-actions"><Button type="submit" disabled={working}>{working?"جارٍ الحفظ…":"إضافة للتقويم"}</Button><Button variant="ghost" type="button" disabled={working} onClick={()=>setCreateOpen(false)}>إلغاء</Button></div><a className="text-button" href="/content?create=reel">عندي المادة الخام وأريد إنشاء طلب تنفيذ</a></form></dialog>
+    <ContentCalendar onEditDraft={editDraft} entries={entries} canEdit={canEdit} working={working} error={error} notice={notice} details={selected ? details?.key===selected.key ? details.data : {loading:true,progress:0,done:0,total:0,current:"",owner:"",fileUrl:null,requestUrl:""} : null} selectedKey={selectedKey} undoAvailable={Boolean(undo)} onSelect={setSelectedKey} onMove={move} onUndo={()=>{if(undo)void move(undo.entry,null,undo.times);}} onRefresh={refresh} onCreate={()=>{createRequest.current=crypto.randomUUID();setCreateFormKey((value)=>value+1);setCreateError("");setCreateOpen(true);}}/>
+    <dialog ref={dialog} className="calendar-create-dialog" onCancel={(event)=>{if(working)event.preventDefault();else setCreateOpen(false);}} onClose={()=>setCreateOpen(false)}><form key={createFormKey} onSubmit={create}><header><h2>إضافة محتوى للتقويم</h2><button className="icon-button" type="button" disabled={working} aria-label="إغلاق" onClick={()=>setCreateOpen(false)}><X size={18}/></button></header><p>الطلبات الموجودة تظهر هنا تلقائيًا. أضف هنا فكرة جديدة وموعدها فقط.</p><label>عنوان المحتوى<input name="title" minLength={3} maxLength={180} required/></label><div className="calendar-form-pair"><label>نوع المحتوى<select name="kind">{contentPlanItemKinds.map((kind)=><option key={kind} value={kind}>{contentPlanItemKindConfig[kind].label}</option>)}</select></label><label>يوم النشر<DateInput name="time" type="date" defaultValue={initialTime} required/></label></div><label>المطلوب / الفكرة<textarea name="brief" minLength={5} maxLength={2000} rows={3} required placeholder="وصف بسيط للمحتوى المقترح"/></label><fieldset><legend>المنصات</legend><div className="calendar-platform-checkboxes">{platformOptions.map((platform)=><label key={platform}><input type="checkbox" name="platforms" value={platform} defaultChecked={platform==="instagram"}/>{contentPlatformLabel(platform)}</label>)}</div></fieldset><details className="calendar-optional-plan"><summary>ربط بخطة موجودة — اختياري</summary><label>الخطة<select name="plan"><option value="">بدون خطة محددة</option>{workspace.plans.filter((plan)=>plan.status!=="archived").map((plan)=><option key={plan.id} value={plan.id}>{plan.offer||plan.name} ({plan.starts_on} — {plan.ends_on})</option>)}</select></label></details>{createError?<p className="form-notice error" role="alert">{createError}</p>:null}<div className="calendar-dialog-actions"><Button type="submit" disabled={working}>{working?"جارٍ الحفظ…":"إضافة للتقويم"}</Button><Button variant="ghost" type="button" disabled={working} onClick={()=>setCreateOpen(false)}>إلغاء</Button></div><a className="text-button" href="/content?create=reel">عندي المادة الخام وأريد إنشاء طلب تنفيذ</a></form></dialog>
   </>;
 }

@@ -23,16 +23,22 @@ export function getSupabaseBrowserClient(){
  return {
   auth:{onAuthStateChange:(callback:any)=>{const timer=setTimeout(()=>callback("SIGNED_IN",{user:{id:owner}}),0);return{data:{subscription:{unsubscribe:()=>clearTimeout(timer)}}};}},
   from:(table:string)=>{
-   let rows=[...(state[table]??[])];let single=false;
-   const query:any={select:()=>query,eq:(key:string,value:any)=>{rows=rows.filter(r=>r[key]===value);return query;},neq:(key:string,value:any)=>{rows=rows.filter(r=>r[key]!==value);return query;},order:()=>query,limit:(n:number)=>{rows=rows.slice(0,n);return query;},range:(a:number,b:number)=>{rows=rows.slice(a,b+1);return query;},maybeSingle:()=>{single=true;return query;},then:(resolve:any)=>Promise.resolve({data:single?rows[0]??null:rows,error:null}).then(resolve)};return query;
+   let rows=[...(state[table]??[])];let single=false;let patch:any=null;
+   const equal=(key:string,value:any)=>{rows=rows.filter(r=>r[key]===value);return query;};
+   const query:any={select:()=>query,update:(value:any)=>{patch=value;return query;},eq:equal,is:equal,neq:(key:string,value:any)=>{rows=rows.filter(r=>r[key]!==value);return query;},order:()=>query,limit:(n:number)=>{rows=rows.slice(0,n);return query;},range:(a:number,b:number)=>{rows=rows.slice(a,b+1);return query;},maybeSingle:()=>{single=true;return query;},then:(resolve:any)=>{if(patch)rows.forEach(row=>Object.assign(row,patch,{version:(row.version??0)+1}));return Promise.resolve({data:single?rows[0]??null:rows,error:null}).then(resolve);}};return query;
   },
   channel:()=>{const channel={on:()=>channel,subscribe:()=>channel};return channel;},removeChannel:async()=>{},
   rpc:async(name:string,args:any)=>{
    await new Promise(resolve=>setTimeout(resolve,350));
    if(mode){const failure=mode;mode="";return{data:null,error:{message:failure==="conflict"?"Calendar revision changed; refresh and retry":"offline"}};}
    if(name==="create_calendar_draft"){
-    state.content_plan_items.push({id:args.request_id,organization_id:org,owner_id:owner,created_by:owner,title:args.item_title,kind:args.item_kind,status:"planned",platforms:args.item_platforms,publish_at:args.item_time});
+    state.content_plan_items.push({id:args.request_id,organization_id:org,owner_id:owner,created_by:owner,title:args.item_title,objective:args.item_brief,version:1,content_item_id:null,kind:args.item_kind,status:"planned",platforms:args.item_platforms,publish_at:args.item_time});
     return{data:args.request_id,error:null};
+   }
+   if(name==="move_content_calendar_group") {
+    const snapshot=structuredClone(state.content_calendar_slots); const rows=[];
+    for(const change of args.changes){const result:any=await getSupabaseBrowserClient().rpc("move_content_calendar_slot",{...args,target_platform:change.platform,target_time:change.target_time,expected_revision:change.revision,expected_time:change.expected_time});if(result.error){state.content_calendar_slots=snapshot;localStorage.setItem("calendar-fixture-slots",JSON.stringify(snapshot));return result;}rows.push(result.data);}
+    return {data:rows,error:null};
    }
    const parent=state[args.source_kind==="content"?"content_items":"content_plan_items"].find(r=>r.id===args.source_id);
    const key=args.source_kind==="content"?"content_item_id":"plan_item_id";

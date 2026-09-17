@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
@@ -672,8 +674,8 @@ export function CampaignsWorkspace() {
           <div className="form-grid">
             <label><span>اسم الإطلاق</span><input name="title" minLength={3} maxLength={180} required placeholder="مثال: إطلاق كورس إدارة المخاطر" /></label>
             <label><span>النوع</span><select name="type" defaultValue="course">{(Object.keys(launchTypeConfig) as LaunchType[]).map((type) => <option value={type} key={type}>{launchTypeConfig[type].label}</option>)}</select></label>
-            <label><span>بداية الإطلاق</span><input name="starts_at" type="datetime-local" defaultValue={defaultStart} required /></label>
-            <label><span>نهاية الإطلاق</span><input name="ends_at" type="datetime-local" defaultValue={defaultEnd} required /></label>
+            <label><span>بداية الإطلاق</span><DateInput name="starts_at" type="datetime-local" defaultValue={defaultStart} required /></label>
+            <label><span>نهاية الإطلاق</span><DateInput name="ends_at" type="datetime-local" defaultValue={defaultEnd} required /></label>
             <label className="full-field"><span>الهدف الاستراتيجي</span><textarea name="objective" minLength={5} maxLength={1500} rows={2} required placeholder="ما النتيجة التي يجب أن يحققها الإطلاق ولماذا الآن؟" /></label>
             <label className="full-field"><span>الجمهور المحدد</span><textarea name="audience" minLength={3} maxLength={1000} rows={2} required placeholder="لمن هذا العرض تحديدًا، وما المشكلة التي يحاول حلها؟" /></label>
             <label className="full-field"><span>العرض</span><textarea name="offer" minLength={3} maxLength={1500} rows={2} required placeholder="المنتج، السعر، النتيجة الموعودة، الضمان والمكافآت إن وُجدت" /></label>
@@ -761,8 +763,8 @@ export function CampaignsWorkspace() {
                   <div className="section-heading"><div><p className="overline">تعديل محكوم</p><h4>بيانات الإطلاق والأهداف</h4></div><button className="text-button" type="button" onClick={() => setEditFormId(null)}>إغلاق</button></div>
                   <label><span>اسم الإطلاق</span><input name="title" required minLength={3} maxLength={180} defaultValue={launch.title} /></label>
                   <label><span>النوع</span><select name="type" defaultValue={launch.type}>{(Object.keys(launchTypeConfig) as LaunchType[]).map((type) => <option key={type} value={type}>{launchTypeConfig[type].label}</option>)}</select></label>
-                  <label><span>البداية</span><input name="starts_at" type="datetime-local" required defaultValue={toLocalDateTimeInput(new Date(launch.starts_at))} /></label>
-                  <label><span>النهاية</span><input name="ends_at" type="datetime-local" required defaultValue={toLocalDateTimeInput(new Date(launch.ends_at))} /></label>
+                  <label><span>البداية</span><DateInput name="starts_at" type="datetime-local" required defaultValue={toLocalDateTimeInput(new Date(launch.starts_at))} /></label>
+                  <label><span>النهاية</span><DateInput name="ends_at" type="datetime-local" required defaultValue={toLocalDateTimeInput(new Date(launch.ends_at))} /></label>
                   <label className="wide"><span>الهدف</span><textarea name="objective" required minLength={5} maxLength={1500} defaultValue={launch.objective} /></label>
                   <label className="wide"><span>الجمهور</span><textarea name="audience" required minLength={3} maxLength={1000} defaultValue={launch.audience} /></label>
                   <label className="wide"><span>العرض</span><textarea name="offer" required minLength={3} maxLength={1500} defaultValue={launch.offer} /></label>
@@ -828,8 +830,8 @@ export function CampaignsWorkspace() {
                     {selectedDeliverableKind !== "social_post" ? <label><span>القناة</span><input name="channel" minLength={2} maxLength={120} placeholder="Instagram / Telegram / Meta" /></label> : null}
                     <label><span>مكان النشر أو التسليم</span><input name="destination" minLength={2} maxLength={500} placeholder="حساب Instagram أو فولدر Drive" /></label>
                     <label><span>{selectedDeliverableKind === "social_post" ? "مسؤول الدفعة" : "المسؤول"}</span><select name="owner_id" defaultValue={session.user.id}>{workingPeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
-                    {selectedDeliverableKind === "social_post" ? <label><span>أول موعد نشر</span><input name="first_publish_at" type="datetime-local" defaultValue={suggestedFirstPublish} required /></label> : null}
-                    <label><span>{selectedDeliverableKind === "social_post" ? "آخر موعد نشر" : "الموعد النهائي"}</span><input name="due_at" type="datetime-local" defaultValue={suggestedDue} required /></label>
+                    {selectedDeliverableKind === "social_post" ? <label><span>أول موعد نشر</span><DateInput name="first_publish_at" type="datetime-local" defaultValue={suggestedFirstPublish} required /></label> : null}
+                    <label><span>{selectedDeliverableKind === "social_post" ? "آخر موعد نشر" : "الموعد النهائي"}</span><DateInput name="due_at" type="datetime-local" defaultValue={suggestedDue} required /></label>
                     <label><span>نوع التكلفة</span><select name="budget_category" defaultValue="production">{(Object.keys(launchBudgetCategoryConfig) as LaunchBudgetCategory[]).map((category) => <option value={category} key={category}>{launchBudgetCategoryConfig[category].label}</option>)}</select></label>
                     <label><span>الميزانية</span><input name="budget_amount" type="number" min="0" step="0.01" defaultValue="0" required /></label>
                     <label><span>العملة</span><input name="currency" defaultValue={launch.currency} minLength={3} maxLength={3} pattern="[A-Za-z]{3}" dir="ltr" required /></label>

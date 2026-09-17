@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import { AlertTriangle, BellRing, CheckCircle2, LoaderCircle } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { formatDateTime } from "../../lib/date-time";
@@ -103,7 +105,7 @@ export function TaskAttentionControls({ task, attention, userId, readOnly, onCha
     </div>
     {form ? <form ref={formElement} className="task-attention-form" onSubmit={submit}>
       {form === "urgent" ? <label htmlFor={`${id}-note`}>رسالة للمسؤول — اختياري<textarea id={`${id}-note`} name="message" rows={2} maxLength={1000} placeholder="مثال: محتاجين التسليم قبل ميعاد النشر." disabled={working} /></label> : null}
-      {form === "acknowledge" ? <label htmlFor={`${id}-eta`}>هتخلص إمتى؟ — اختياري<input id={`${id}-eta`} name="promised_at" type="datetime-local" disabled={working} /><small>تأكيد الاستلام لا يبدأ التنفيذ ولا يغيّر موعد المهمة.</small></label> : null}
+      {form === "acknowledge" ? <label htmlFor={`${id}-eta`}>هتخلص إمتى؟ — اختياري<DateInput id={`${id}-eta`} name="promised_at" type="datetime-local" disabled={working} /><small>تأكيد الاستلام لا يبدأ التنفيذ ولا يغيّر موعد المهمة.</small></label> : null}
       {form === "help" ? <>
         <label htmlFor={`${id}-reason`}>إيه اللي معطّلك؟<select id={`${id}-reason`} name="reason" required defaultValue="" disabled={working}><option value="" disabled>اختار السبب</option>{Object.entries(helpReasons).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
         <label htmlFor={`${id}-details`}>محتاج إيه بالظبط؟<textarea id={`${id}-details`} name="message" required minLength={3} maxLength={1000} rows={3} placeholder="اكتب المطلوب عشان تقدر تكمل المهمة." disabled={working} /></label>

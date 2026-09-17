@@ -4709,6 +4709,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      move_content_calendar_group: {
+        Args: { source_kind: string; source_id: string; changes: Json }
+        Returns: Database["public"]["Tables"]["content_calendar_slots"]["Row"][]
+      }
       move_content_calendar_slot: {
         Args: { source_kind: string; source_id: string; target_platform: string; target_time: string | null; expected_revision: number; expected_time: string | null }
         Returns: Database["public"]["Tables"]["content_calendar_slots"]["Row"]

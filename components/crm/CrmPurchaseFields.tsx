@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import { useState } from "react";
 import { crmInterestConfig, type CrmInterest } from "../../lib/crm";
 
@@ -61,8 +63,8 @@ export function CrmPurchaseFields({ defaultProduct }: { defaultProduct: CrmInter
     {subscription ? <div className="crm-purchase-subscription">
       <label><span>قيمة الاشتراك</span><input name="purchase_subscription_amount" type="number" min="0.01" step="0.01" required /></label>
       <label><span>العملة</span><select name="purchase_subscription_currency" defaultValue="EGP"><option value="EGP">EGP</option><option value="USD">USD</option></select></label>
-      <label><span>بداية الاشتراك</span><input name="purchase_subscription_starts_on" type="date" required /></label>
-      <label><span>نهاية الاشتراك</span><input name="purchase_subscription_ends_on" type="date" required /></label>
+      <label><span>بداية الاشتراك</span><DateInput name="purchase_subscription_starts_on" type="date" required /></label>
+      <label><span>نهاية الاشتراك</span><DateInput name="purchase_subscription_ends_on" type="date" required /></label>
     </div> : null}
   </fieldset>;
 }

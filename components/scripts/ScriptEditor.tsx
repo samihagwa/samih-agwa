@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import type { Session } from "@supabase/supabase-js";
 import {
   Archive, ArrowRight, Bot, CheckCircle2, ExternalLink, Factory, FilePenLine, MoreHorizontal, Plus,
@@ -743,7 +745,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
           <div><strong>تعليمات الغلاف التي ستصل للمصمم</strong><p>{workspace.script.thumbnail_notes.trim() || "لا توجد تعليمات غلاف محفوظة. يمكنك إنشاء الطلب، لكن مهمة المصمم ستصل بدون اتجاه غلاف محدد."}</p></div>
         </aside>
         <div className="script-fields-grid">
-          <label><span>موعد النشر</span><input required type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} /></label>
+          <label><span>موعد النشر</span><DateInput required type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} /></label>
           <label><span>التسجيل وصناعة المحتوى</span><select value={contentCreatorId} onChange={(event) => setContentCreatorId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
           <label><span>المونتاج</span><select value={editingOwnerId} onChange={(event) => setEditingOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
           <label><span>الغلاف</span><select value={thumbnailOwnerId} onChange={(event) => setThumbnailOwnerId(event.target.value)}>{assignablePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>

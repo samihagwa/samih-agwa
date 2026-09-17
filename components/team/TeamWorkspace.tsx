@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import type { Session } from "@supabase/supabase-js";
 import {
   Activity, Ban, BookOpenCheck, CalendarDays, CheckCircle2, ClipboardCheck,
@@ -450,7 +452,7 @@ export function TeamWorkspace() {
     <section className="panel team-report-panel">
       <div className="team-report-heading"><div><p className="overline">تقرير مبني على السجل</p><h2>ما طُلب وما نُفذ والالتزام بالموعد</h2><p>أرقام واقعية بلا تقييم شخصي. «آخر حركة شغل» تعني مهمة أو مراجعة مسجلة، ولا تتغير بمجرد فتح المنصة.</p></div>{reportLoading ? <LoaderCircle className="spin" size={20} /> : <Activity size={20} />}</div>
       {manager ? <>
-        <div className="team-range-controls"><div className="segmented-control">{(["week", "month", "custom"] as RangePreset[]).map((value) => <button type="button" key={value} className={preset === value ? "active" : ""} onClick={() => setPreset(value)}>{value === "week" ? "آخر أسبوع" : value === "month" ? "آخر 30 يوم" : "مدة محددة"}</button>)}</div>{preset === "custom" ? <div className="custom-range"><label><span>من</span><input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label><span>إلى</span><input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div> : null}<span><CalendarDays size={13} /> {formatDate(range.start.toISOString())} — {formatDate(range.end.toISOString())}</span></div>
+        <div className="team-range-controls"><div className="segmented-control">{(["week", "month", "custom"] as RangePreset[]).map((value) => <button type="button" key={value} className={preset === value ? "active" : ""} onClick={() => setPreset(value)}>{value === "week" ? "آخر أسبوع" : value === "month" ? "آخر 30 يوم" : "مدة محددة"}</button>)}</div>{preset === "custom" ? <div className="custom-range"><label><span>من</span><DateInput type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label><span>إلى</span><DateInput type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div> : null}<span><CalendarDays size={13} /> {formatDate(range.start.toISOString())} — {formatDate(range.end.toISOString())}</span></div>
         <div className="team-report-table-wrap"><table className="team-report-table"><thead><tr><th>العضو</th><th>طلب مهام</th><th>أُسند له</th><th>أكمل</th><th>قبل الموعد</th><th>بعد الموعد</th><th>متأخر مفتوح</th><th>أرسل للمراجعة</th><th>طلب تعديلات</th><th>استلم تعديلات</th><th>آخر حركة شغل</th></tr></thead><tbody>{activePeople.filter((person) => person.role !== "viewer").map((person) => {
           const row = reportByUser.get(person.id);
           return <tr key={person.id}><th><strong>{person.name}</strong><small>{roleLabel(person.role)}</small></th><td>{row?.tasks_requested ?? 0}</td><td>{row?.tasks_assigned ?? 0}</td><td>{row?.tasks_completed ?? 0}</td><td className="positive-cell"><CheckCircle2 size={12} /> {row?.completed_on_time ?? 0}</td><td className="warning-cell"><Clock3 size={12} /> {row?.completed_late ?? 0}</td><td className="danger-cell">{row?.overdue_open ?? 0}</td><td>{row?.review_submissions ?? 0}</td><td>{row?.revisions_requested ?? 0}</td><td>{row?.revisions_received ?? 0}</td><td>{formatDate(row?.last_activity_at ?? null)}</td></tr>;

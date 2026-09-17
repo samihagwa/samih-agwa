@@ -31,6 +31,7 @@ const eslintConfig = defineConfig([
       },
     },
     settings: {
+      "jsx-a11y": { components: { DateInput: "input" } },
       react: {
         version: "detect",
       },

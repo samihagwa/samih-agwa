@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import { Film, LoaderCircle, Repeat2 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import type { Database } from "../../lib/supabase/database.types";
@@ -173,13 +175,13 @@ export function WeeklyContentRoutineForm({ organizationId, currentUserId, people
       <p className="weekly-content-summary">{scheduleSummary}</p>
       <div className="form-grid">
         <label><span>اسم التسليم</span><input name="bundle_title" minLength={3} maxLength={140} required placeholder={format === "reel" ? "مثال: ريلز الأربعاء التعليمي" : "مثال: نتائج توصيات الأسبوع"} /></label>
-        <label><span>أول موعد نشر — القاهرة</span><input name="publish_at" type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} required /></label>
+        <label><span>أول موعد نشر — القاهرة</span><DateInput name="publish_at" type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} required /></label>
         <label className="full-field"><span>كل المطلوب والروابط — في مكان واحد</span><textarea name="bundle_request" minLength={5} maxLength={12000} rows={8} required placeholder="الصق الطلب كاملًا كما سترسله في Telegram: البيانات، التعليمات، وروابط المصادر…" /></label>
         <label><span>{format === "reel" ? "صاحب المادة الخام" : "صاحب بيانات التقرير"}</span><select name="source_owner_id" defaultValue={defaultOwnerId} required>{people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
         {format === "reel" ? <label><span>المونتاج</span><select name="editing_owner_id" defaultValue={defaultOwnerId} required>{people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label> : null}
         <label><span>{format === "reel" ? "تصميم الغلاف" : "التصميم"}</span><select name="design_owner_id" defaultValue={defaultOwnerId} required>{people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
         <label><span>النشر</span><select name="publishing_owner_id" defaultValue={defaultOwnerId} required>{people.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
-        <label><span>آخر موعد نشر — اختياري</span><input name="ends_on" type="date" min={publishAt.slice(0, 10)} /></label>
+        <label><span>آخر موعد نشر — اختياري</span><DateInput name="ends_on" type="date" min={publishAt.slice(0, 10)} /></label>
       </div>
       {error ? <p className="form-notice error" role="alert">{error}</p> : null}
       {notice ? <p className="form-notice success" role="status">{notice}</p> : null}

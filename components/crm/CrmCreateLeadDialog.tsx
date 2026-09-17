@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import { CheckCircle2, LoaderCircle, UserRoundCheck } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { crmContactIdentityKinds, crmConversationChannelConfig, crmIdentityKindConfig, crmInterestConfig, crmTradingExperienceConfig, type CrmConversationChannel, type CrmIdentityKind, type CrmInterest, type CrmSource, type CrmTradingExperience } from "../../lib/crm";
@@ -118,7 +120,7 @@ export function CrmCreateLeadDialog({ organizationId, actorId, people, onClose, 
         <label><span>مسؤول المتابعة والملف</span><select name="owner_id" defaultValue={actorId} required>{availablePeople.map((person) => <option value={person.id} key={person.id}>{person.id === actorId ? `${person.name} — أنا` : person.name}</option>)}</select><small>اسمك محدد تلقائيًا. غيّره فقط لو هتسند الملف والمتابعة لعضو سيلز فعّال.</small></label>
         {kind === "current" ? <CrmPurchaseFields key={interest} defaultProduct={interest} /> : null}
         <fieldset className="crm-follow-up-decision crm-create-follow-up-decision"><legend>هل يحتاج متابعة مرة أخرى؟</legend><div><button type="button" className={needsFollowUp ? "active" : ""} aria-pressed={needsFollowUp} onClick={() => setNeedsFollowUp(true)}>نعم</button><button type="button" className={!needsFollowUp ? "active" : ""} aria-pressed={!needsFollowUp} onClick={() => setNeedsFollowUp(false)}>لا</button></div></fieldset>
-        {needsFollowUp ? <label><span>موعد المتابعة</span><input name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /></label> : <div className="crm-current-customer-note"><CheckCircle2 size={17} /><span><strong>بدون متابعة مجدولة</strong><small>يمكن تحديد موعد لاحقًا من ملف العميل.</small></span></div>}
+        {needsFollowUp ? <label><span>موعد المتابعة</span><DateInput name="follow_up_at" type="datetime-local" defaultValue={defaultFollowUp} required /></label> : <div className="crm-current-customer-note"><CheckCircle2 size={17} /><span><strong>بدون متابعة مجدولة</strong><small>يمكن تحديد موعد لاحقًا من ملف العميل.</small></span></div>}
         <label className="full-field"><span>ملاحظة سريعة — اختياري</span><textarea name="notes" maxLength={5000} rows={3} /></label>
       </div>
       <details className="crm-optional-contact-details"><summary>عندي رقم أو بريد أو اسم مستخدم</summary><fieldset className="crm-identities-fieldset"><legend>بيانات إضافية اختيارية</legend><div>{crmContactIdentityKinds.map((identityKind) => <label key={identityKind}><span>{crmIdentityKindConfig[identityKind].label}</span><input name={`identity_${identityKind}`} type={crmIdentityKindConfig[identityKind].inputType} dir="ltr" minLength={3} maxLength={identityKind === "tradingview" ? 100 : 320} placeholder={crmIdentityKindConfig[identityKind].placeholder} /></label>)}</div><label className="crm-primary-select"><span>البيان الأساسي لو أدخلت أكثر من واحد</span><select value={primaryKind} onChange={(event) => setPrimaryKind(event.target.value as CrmIdentityKind)}>{crmContactIdentityKinds.map((identityKind) => <option value={identityKind} key={identityKind}>{crmIdentityKindConfig[identityKind].label}</option>)}</select></label></fieldset></details>

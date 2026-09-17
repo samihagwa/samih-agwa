@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle, Archive, ArrowUpLeft, Bot, CalendarDays, CheckCircle2, CircleSlash2, FilePlus2,
@@ -548,8 +550,8 @@ function PlanningTools() {
       <div className="planning-form-grid">
         <label><span>اسم الخطة</span><input name="name" minLength={3} maxLength={160} required placeholder="مثال: الربع الرابع — بناء الثقة" /></label>
         <label><span>المؤشر الرئيسي — اختياري</span><input name="primary_metric" maxLength={500} placeholder="مثال: 500 تسجيل مؤهل" /></label>
-        <label><span>تاريخ البداية</span><input name="starts_on" type="date" defaultValue={quarter.startsOn} required /></label>
-        <label><span>تاريخ النهاية</span><input name="ends_on" type="date" defaultValue={quarter.endsOn} required /></label>
+        <label><span>تاريخ البداية</span><DateInput name="starts_on" type="date" defaultValue={quarter.startsOn} required /></label>
+        <label><span>تاريخ النهاية</span><DateInput name="ends_on" type="date" defaultValue={quarter.endsOn} required /></label>
         <label className="span-2"><span>الهدف التجاري أو التسويقي</span><textarea name="objective" minLength={10} maxLength={3000} rows={3} required placeholder="ما النتيجة التي يجب أن يحققها المحتوى خلال الفترة؟" /></label>
         <label><span>الجمهور</span><textarea name="audience" minLength={3} maxLength={2000} rows={3} required placeholder="من نخاطب؟ وما مشكلته الحالية؟" /></label>
         <label><span>العرض أو المنتج — اختياري</span><textarea name="offer" maxLength={1000} rows={3} placeholder="الكورس أو الخدمة أو القناة التي تخدمها الخطة" /></label>
@@ -588,7 +590,7 @@ function PlanningTools() {
             <label><span>نوع المحتوى</span><select name="kind" value={selectedKind} onChange={(event) => setSelectedKind(event.target.value as ContentPlanItemKind)}>{contentPlanItemKinds.map((kind) => <option value={kind} key={kind}>{contentPlanItemKindConfig[kind].label}</option>)}</select></label>
             <label><span>عنوان واضح</span><input name="title" minLength={3} maxLength={180} required placeholder="عنوان الفكرة أو الوعد الرئيسي" /></label>
             <label><span>عمود المحتوى — اختياري</span><select name="pillar_id" defaultValue=""><option value="">بدون عمود مؤقتًا</option>{selectedPillars.map((pillar) => <option value={pillar.id} key={pillar.id}>{pillar.title}</option>)}</select></label>
-            <label><span>موعد النشر — القاهرة</span><input name="publish_at" type="datetime-local" defaultValue={planItemInputDate(selectedPlan)} required /></label>
+            <label><span>موعد النشر — القاهرة</span><DateInput name="publish_at" type="datetime-local" defaultValue={planItemInputDate(selectedPlan)} required /></label>
             <label className="span-2"><span>كل المطلوب والروابط</span><textarea name="request_text" minLength={10} maxLength={30000} rows={14} required placeholder="الصق الطلب كاملًا هنا: الفكرة أو الاسكريبت، المطلوب، التوقيتات، تعليمات المونتاج والتصميم، وأي روابط…" /><small>هذه الخانة هي المرجع الوحيد. النص والروابط يظلان معًا كما كتبتهما ويظهران لكل مسؤول داخل مهمته.</small></label>
             <fieldset className="span-2 planning-execution-choice">
               <legend>ماذا يحدث بعد الحفظ؟</legend>

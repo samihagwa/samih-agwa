@@ -1,5 +1,7 @@
 "use client";
 
+import { DateInput } from "../ui/DateInput";
+
 import type { Session } from "@supabase/supabase-js";
 import {
   AlertTriangle,
@@ -901,8 +903,8 @@ export function TasksWorkspace() {
         <summary><CalendarClock size={16} /> فلترة بالتاريخ وطالب المهمة {advancedFiltersActive ? <StatusBadge tone="info">مفعّلة</StatusBadge> : null}</summary>
         <div className="task-filter-fields" aria-label="فلترة بورد المهام">
           <label className="task-filter-field"><span><UserRoundCheck size={13} aria-hidden="true" /> طالب المهمة</span><select value={requesterFilter} onChange={(event) => setRequesterFilter(event.target.value)}><option value="all">كل طالبي المهام</option>{workspace.people.map((person) => <option value={person.id} key={person.id}>{person.id === session.user.id ? `أنا — ${person.name}` : person.name}</option>)}</select></label>
-          <label className="task-filter-field"><span>من تاريخ</span><input type="date" value={dateRange.from} max={dateRange.to || undefined} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} /></label>
-          <label className="task-filter-field"><span>إلى تاريخ</span><input type="date" value={dateRange.to} min={dateRange.from || undefined} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} /></label>
+          <label className="task-filter-field"><span>من تاريخ</span><DateInput type="date" value={dateRange.from} max={dateRange.to || undefined} onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))} /></label>
+          <label className="task-filter-field"><span>إلى تاريخ</span><DateInput type="date" value={dateRange.to} min={dateRange.from || undefined} onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))} /></label>
           <button className="task-filter-reset" type="button" disabled={!advancedFiltersActive} onClick={() => { setRequesterFilter("all"); setDateRange({ from: "", to: "" }); }}>مسح الفلاتر</button>
         </div>
       </details> : null}
@@ -932,7 +934,7 @@ export function TasksWorkspace() {
             <p>حدد الشخص ووقت التسليم فقط؛ النظام سيتحقق من حمله قبل الحفظ النهائي.</p>
             <div className="form-grid">
               <label><span>المسؤول المباشر</span><select name="owner_id" value={taskCreateOwnerId} required={taskCreateStep === 2} onChange={(event) => { setNewTaskOwnerId(event.target.value); if (event.target.value === session.user.id) setNewTaskRequiresReview(false); }}>{assignablePeople.map((person) => <option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
-              <label><span>{taskCreateMode === "weekly" ? "أول موعد أسبوعي" : "الموعد النهائي"}</span><input name="due_at" type="datetime-local" value={newTaskDueAt} required={taskCreateStep === 2} onChange={(event) => setNewTaskDueAt(event.target.value)} /></label>
+              <label><span>{taskCreateMode === "weekly" ? "أول موعد أسبوعي" : "الموعد النهائي"}</span><DateInput name="due_at" type="datetime-local" value={newTaskDueAt} required={taskCreateStep === 2} onChange={(event) => setNewTaskDueAt(event.target.value)} /></label>
             </div>
             <div className="task-create-mode" aria-label="نوع المهمة">
               <div className="segmented-control">
@@ -959,7 +961,7 @@ export function TasksWorkspace() {
               <div className="content-request-advanced-body form-grid">
                 <label><span>الأولوية</span><select name="priority" defaultValue="normal">{(Object.keys(taskPriorityConfig) as TaskPriority[]).map((priority) => <option value={priority} key={priority}>{taskPriorityConfig[priority].label}</option>)}</select></label>
                 <label><span>الوقت المتوقع</span><select name="estimated_minutes" defaultValue="60"><option value="30">30 دقيقة</option><option value="60">ساعة</option><option value="90">ساعة ونصف</option><option value="120">ساعتان</option><option value="180">3 ساعات</option><option value="240">4 ساعات</option><option value="360">6 ساعات</option></select></label>
-                {taskCreateMode === "weekly" ? <label><span>تاريخ النهاية — اختياري</span><input name="routine_ends_on" type="date" min={localDatePart(newTaskDueAt)} /></label> : null}
+                {taskCreateMode === "weekly" ? <label><span>تاريخ النهاية — اختياري</span><DateInput name="routine_ends_on" type="date" min={localDatePart(newTaskDueAt)} /></label> : null}
                 <label className="full-field"><span>معيار القبول — اختياري</span><textarea name="acceptance_criteria" maxLength={4000} rows={3} placeholder="اكتبه فقط لو النتيجة تحتاج شرطًا واضحًا، مثل المقاس أو صيغة التسليم" /></label>
                 <fieldset className="full-field task-review-choice">
                   <legend>هل المهمة تحتاج مراجعة؟</legend>

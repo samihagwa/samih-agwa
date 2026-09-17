@@ -42,6 +42,21 @@ test("cancelled or archived requests are absent; published cards are immovable",
   assert.equal(c.calendarEntries([content],[linked],[{...plan,status:"archived"}],[]).length,0);
   assert.ok(c.calendarEntries([{...content,status:"published"}],[],[],[]).every(e=>!e.editable));
 });
+test("group cards by source and Cairo day, not title; retain independent platform records",()=>{
+ const entries=c.calendarEntries([content,{...content,id:"other"}],[],[],[]);
+ const groups=c.groupCalendarEntries(entries);
+ assert.equal(groups.length,2);assert.equal(groups[0].members.length,2);
+ assert.equal(entries.length,4);assert.equal(entries[0].members,undefined);
+ const moved=entries.map(entry=>entry.key==="content:c:facebook"?{...entry,scheduledAt:"2026-09-18T15:00:00Z"}:entry);
+ assert.equal(c.groupCalendarEntries(moved).length,3);
+ assert.equal(c.groupCalendarEntries(entries.filter(entry=>entry.platform==="instagram"))[0].members.length,1);
+});
+test("calendar detail stays in place and completion is not inferred from ready status",async()=>{
+ const ui=await readFile(new URL("../components/planning/ContentCalendar.tsx",import.meta.url),"utf8");
+ assert.doesNotMatch(ui,/فتح بند الخطة|href=\{details.requestUrl\}|scrollIntoView/);
+ assert.match(ui,/calendar-detail-dialog/);assert.match(ui,/تم النشر بنجاح/);
+ assert.equal(c.calendarState({...content,status:"scheduled"}).label,"جاهز للنشر");
+});
 test("calendar exposes day-only drag, mobile alternative and undo without hourly gaps",async()=>{
   const ui=await readFile(new URL("../components/planning/ContentCalendar.tsx",import.meta.url),"utf8");
   for(const contract of ["draggable={editable}","onPointerMove={touchMove}","تغيير الموعد","تراجع عن النقل","calendar-mobile-agenda","calendar-week-board","aria-valuenow",'type="date"'])assert.ok(ui.includes(contract),contract);
