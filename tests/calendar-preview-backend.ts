@@ -35,6 +35,16 @@ export function getSupabaseBrowserClient(){
     state.content_plan_items.push({id:args.request_id,organization_id:org,owner_id:owner,created_by:owner,title:args.item_title,objective:args.item_brief,version:1,content_item_id:null,kind:args.item_kind,status:"planned",platforms:args.item_platforms,publish_at:args.item_time});
     return{data:args.request_id,error:null};
    }
+   if(name==="set_content_calendar_completion") {
+    const snapshot=structuredClone(state.content_calendar_slots); const rows=[];
+    for(const change of args.changes){
+     const result:any=await getSupabaseBrowserClient().rpc("move_content_calendar_slot",{...args,target_platform:change.platform,target_time:change.expected_time,expected_revision:change.revision,expected_time:change.expected_time});
+     if(result.error){state.content_calendar_slots=snapshot;localStorage.setItem("calendar-fixture-slots",JSON.stringify(snapshot));return result;}
+     const slot=state.content_calendar_slots.find(row=>row.id===result.data.id)!;
+     slot.completed_at=args.completed?new Date().toISOString():null;slot.completed_by=args.completed?owner:null;rows.push({...slot});
+    }
+    localStorage.setItem("calendar-fixture-slots",JSON.stringify(state.content_calendar_slots));return{data:rows,error:null};
+   }
    if(name==="move_content_calendar_group") {
     const snapshot=structuredClone(state.content_calendar_slots); const rows=[];
     for(const change of args.changes){const result:any=await getSupabaseBrowserClient().rpc("move_content_calendar_slot",{...args,target_platform:change.platform,target_time:change.target_time,expected_revision:change.revision,expected_time:change.expected_time});if(result.error){state.content_calendar_slots=snapshot;localStorage.setItem("calendar-fixture-slots",JSON.stringify(snapshot));return result;}rows.push(result.data);}

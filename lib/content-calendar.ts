@@ -5,12 +5,14 @@ export type CalendarSource = "content" | "plan";
 export type CalendarSlot = {
   id: string; organization_id: string; content_item_id: string | null; plan_item_id: string | null;
   platform: string; scheduled_at: string | null; revision: number; updated_at: string;
+  completed_at?: string | null; completed_by?: string | null;
 };
 export type CalendarEntry = {
   key: string; source: CalendarSource; sourceId: string; platform: string; scheduledAt: string | null;
   revision: number; title: string; kind: string; status: string; ownerId: string; product: string;
   contentId: string | null; planId: string | null; editable: boolean;
   brief?: string; members?: CalendarEntry[];
+  completedAt?: string | null;
 };
 type Content = Tables<"content_items">;
 type PlanItem = Tables<"content_plan_items">;
@@ -67,7 +69,7 @@ export function calendarEntries(contents: Content[], items: PlanItem[], plans: P
       const key = `${source}:${item.id}:${platform}`;
       const slot = slotByKey.get(key);
       result.push({ key, source, sourceId: item.id, platform, scheduledAt: slot ? slot.scheduled_at : item.publish_at,
-        revision: slot?.revision ?? 0, title: item.title, kind: "format" in item ? item.format : item.kind,
+        revision: slot?.revision ?? 0, completedAt: slot?.completed_at ?? null, title: item.title, kind: "format" in item ? item.format : item.kind,
         status: item.status, ownerId: "owner_id" in item ? item.owner_id : item.created_by,
         product: plan?.offer?.trim() || plan?.name || "بدون خطة", contentId: source === "content" ? item.id : null,
         planId: plan?.id ?? null, editable: item.status !== "published",
@@ -78,8 +80,12 @@ export function calendarEntries(contents: Content[], items: PlanItem[], plans: P
   items.filter((item) => !item.content_item_id).forEach((item) => append("plan", item, item));
   return result.sort((a, b) => (a.scheduledAt ? calendarDay(a.scheduledAt) : "9999").localeCompare(b.scheduledAt ? calendarDay(b.scheduledAt) : "9999") || a.title.localeCompare(b.title, "ar") || a.key.localeCompare(b.key));
 }
+export function calendarIsComplete(entry: CalendarEntry): boolean {
+  return (entry.members ?? [entry]).every(member => member.status === "published" || Boolean(member.completedAt));
+}
 export function calendarState(entry: CalendarEntry) {
   if (entry.status === "published") return { label: "منشور", tone: "success" as const };
+  if (calendarIsComplete(entry)) return { label: "تم", tone: "success" as const };
   if (entry.status === "scheduled") return { label: "جاهز للنشر", tone: "success" as const };
   if (["production", "review", "in_production"].includes(entry.status)) return { label: "قيد التجهيز", tone: "warning" as const };
   return { label: "مخطط", tone: "neutral" as const };

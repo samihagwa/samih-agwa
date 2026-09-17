@@ -4198,8 +4198,23 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink-950) !import
 .calendar-date-shortcuts button { border:1px solid #ccd6dc; border-radius:24px; padding:9px 14px; background:#f4f6f7; color:#253942; cursor:pointer; }
 .calendar-platform-labels { color:#526b78; font-size:11px; line-height:1.7; overflow-wrap:anywhere; }
 .calendar-event { border-radius:8px; }
-.calendar-completion { color:#7b8990; display:inline-flex; }
+.calendar-completion { color:#7b8990; display:inline-flex; align-items:center; justify-content:center; position:absolute; inset-block-start:0; inset-inline-end:0; width:44px; height:44px; padding:0; border:0; background:transparent; border-radius:6px; cursor:pointer; }
+.calendar-completion:disabled { cursor:default; }
+.calendar-completion:focus-visible { outline:2px solid #658875; outline-offset:-3px; }
+.calendar-completion:not(:disabled):hover { background:#65887515; }
+.calendar-event-top { padding-inline-end:32px; min-height:24px; }
+.calendar-check-empty.mixed { background:linear-gradient(#7b8990,#7b8990) center/8px 2px no-repeat; }
 .calendar-completion.done { color:#658875; }
+.carousel-image-fields { border:1px solid #d7e1e7; padding:16px; border-radius:10px; min-width:0; }
+.carousel-image-row { display:flex; align-items:center; gap:10px; margin-block:12px; }
+.carousel-image-row > label { flex:1; min-width:0; }
+.carousel-image-row > div { display:flex; }
+.carousel-image-row .icon-button { width:44px; height:44px; }
+.carousel-gallery ol { list-style:none; padding:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:12px; }
+.carousel-gallery li a { display:flex; flex-direction:column; gap:8px; padding:10px; border:1px solid #d7e1e7; border-radius:8px; }
+.carousel-gallery img { width:100%; aspect-ratio:1; object-fit:contain; background:#f1f5f7; }
+.carousel-gallery span { font-size:12px; }
+@media(max-width:600px){.carousel-image-row{flex-wrap:wrap}.carousel-image-row>div{margin-inline-start:auto}.carousel-image-row>label{min-width:70%}}
 .calendar-check-empty { width:15px; height:15px; border:1px solid #99a6ad; border-radius:4px; display:inline-block; }
 .calendar-event-open { padding-bottom:42px; }
 .calendar-event-actions button { width:36px; height:36px; }

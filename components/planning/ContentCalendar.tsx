@@ -5,7 +5,7 @@ import { DateRangeSelection } from "../ui/DateRangeSelection";
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { AlertTriangle, CalendarDays, CalendarClock, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, Filter, GripVertical, Plus, RefreshCw, X } from "lucide-react";
-import { addCalendarDays, calendarDateInstant, calendarDateLabel, calendarDay, calendarMonthDays, calendarState, calendarWeek, groupCalendarEntries, type CalendarEntry } from "../../lib/content-calendar";
+import { addCalendarDays, calendarDateInstant, calendarDateLabel, calendarDay, calendarMonthDays, calendarState, calendarIsComplete, calendarWeek, groupCalendarEntries, type CalendarEntry } from "../../lib/content-calendar";
 import { contentFormatConfig, contentPlatformLabel } from "../../lib/content";
 import { contentPlanItemKindConfig } from "../../lib/planning";
 import { Button } from "../ui/Button";
@@ -18,6 +18,7 @@ type Props = {
   onSelect: (key: string | null) => void; onMove: (entry: CalendarEntry, time: string | null) => Promise<boolean>;
   onUndo: () => void; onRefresh: () => void; onCreate: () => void;
   onEditDraft?: (entry: CalendarEntry, title: string, brief: string) => Promise<boolean>;
+  onComplete: (entry: CalendarEntry, completed: boolean) => Promise<boolean>;
 };
 type Drag = { key: string };
 
@@ -25,7 +26,7 @@ function kindLabel(kind: string) {
   return contentFormatConfig[kind as keyof typeof contentFormatConfig]?.label ?? contentPlanItemKindConfig[kind as keyof typeof contentPlanItemKindConfig]?.label ?? "محتوى";
 }
 
-export function ContentCalendar({ entries, canEdit, working, error, notice, details, selectedKey, undoAvailable, onSelect, onMove, onUndo, onRefresh, onCreate, onEditDraft }: Props) {
+export function ContentCalendar({ entries, canEdit, working, error, notice, details, selectedKey, undoAvailable, onSelect, onMove, onUndo, onRefresh, onCreate, onEditDraft, onComplete }: Props) {
   const [anchor, setAnchor] = useState(() => calendarDay(new Date()));
   const [view, setView] = useState<"week" | "month" | "list">("week");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -94,13 +95,21 @@ export function ContentCalendar({ entries, canEdit, working, error, notice, deta
   function card(entry: CalendarEntry, compact = false) {
     const status = calendarState(entry);
     const editable = canEdit && entry.editable && !working;
+    const complete = calendarIsComplete(entry);
+    const mixed = !complete && (entry.members ?? [entry]).some(member => calendarIsComplete(member));
     return <article key={entry.key} className={`calendar-event ${status.tone} ${selectedKey === entry.key ? "selected" : ""} ${drag?.key === entry.key ? "dragging" : ""} ${compact ? "compact" : ""}`} draggable={editable}
       onDragStart={(event) => { if (!editable) { event.preventDefault(); return; } const item = { key: entry.key }; event.dataTransfer.setData("text/plain", entry.key); event.dataTransfer.effectAllowed = "move"; setDrag(item); }} onDragEnd={clearDrag}>
       <button type="button" className="calendar-event-open" onClick={() => onSelect(entry.key)} aria-label={`${entry.title} — ${(entry.members??[entry]).map(member=>contentPlatformLabel(member.platform)).join("، ")} — ${entry.scheduledAt ? calendarDateLabel(calendarDay(entry.scheduledAt)) : "بدون موعد"}`}>
-        <span className="calendar-event-top"><span>{kindLabel(entry.kind)}</span><span className={`calendar-completion ${entry.status==="published"?"done":""}`} aria-label={entry.status==="published"?"تم النشر بنجاح":"لم يتم النشر بعد"} title={entry.status==="published"?"تم النشر بنجاح":"لم يتم النشر بعد"}>{entry.status==="published"?<CheckCircle2 size={18}/>:<span className="calendar-check-empty"/>}</span></span>
+        <span className="calendar-event-top"><span>{kindLabel(entry.kind)}</span></span>
         <strong>{entry.title}</strong>
         <span className="calendar-platform-labels">{(entry.members??[entry]).map(member=>contentPlatformLabel(member.platform)).join(" · ")}</span>
         <span className={`calendar-state ${status.tone}`}>{status.tone === "success" ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}{status.label}</span>
+      </button>
+      <button type="button" role="checkbox" aria-checked={mixed ? "mixed" : complete} className={`calendar-completion ${complete ? "done" : ""}`} disabled={!editable}
+        aria-label={`${complete ? "إلغاء علامة تم" : "تحديد كمكتمل"}: ${entry.title}`} title={entry.status === "published" ? "تم النشر بنجاح" : "علامة تم في التقويم فقط؛ لا تنشر المحتوى أو تنهي مهام التنفيذ"}
+        draggable={false} onPointerDown={event => event.stopPropagation()} onDragStart={event => { event.preventDefault(); event.stopPropagation(); }}
+        onClick={event => { event.stopPropagation(); void onComplete(entry, !complete); }}>
+        {complete ? <CheckCircle2 size={18}/> : <span className={`calendar-check-empty ${mixed ? "mixed" : ""}`}/>}
       </button>
       {editable ? <div className="calendar-event-actions"><button className="calendar-drag-handle" type="button" aria-label={`سحب ${entry.title}؛ أو اضغط لتغيير الموعد`} onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } if (!touchDrag.current) openMove(entry); }}
         onPointerDown={(event) => { if (event.pointerType === "mouse") return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); touchDrag.current = { key: entry.key }; setDrag(touchDrag.current); }}

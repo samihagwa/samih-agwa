@@ -128,6 +128,16 @@ async function submitStepDelivery(body: Record<string, unknown>, context: Contex
   const step = text(body.step);
   const note = text(body.result_note);
   const url = text(body.result_url);
+  if (body.result_images !== undefined) {
+    const images=body.result_images;
+    if(step!=="design" || !taskId || !Array.isArray(images) || images.length<2 || images.length>30 || images.some(url=>typeof url!=="string" || url.length>2000 || !isHttpUrl(url)) || new Set(images.map(url=>String(url).trim().toLowerCase())).size!==images.length || note.length>10000)
+      return jsonResponse({message:"أضف من صورتين إلى 30 صورة بروابط صحيحة وبدون تكرار."},400);
+    const {data,error}=await context!.supabaseAdmin.rpc("submit_carousel_delivery",{
+      target_user_id:context!.userClaims!.id,target_task_id:taskId,delivery_result_note:note||null,images,
+      expected_task_version:body.expected_task_version,expected_delivery_version:body.expected_delivery_version??null,
+    });
+    return commandError(error,"تعذّر حفظ صور الكاروسيل. راجع الروابط أو حدّث المهمة.")??jsonResponse({deliveryId:data},201);
+  }
   if (!taskId || !resultSteps.has(step) || (!note && !url)
     || note.length > 10000 || url.length > 2000 || (url && !isHttpUrl(url))
     || (resultUrlSteps.has(step) && !url)) {

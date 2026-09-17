@@ -25,6 +25,8 @@ type RawMaterialKind = "raw_video" | "audio" | "source";
 type RawMaterialDraft = { id: string; kind: RawMaterialKind; url: string };
 
 export type QuickIntakePayload = {
+  request_format?: "reel" | "long_video" | "carousel";
+  request_platforms?: string[];
   request_id: string;
   target_publish_at: string;
   content_title: string;

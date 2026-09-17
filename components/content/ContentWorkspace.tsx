@@ -14,6 +14,7 @@ import { Button } from "../ui/Button";
 import { ContentLibrary } from "./ContentLibrary";
 import { ContentRequestView } from "./ContentRequestView";
 import { QuickIntakeForm, type QuickIntakePayload } from "./QuickIntakeForm";
+import { VisualContentIntake } from "./VisualContentIntake";
 
 type Person = { id: string; name: string; role: Tables<"memberships">["role"]; allowedSections: string[] };
 type Workspace = { membership: Tables<"memberships">; people: Person[] };
@@ -42,6 +43,7 @@ export function ContentWorkspace({ contentId, backHref = "/content" }: { content
   const [error, setError] = useState<string | null>(configured ? null : "اتصال الموقع غير متاح مؤقتًا.");
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [createFormat,setCreateFormat]=useState<"reel"|"carousel"|"long_video">("reel");
   const [view, setView] = useState("active");
   const [deepId, setDeepId] = useState<string | null>(null);
   const [revisionId, setRevisionId] = useState<string | null>(null);
@@ -187,7 +189,7 @@ export function ContentWorkspace({ contentId, backHref = "/content" }: { content
     {error ? <div role="alert" className="form-notice error">{error}<Button type="button" variant="ghost" disabled={refreshing || working} onClick={() => void refresh()}>تحديث العرض</Button></div> : null}
     {selectedId ? selected ? <ContentRequestView key={selected.id} item={selected} tasks={data.tasks} assets={data.assets} deliveries={data.deliveries} revisions={data.revisions} timeline={data.timeline} people={workspace.people} userId={session.user.id} readOnly={workspace.membership.role === "viewer"} platformAdmin={canManageAllTaskExecution(workspace.membership.role)} working={working} command={command} backHref={backHref} revisionId={revisionId} /> : <><p role="alert">الطلب غير موجود أو ليس ضمن صلاحيات حسابك.</p><Button href={backHref} variant="secondary">رجوع</Button></> : <>
       <header className="request-heading"><h1>طلبات المحتوى</h1><div className="toolbar-actions"><Button type="button" variant="ghost" disabled={refreshing} onClick={() => void refresh()} aria-label="تحديث الطلبات"><RefreshCw className={refreshing ? "spin" : ""} size={17} /></Button>{canCreate ? <Button type="button" onClick={() => setShowCreate(!showCreate)}><Plus size={16} /> طلب جديد</Button> : null}</div></header>
-      {showCreate && canCreate ? <QuickIntakeForm organizationId={workspace.membership.organization_id} currentUserId={session.user.id} defaultOwnerIds={defaultOwnerIds} defaultPublish={defaultPublish} people={assignablePeople} working={working} onCancel={() => setShowCreate(false)} onCreate={create} /> : null}
+      {showCreate && canCreate ? <><div className="segmented-control" aria-label="نوع طلب المحتوى">{([["reel","ريلز"],["long_video","فيديو يوتيوب"],["carousel","كاروسيل"]] as const).map(([value,label])=><button type="button" key={value} aria-pressed={createFormat===value} disabled={working} onClick={()=>setCreateFormat(value)}>{label}</button>)}</div>{createFormat==="reel"?<QuickIntakeForm organizationId={workspace.membership.organization_id} currentUserId={session.user.id} defaultOwnerIds={defaultOwnerIds} defaultPublish={defaultPublish} people={assignablePeople} working={working} onCancel={() => setShowCreate(false)} onCreate={create}/>:<VisualContentIntake key={createFormat} format={createFormat} currentUserId={session.user.id} defaultPublish={defaultPublish} people={assignablePeople} working={working} onCancel={()=>setShowCreate(false)} onCreate={create}/>}</> : null}
       <div className="request-view-tabs" aria-label="عرض الطلبات">{[["active", "الحالي"], ["scheduled", "المجدول"], ["archive", "الأرشيف"]].map(([key, label]) => <button type="button" key={key} aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}</div>
       <ContentLibrary key={view} items={data.items} tasks={tasksByContent} view={view} />
     </>}

@@ -3,7 +3,7 @@
 - One card represents one content source on one Cairo calendar day. Platform filters apply before grouping. Different days remain separate; underlying platform records are preserved.
 - Dragging/rescheduling a grouped card moves its visible platforms together through `move_content_calendar_group`. The database transaction delegates authorization, locks, optimistic revisions, and audit to the existing slot command. A stale sibling rolls back the entire move; undo restores each original timestamp. Execution tasks are unchanged.
 - Details and date editing use centered dialogs without navigating into legacy plan administration. Unlinked plan drafts can edit title and brief in place with a version check and existing RLS/audit triggers.
-- Completion marks mean published, not merely ready or scheduled. Publication remains the responsibility of the existing publishing workflow.
+- Completion is a standalone, persisted manual check-off, separate from opening details. Grouped cards check all visible platforms atomically; stale revisions roll back the entire change. Checking/unchecking never changes publication status, appointments or execution tasks. Actually published cards remain checked and read-only. Publication remains the responsibility of the existing publishing workflow.
 - The shared `DateInput` preserves native form names, values, validation, reset and FormData. Calendar planning is day-only; other workflows retain their existing time requirements. Date/range selection supports month/year navigation, keyboard arrows and reduced motion.
 - Backup scheduling is not enabled by this change. A storage destination, retention policy and restore verification still need to be selected before building that workflow.
 

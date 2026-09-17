@@ -8,6 +8,16 @@ const c = await import("data:text/javascript;base64,"+Buffer.from(code).toString
 const content = {id:"c",title:"ريل",format:"reel",created_by:"owner",status:"production",platforms:["Instagram","facebook"],publish_at:"2026-09-17T15:00:00Z"};
 const plan = {id:"p",name:"خطة المؤشر",offer:"المؤشر",status:"active"};
 const linked = {id:"i",plan_id:"p",content_item_id:"c",platforms:content.platforms,publish_at:content.publish_at,status:"in_production"};
+test("manual completion survives slot mapping, groups require all platforms and never implies publication",()=>{
+  const entries=c.calendarEntries([content],[],[],[{content_item_id:"c",platform:"instagram",scheduled_at:content.publish_at,revision:1,completed_at:"2026-09-17T12:00:00Z"}]);
+  assert.equal(c.calendarIsComplete(entries.find(entry=>entry.platform==="instagram")),true);
+  assert.equal(c.calendarIsComplete(c.groupCalendarEntries(entries)[0]),false);
+  const complete={...entries[0],members:entries.map(entry=>({...entry,completedAt:"2026-09-17T12:00:00Z"}))};
+  assert.equal(c.calendarIsComplete(complete),true);
+  assert.equal(c.calendarState(complete).label,"تم");
+  assert.equal(complete.status,"production");
+  assert.equal(c.calendarIsComplete({...entries[0],completedAt:null}),false);
+});
 test("Cairo wall time handles DST and browser-independent date rollover",()=>{
   assert.equal(c.calendarInstant("2026-09-17T18:00"),"2026-09-17T15:00:00.000Z");
   assert.equal(c.calendarInstant("2026-01-17T18:00"),"2026-01-17T16:00:00.000Z");

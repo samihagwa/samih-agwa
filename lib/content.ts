@@ -24,7 +24,7 @@ export const contentFormatConfig: Record<ContentFormat, { label: string }> = {
   carousel: { label: "كاروسيل" },
   post: { label: "بوست" },
   story: { label: "ستوري" },
-  long_video: { label: "فيديو طويل" },
+  long_video: { label: "فيديو يوتيوب" },
   live: { label: "بث مباشر" },
   email: { label: "بريد إلكتروني" },
 };
@@ -69,10 +69,12 @@ export const socialPostContentSteps: ContentStep[] = [
 ];
 
 export function contentWorkflowSteps(format: ContentFormat) {
+  if (format === "carousel") return ["design","publishing"] as ContentStep[];
   return format === "post" ? socialPostContentSteps : reelContentSteps;
 }
 
 export function contentRevisionSteps(format: ContentFormat) {
+  if (format === "carousel") return ["design"] as ContentStep[];
   return format === "post"
     ? (["caption", "design"] as ContentStep[])
     : (["recording", "editing", "thumbnail", "caption"] as ContentStep[]);

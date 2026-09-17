@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowRight, CheckCircle2, Eye, Link2, Pencil, Plus, Trash2 } from "lucide-react";
-import { contentAssetKindConfig, contentRevisionSteps, contentStepConfig, contentWorkflowSteps, type ContentAssetKind } from "../../lib/content";
+import { contentAssetKindConfig, contentRevisionSteps, contentFormatConfig, contentStepConfig, contentWorkflowSteps, type ContentAssetKind } from "../../lib/content";
 import { contentRequestText, latestDeliveries, safeWebLink } from "../../lib/content-presentation";
 import { contentSourceDeepLink, taskDeepLink, taskDeliveryDeepLink } from "../../lib/deep-links";
 import { formatDateTime } from "../../lib/date-time";
@@ -12,6 +12,7 @@ import { EmojiTextarea } from "../ui/EmojiTextarea";
 import { RequestText } from "../ui/RequestText";
 import { ContentProgress } from "./ContentLibrary";
 import { ContentPublishTimes } from "./ContentPublishTimes";
+import { CarouselImageGallery } from "./CarouselImages";
 
 type Props = {
   item: Tables<"content_items">; tasks: Tables<"tasks">[]; assets: Tables<"content_assets">[];
@@ -78,7 +79,7 @@ export function ContentRequestView({ item, tasks, assets, deliveries, revisions,
 
   return <article className="request-file" id={`content-${item.id}`}>
     <Button href={backHref} variant="ghost"><ArrowRight size={16} />{backHref === "/tasks" ? "العودة لمهامي" : "طلبات المحتوى"}</Button>
-    <header className="request-file-heading"><div><h1>{item.title}</h1><p>{item.format === "post" ? "منشور" : "ريل"}</p><ContentPublishTimes item={item}/></div>
+    <header className="request-file-heading"><div><h1>{item.title}</h1><p>{contentFormatConfig[item.format].label}</p><ContentPublishTimes item={item}/></div>
       {canEdit ? <Button type="button" variant="ghost" onClick={() => { setDraft(canonical); setEditVersion(item.version); setFormError(""); setEditing(!editing); }} disabled={working}><Pencil size={15} />{editing ? "إلغاء التعديل" : "تعديل الطلب"}</Button> : null}
     </header>
     <ContentProgress tasks={tasks} status={item.status} />
@@ -90,6 +91,7 @@ export function ContentRequestView({ item, tasks, assets, deliveries, revisions,
       {stageResults.filter(({ task, delivery }) => ["editing", "thumbnail", "design"].includes(task.content_step!) && !delivery?.result_url).map(({ task }) => <span key={task.id}>{contentStepConfig[task.content_step!].label}: {task.status === "done" ? "تم التسليم كنص" : "لم يُسلّم بعد"}</span>)}
       {canAdd ? <button className="text-button" type="button" onClick={() => { setAddingLink(!addingLink); setFormError(""); }}><Plus size={15} /> إضافة رابط</button> : null}
     </div>
+    {item.format==="carousel"?stageResults.filter(({delivery})=>delivery?.step==="design").map(({delivery})=><CarouselImageGallery key={delivery!.id} images={delivery!.result_images}/>):null}
     {addingLink && canAdd ? <form className="request-inline-form" onSubmit={addLink}>
       <label>اسم الرابط<input name="title" minLength={2} maxLength={160} required /></label>
       <label>الرابط<input name="url" type="url" dir="ltr" maxLength={2000} required /></label>

@@ -90,6 +90,30 @@ begin
   jsonb_build_object('platform','instagram','target_time',original_time,'revision',1,'expected_time',changed_time)));
  if (select count(*) from public.content_calendar_slots where plan_item_id=gid and scheduled_at=original_time and revision=2)<>2 then raise exception 'Group undo failed'; end if;
  if (select count(*) from public.tasks where organization_id=org)<>before_count then raise exception 'Group created tasks'; end if;
+ -- Manual completion: atomic grouped updates, unchanged schedules and tasks.
+ perform public.set_content_calendar_completion('plan',gid,jsonb_build_array(
+  jsonb_build_object('platform','facebook','revision',2,'expected_time',original_time),
+  jsonb_build_object('platform','instagram','revision',2,'expected_time',original_time)),true);
+ if (select count(*) from public.content_calendar_slots where plan_item_id=gid and completed_at is not null and completed_by=actor and scheduled_at=original_time and revision=3)<>2 then raise exception 'Completion failed'; end if;
+ begin
+  perform public.set_content_calendar_completion('plan',gid,jsonb_build_array(
+   jsonb_build_object('platform','facebook','revision',3,'expected_time',original_time),
+   jsonb_build_object('platform','instagram','revision',99,'expected_time',original_time)),false);
+  raise exception 'Stale completion allowed';
+ exception when others then if sqlerrm<>'Calendar revision changed; refresh and retry' then raise; end if; end;
+ if (select count(*) from public.content_calendar_slots where plan_item_id=gid and completed_at is not null and revision=3)<>2 then raise exception 'Partial completion commit'; end if;
+ perform public.set_content_calendar_completion('plan',gid,jsonb_build_array(
+  jsonb_build_object('platform','facebook','revision',3,'expected_time',original_time),
+  jsonb_build_object('platform','instagram','revision',3,'expected_time',original_time)),false);
+ if exists(select 1 from public.content_calendar_slots where plan_item_id=gid and (completed_at is not null or completed_by is not null or revision<>4)) then raise exception 'Completion undo failed'; end if;
+ if (select to_jsonb(t) from public.tasks t where id=tid) is distinct from before_task then raise exception 'Completion changed task'; end if;
+ if (select status from public.content_plan_items where id=gid)<>'planned' then raise exception 'Completion changed publication status'; end if;
+ perform set_config('request.jwt.claim.sub',gen_random_uuid()::text,true);
+ begin
+  perform public.set_content_calendar_completion('plan',gid,jsonb_build_array(jsonb_build_object('platform','facebook','revision',4,'expected_time',original_time)),true);
+  raise exception 'Outsider completion allowed';
+ exception when others then if sqlerrm not in ('Calendar permission denied','Calendar access denied') then raise; end if; end;
+ perform set_config('request.jwt.claim.sub',actor::text,true);
  update public.content_plan_items set content_item_id=cid where id=pid;
  if (select scheduled_at from public.content_calendar_slots where content_item_id=cid and platform='instagram')<>changed_time then raise exception 'Link overwrote canonical appointment'; end if;
  begin
@@ -108,6 +132,10 @@ begin
    begin
      perform public.move_content_calendar_slot('content',cid,'instagram',original_time,4,changed_time);
      raise exception 'Viewer moved schedule';
+   exception when others then if sqlerrm<>'Calendar permission denied' then raise; end if; end;
+   begin
+     perform public.set_content_calendar_completion('plan',gid,jsonb_build_array(jsonb_build_object('platform','facebook','revision',4,'expected_time',original_time)),true);
+     raise exception 'Viewer completion allowed';
    exception when others then if sqlerrm<>'Calendar permission denied' then raise; end if; end;
    execute 'reset role';
  end if;

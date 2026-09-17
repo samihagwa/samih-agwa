@@ -35,6 +35,8 @@ import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 import { TaskAttentionControls } from "./TaskAttentionControls";
+import { CarouselImageFields,CarouselImageGallery } from "../content/CarouselImages";
+import { carouselImagesError } from "../../lib/carousel-images";
 
 type Task = Tables<"tasks">;
 type TaskEvent = Tables<"task_events">;
@@ -46,7 +48,7 @@ type ContentAsset = Tables<"content_assets">;
 type ContentStepDelivery = Tables<"content_step_deliveries">;
 type ContentRequest = Pick<
   Tables<"content_items">,
-  "id" | "version" | "intake_request" | "intake_source_url" | "caption_brief" | "editing_brief" | "thumbnail_brief" | "copy_brief" | "design_brief"
+  "id" | "format" | "version" | "intake_request" | "intake_source_url" | "caption_brief" | "editing_brief" | "thumbnail_brief" | "copy_brief" | "design_brief"
 >;
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
@@ -283,7 +285,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
           ? supabase.from("content_step_deliveries").select("*").eq("content_item_id", task.content_item_id).order("submitted_at", { ascending: false })
           : Promise.resolve({ data: [] as ContentStepDelivery[], error: null }),
         task.content_item_id
-          ? supabase.from("content_items").select("id, version, intake_request, intake_source_url, caption_brief, editing_brief, thumbnail_brief, copy_brief, design_brief").eq("id", task.content_item_id).maybeSingle()
+          ? supabase.from("content_items").select("id, format, version, intake_request, intake_source_url, caption_brief, editing_brief, thumbnail_brief, copy_brief, design_brief").eq("id", task.content_item_id).maybeSingle()
           : Promise.resolve({ data: null as ContentRequest | null, error: null }),
         supabase.from("task_attention").select("*").eq("task_id", task.id).maybeSingle(),
       ]);
@@ -542,7 +544,9 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     if (!["in_progress", "done"].includes(workspace.task.status)) { setError("لا يمكن تسليم هذه المهمة في حالتها الحالية."); return; }
     const form = new FormData(event.currentTarget);
     const resultNote = String(form.get("result_note") ?? "").trim();
-    const resultUrl = String(form.get("result_url") ?? "").trim();
+    const images=workspace.contentRequest?.format==="carousel"&&workspace.task.content_step==="design"?form.getAll("carousel_image").map(value=>String(value).trim()):undefined;
+    if(images){const imageError=carouselImagesError(images);if(imageError){setError(imageError);return;}}
+    const resultUrl = images?.[0] ?? String(form.get("result_url") ?? "").trim();
     if (!resultNote && !resultUrl) { setError("أضف رابط التسليم أو اكتب ملاحظة التسليم."); return; }
     if (resultNote && resultNote.length < 3) { setError("ملاحظة التسليم لازم تكون 3 حروف على الأقل."); return; }
     if (resultUrl && !/^https?:\/\/\S+$/i.test(resultUrl)) { setError("اكتب رابط تسليم صحيح يبدأ بـ http:// أو https://."); return; }
@@ -564,7 +568,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         ? "تم تحديث التسليم داخل المهمة."
         : workspace.task.content_step === "publishing"
           ? "تم تأكيد النشر وحفظ الرابط."
-          : "تم حفظ التسليم وإغلاق المهمة وفتح الخطوة التالية.");
+          : "تم حفظ التسليم وإغلاق المهمة وفتح الخطوة التالية.", images);
       return;
     }
 
@@ -596,7 +600,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
     setWorking(false);
   }
 
-  async function submitContentDelivery(resultNote: string, resultUrl: string, successMessage: string) {
+  async function submitContentDelivery(resultNote: string, resultUrl: string, successMessage: string, images?: string[]) {
     if (!workspace?.task.content_item_id || !workspace.task.content_step || !session) return;
     setWorking(true); setError(null); setNotice(null);
     const { error: submissionError } = await getSupabaseBrowserClient().functions.invoke("content-commands", {
@@ -606,6 +610,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
         step: workspace.task.content_step,
         result_note: resultNote,
         result_url: resultUrl,
+        ...(images?{result_images:images,expected_task_version:deliverySnapshot?.taskVersion,expected_delivery_version:deliverySnapshot?.deliveryVersion}:{}),
       },
     });
     if (submissionError) {
@@ -782,12 +787,13 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
               </ul>
             </div> : null}
 
+            {workspace.contentRequest?.format==="carousel"?workspace.deliveries.filter(delivery=>delivery.step==="design").map(delivery=><CarouselImageGallery key={delivery.id} images={delivery.result_images}/>):null}
             {(currentDelivery || showDeliveryForm) && (task.content_item_id || standaloneTask) ? <div id="delivery" ref={deliverySection} className={`task-current-delivery${currentDelivery ? " has-delivery" : ""}`} tabIndex={-1}>
               <header><div><PackageCheck size={16} /><div><strong>تسليم هذه المهمة</strong><small>{currentDelivery ? <>إصدار {currentDelivery.version} · <bdi dir="ltr">{formatDateTime(currentDelivery.submitted_at)}</bdi></> : "النتيجة النهائية التي سلّمها منفّذ هذه الخطوة"}</small></div></div>{currentDelivery ? <StatusBadge tone="success">تم التسليم</StatusBadge> : <StatusBadge tone="neutral">في الانتظار</StatusBadge>}</header>
               {currentDelivery ? <div className="task-current-delivery-body"><div>{currentDelivery.result_note ? <p>{currentDelivery.result_note}</p> : <p>تم التسليم بدون ملاحظة مكتوبة.</p>}<small>بواسطة {peopleById.get(currentDelivery.submitted_by)?.name ?? "عضو فريق"}</small></div>{currentDelivery.result_url ? <a href={currentDelivery.result_url} target="_blank" rel="noreferrer"><span>{task.content_step === "publishing" ? "فتح المنشور" : "فتح ملف التسليم"}<small dir="ltr">{resourceHost(currentDelivery.result_url)}</small></span><ExternalLink size={15} /></a> : null}</div> : null}
               {showDeliveryForm ? <form className="task-delivery-compose" key={`delivery-${deliverySnapshot?.taskVersion ?? 0}-${deliverySnapshot?.deliveryVersion ?? 0}`} onSubmit={saveTaskDelivery}>
                 {deliveryDraftStale ? <p className="form-notice error" role="alert">وصل تعديل جديد أثناء الكتابة. اقفل النموذج وراجع أحدث تعليمات أو تسليم قبل الحفظ.</p> : null}
-                <label><span>{task.content_step === "publishing" ? "رابط المنشور" : task.content_step === "recording" ? "رابط المادة الخام" : "رابط ملف التسليم"}</span><input name="result_url" type="url" inputMode="url" dir="ltr" maxLength={2000} required={Boolean(task.content_step && contentStepsRequiringResultUrl.has(task.content_step))} defaultValue={currentDelivery?.result_url ?? ""} placeholder={task.content_step === "publishing" ? "https://instagram.com/p/..." : "https://drive.google.com/..."} disabled={working || deliveryDraftStale} /></label>
+                {workspace.contentRequest?.format==="carousel"&&task.content_step==="design"?<CarouselImageFields initial={currentDelivery&&"result_images" in currentDelivery?currentDelivery.result_images:[]} disabled={working||deliveryDraftStale}/>:<label><span>{task.content_step === "publishing" ? "رابط المنشور" : task.content_step === "recording" ? "رابط المادة الخام" : "رابط ملف التسليم"}</span><input name="result_url" type="url" inputMode="url" dir="ltr" maxLength={2000} required={Boolean(task.content_step && contentStepsRequiringResultUrl.has(task.content_step))} defaultValue={currentDelivery?.result_url ?? ""} placeholder={task.content_step === "publishing" ? "https://instagram.com/p/..." : "https://drive.google.com/..."} disabled={working || deliveryDraftStale} /></label>}
                 <label><span>{task.content_step === "publishing" ? "الكابشن النهائي والهاشتاجات" : task.content_step === "recording" ? "الكابشن النهائي — اختياري الآن" : "ملاحظة التسليم — اختيارية عند وجود رابط"}</span><textarea name="result_note" rows={task.content_step === "publishing" || task.content_step === "recording" ? 6 : 3} minLength={3} maxLength={10000} required={task.content_step === "publishing"} defaultValue={currentDelivery?.result_note === "تم إرسال المادة الخام على Telegram." ? "" : currentDelivery?.result_note ?? (task.content_step === "publishing" ? workspace.contentRequest?.caption_brief : "") ?? ""} placeholder={task.content_step === "publishing" ? "اكتب النص الذي سيُنشر كما هو مع الهاشتاجات." : task.content_step === "recording" ? "لو الكابشن جاهز اكتبه هنا؛ وإن لم يكن جاهزًا سيكمله مسؤول النشر داخل مهمته." : "اكتب مكان النسخة النهائية أو أي ملاحظة مهمة لطالب المهمة."} disabled={working || deliveryDraftStale} />{task.content_step === "recording" ? <small>لن تُنشأ مهمة كابشن منفصلة. النص الذي تحفظه هنا يظهر تلقائيًا لمسؤول النشر.</small> : null}</label>
                 <div className="form-actions"><Button type="submit" disabled={working || deliveryDraftStale}>{working ? <LoaderCircle className="spin" size={14} /> : <PackageCheck size={14} />} {currentDelivery && task.status === "done" ? "تحديث التسليم" : task.content_step === "publishing" ? "تأكيد تم النشر" : task.requires_review ? "حفظ وإرسال للمراجعة" : "تسليم وإغلاق المهمة"}</Button><button className="text-button" type="button" disabled={working} onClick={closeDeliveryForm}>{deliveryDraftStale ? "إغلاق ومراجعة التحديث" : "إلغاء"}</button><small>{task.status === "done" ? "يمكنك تصحيح الرابط أو الملاحظة بدون إعادة فتح المهمة." : task.requires_review ? "الحفظ يرسل النتيجة للمراجعة في نفس العملية." : "الحفظ يغلق المهمة في نفس العملية، والخانة تفضل موجودة حتى بعد اكتمال المهمة."}</small></div>
               </form> : null}

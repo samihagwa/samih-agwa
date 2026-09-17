@@ -149,11 +149,27 @@ export function ContentCalendarWorkspace() {
     }catch{setError("لم نحفظ التعديل. قد تكون التفاصيل اتغيّرت؛ حدّث التقويم وحاول مجددًا. النص الذي كتبته ما زال هنا.");return false;}
     finally{busy.current=false;setWorking(false);}
   }
+  async function complete(entry: CalendarEntry, completed: boolean) {
+    if (busy.current || !canEdit || !session || !entry.editable) return false;
+    busy.current=true;setWorking(true);setError(null);setNotice("جارٍ حفظ علامة الإتمام…");
+    try {
+      const result=await getSupabaseBrowserClient().rpc("set_content_calendar_completion", {
+        source_kind:entry.source,source_id:entry.sourceId,completed,
+        changes:(entry.members??[entry]).map(member=>({platform:member.platform,revision:member.revision,expected_time:member.scheduledAt})),
+      });
+      if(result.error)throw result.error;
+      const slots=result.data;
+      setWorkspace(current=>current?.membership.user_id===session.user.id?{...current,slots:[...current.slots.filter(row=>!slots.some(slot=>slot.id===row.id)),...slots]}:current);
+      setUndo(null);setNotice(completed?"تم حفظ علامة الإتمام. مهام التنفيذ وحالة النشر لم تتغير.":"تم إلغاء علامة الإتمام.");
+      await loadWorkspace(session);return true;
+    }catch{setError("تعذّر حفظ علامة الإتمام. حدّث التقويم وحاول مجددًا.");setNotice(null);await loadWorkspace(session);return false;}
+    finally{busy.current=false;setWorking(false);}
+  }
   if(!configured)return <p className="form-notice">إعداد الاتصال بمساحة العمل مطلوب.</p>;
   if(loading&&!workspace)return <p role="status">جارٍ تحميل تقويم المحتوى…</p>;
   if(!workspace)return <div><p role="alert">{error??"يلزم تسجيل الدخول بحساب فريق فعّال."}</p><Button href="/login">تسجيل الدخول</Button>{session?<Button onClick={refresh}>إعادة المحاولة</Button>:null}</div>;
   return <>
-    <ContentCalendar onEditDraft={editDraft} entries={entries} canEdit={canEdit} working={working} error={error} notice={notice} details={selected ? details?.key===selected.key ? details.data : {loading:true,progress:0,done:0,total:0,current:"",owner:"",fileUrl:null,requestUrl:""} : null} selectedKey={selectedKey} undoAvailable={Boolean(undo)} onSelect={setSelectedKey} onMove={move} onUndo={()=>{if(undo)void move(undo.entry,null,undo.times);}} onRefresh={refresh} onCreate={()=>{createRequest.current=crypto.randomUUID();setCreateFormKey((value)=>value+1);setCreateError("");setCreateOpen(true);}}/>
+    <ContentCalendar onComplete={complete} onEditDraft={editDraft} entries={entries} canEdit={canEdit} working={working} error={error} notice={notice} details={selected ? details?.key===selected.key ? details.data : {loading:true,progress:0,done:0,total:0,current:"",owner:"",fileUrl:null,requestUrl:""} : null} selectedKey={selectedKey} undoAvailable={Boolean(undo)} onSelect={setSelectedKey} onMove={move} onUndo={()=>{if(undo)void move(undo.entry,null,undo.times);}} onRefresh={refresh} onCreate={()=>{createRequest.current=crypto.randomUUID();setCreateFormKey((value)=>value+1);setCreateError("");setCreateOpen(true);}}/>
     <dialog ref={dialog} className="calendar-create-dialog" onCancel={(event)=>{if(working)event.preventDefault();else setCreateOpen(false);}} onClose={()=>setCreateOpen(false)}><form key={createFormKey} onSubmit={create}><header><h2>إضافة محتوى للتقويم</h2><button className="icon-button" type="button" disabled={working} aria-label="إغلاق" onClick={()=>setCreateOpen(false)}><X size={18}/></button></header><p>الطلبات الموجودة تظهر هنا تلقائيًا. أضف هنا فكرة جديدة وموعدها فقط.</p><label>عنوان المحتوى<input name="title" minLength={3} maxLength={180} required/></label><div className="calendar-form-pair"><label>نوع المحتوى<select name="kind">{contentPlanItemKinds.map((kind)=><option key={kind} value={kind}>{contentPlanItemKindConfig[kind].label}</option>)}</select></label><label>يوم النشر<DateInput name="time" type="date" defaultValue={initialTime} required/></label></div><label>المطلوب / الفكرة<textarea name="brief" minLength={5} maxLength={2000} rows={3} required placeholder="وصف بسيط للمحتوى المقترح"/></label><fieldset><legend>المنصات</legend><div className="calendar-platform-checkboxes">{platformOptions.map((platform)=><label key={platform}><input type="checkbox" name="platforms" value={platform} defaultChecked={platform==="instagram"}/>{contentPlatformLabel(platform)}</label>)}</div></fieldset><details className="calendar-optional-plan"><summary>ربط بخطة موجودة — اختياري</summary><label>الخطة<select name="plan"><option value="">بدون خطة محددة</option>{workspace.plans.filter((plan)=>plan.status!=="archived").map((plan)=><option key={plan.id} value={plan.id}>{plan.offer||plan.name} ({plan.starts_on} — {plan.ends_on})</option>)}</select></label></details>{createError?<p className="form-notice error" role="alert">{createError}</p>:null}<div className="calendar-dialog-actions"><Button type="submit" disabled={working}>{working?"جارٍ الحفظ…":"إضافة للتقويم"}</Button><Button variant="ghost" type="button" disabled={working} onClick={()=>setCreateOpen(false)}>إلغاء</Button></div><a className="text-button" href="/content?create=reel">عندي المادة الخام وأريد إنشاء طلب تنفيذ</a></form></dialog>
   </>;
 }

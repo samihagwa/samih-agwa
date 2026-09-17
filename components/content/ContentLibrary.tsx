@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { ArrowLeft, Search, SlidersHorizontal } from "lucide-react";
 import type { Tables } from "../../lib/supabase/database.types";
-import { contentStepConfig } from "../../lib/content";
+import { contentFormatConfig, contentStepConfig } from "../../lib/content";
 import { contentDeepLink } from "../../lib/deep-links";
 import { formatDateTime } from "../../lib/date-time";
 import { contentProgress, filterContent } from "../../lib/content-presentation";
@@ -32,7 +32,7 @@ export function ContentLibrary({ items, tasks, view }: { items: Tables<"content_
     </div>
     <div className="request-table-wrap"><table className="request-table"><thead><tr><th>الطلب</th><th>التقدم</th><th>الخطوة الحالية</th><th>موعد النشر</th><th><span className="sr-only">فتح الطلب</span></th></tr></thead>
       <tbody>{filtered.slice(start, start + 15).map((item) => <tr key={item.id}>
-        <td><a className="request-title" href={contentDeepLink(item.id)}>{item.title}</a><small>{item.format === "post" ? "منشور" : "ريل"} · {item.platforms.join(" · ")}</small></td>
+        <td><a className="request-title" href={contentDeepLink(item.id)}>{item.title}</a><small>{contentFormatConfig[item.format].label} · {item.platforms.join(" · ")}</small></td>
         <td><ContentProgress tasks={tasks.get(item.id) ?? []} status={item.status} compact /></td>
         <td className="request-stage">{contentProgress(tasks.get(item.id) ?? [], item.status).current}</td>
         <td><time dateTime={item.publish_at}>{formatDateTime(item.publish_at)}</time></td>

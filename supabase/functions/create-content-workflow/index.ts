@@ -80,8 +80,8 @@ function isWebUrl(value: string) {
   }
 }
 
-function directRawMaterials(value: unknown): DirectRawMaterial[] | null {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 10) return null;
+function directRawMaterials(value: unknown, allowEmpty = false): DirectRawMaterial[] | null {
+  if (!Array.isArray(value) || value.length < (allowEmpty ? 0 : 1) || value.length > 10) return null;
 
   const materials: DirectRawMaterial[] = [];
   const urls = new Set<string>();
@@ -182,7 +182,11 @@ export default {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(body.request_id))) {
         return jsonResponse({ message: "معرّف الطلب غير صالح. حدّث الصفحة ثم حاول مرة أخرى." }, 400);
       }
-      const materials = directRawMaterials(body.raw_materials);
+      const requestFormat = body.request_format ?? "reel";
+      if (!["reel","long_video","carousel"].includes(String(requestFormat))) return jsonResponse({message:"نوع الطلب غير متاح."},400);
+      const requestPlatforms=body.request_platforms ?? [requestFormat==="long_video"?"youtube":"instagram"];
+      if (!Array.isArray(requestPlatforms) || !requestPlatforms.length || requestPlatforms.length>7 || requestPlatforms.some(p=>!["instagram","facebook","youtube","tiktok","telegram","x","linkedin"].includes(String(p)))) return jsonResponse({message:"اختر منصات صحيحة."},400);
+      const materials = directRawMaterials(body.raw_materials, requestFormat==="carousel");
       if (!materials) {
         return jsonResponse({
           message: "أضف من رابط إلى 10 روابط ويب صالحة للمادة الخام، وحدد نوع كل رابط بدون تكرار.",
@@ -195,7 +199,7 @@ export default {
       }
 
       const { data: contentId, error } = await context.supabaseAdmin.rpc(
-        "create_direct_reel_workflow_v2",
+        requestFormat === "reel" ? "create_direct_reel_workflow_v2" : "create_content_request_workflow",
         {
           target_user_id: context.userClaims.id,
           target_organization_id: body.target_organization_id,
@@ -208,6 +212,7 @@ export default {
           thumbnail_owner_id: body.thumbnail_owner_id,
           publishing_owner_id: body.publishing_owner_id,
           target_brand_article_ids: simpleBrandArticleIds,
+          ...(requestFormat==="reel"?{}:{request_format:requestFormat,request_platforms:requestPlatforms}),
         },
       );
 

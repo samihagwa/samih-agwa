@@ -15,7 +15,7 @@ export type Database = {
   public: {
     Tables: {
       content_calendar_slots: {
-        Row: { id: string; organization_id: string; content_item_id: string | null; plan_item_id: string | null; platform: string; scheduled_at: string | null; revision: number; updated_at: string }
+        Row: { id: string; organization_id: string; content_item_id: string | null; plan_item_id: string | null; platform: string; scheduled_at: string | null; revision: number; updated_at: string; completed_at: string | null; completed_by: string | null }
         Insert: { id?: string; organization_id: string; content_item_id?: string | null; plan_item_id?: string | null; platform: string; scheduled_at?: string | null; revision?: number; updated_at?: string }
         Update: { scheduled_at?: string | null; revision?: number; updated_at?: string }
         Relationships: []
@@ -1208,6 +1208,7 @@ export type Database = {
       }
       content_step_deliveries: {
         Row: {
+          result_images: Json
           content_item_id: string
           id: string
           organization_id: string
@@ -1221,6 +1222,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          result_images?: Json
           content_item_id: string
           id?: string
           organization_id: string
@@ -1234,6 +1236,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          result_images?: Json
           content_item_id?: string
           id?: string
           organization_id?: string
@@ -4711,6 +4714,10 @@ export type Database = {
     Functions: {
       move_content_calendar_group: {
         Args: { source_kind: string; source_id: string; changes: Json }
+        Returns: Database["public"]["Tables"]["content_calendar_slots"]["Row"][]
+      }
+      set_content_calendar_completion: {
+        Args: { source_kind: string; source_id: string; changes: Json; completed: boolean }
         Returns: Database["public"]["Tables"]["content_calendar_slots"]["Row"][]
       }
       move_content_calendar_slot: {
