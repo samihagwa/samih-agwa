@@ -33,6 +33,14 @@ export function calendarInstant(wall: string) {
   return candidates.find((candidate) => calendarWall(candidate) === wall)?.toISOString() ?? null;
 }
 export function calendarDay(value: string | Date) { return calendarWall(value).slice(0, 10); }
+// The calendar is day-only. Keep existing clock metadata for compatibility with
+// linked publishing records, but never ask the team to commit to an hour.
+export function calendarDateInstant(day: string, previous: string | null = null) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  if (previous && calendarDay(previous) === day) return new Date(previous).toISOString();
+  const clock = previous ? calendarWall(previous).slice(11, 16) : "12:00";
+  return calendarInstant(`${day}T${clock}`) ?? calendarInstant(`${day}T12:00`);
+}
 export function addCalendarDays(day: string, count: number) {
   const date = new Date(`${day}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + count); return date.toISOString().slice(0, 10);
 }
@@ -45,39 +53,6 @@ export function calendarMonthDays(day: string) {
 export function calendarDateLabel(day: string, options: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" }) {
   return new Intl.DateTimeFormat("ar-EG", { ...options, timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
 }
-export function calendarTime(value: string) { return new Intl.DateTimeFormat("ar-EG", { timeZone: CALENDAR_ZONE, hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
-export function calendarMinutes(value: string) { const wall = calendarWall(value); return Number(wall.slice(11, 13)) * 60 + Number(wall.slice(14, 16)); }
-export function calendarDropTime(day: string, minutes: number) {
-  const snapped = Math.max(0, Math.min(1425, Math.round(minutes / 15) * 15));
-  return calendarInstant(`${day}T${String(Math.floor(snapped / 60)).padStart(2, "0")}:${String(snapped % 60).padStart(2, "0")}`);
-}
-
-// Connected overlap groups use one column count, so staggered times cannot
-// accidentally paint cards over one another.
-export function calendarLanes(entries: CalendarEntry[]) {
-  const ordered = [...entries].sort((a,b)=>calendarMinutes(a.scheduledAt!)-calendarMinutes(b.scheduledAt!));
-  const result = new Map<string,{lane:number;count:number}>();
-  let group: CalendarEntry[] = [], end = -1;
-  const flush = () => {
-    const lanes: number[] = [];
-    const assigned = group.map((entry) => {
-      const start = calendarMinutes(entry.scheduledAt!);
-      let lane = lanes.findIndex((finish) => finish <= start);
-      if(lane < 0) lane = lanes.length;
-      lanes[lane] = start + 135;
-      return {entry,lane};
-    });
-    assigned.forEach(({entry,lane}) => result.set(entry.key,{lane,count:lanes.length}));
-    group=[];
-  };
-  for(const entry of ordered) {
-    const start=calendarMinutes(entry.scheduledAt!);
-    if(start>=end)flush();
-    group.push(entry);end=Math.max(end,start+135);
-  }
-  flush();return result;
-}
-
 export function calendarEntries(contents: Content[], items: PlanItem[], plans: Plan[], slots: CalendarSlot[]): CalendarEntry[] {
   const planById = new Map(plans.map((plan) => [plan.id, plan]));
   const linked = new Map(items.filter((item) => item.content_item_id).map((item) => [item.content_item_id!, item]));
@@ -99,7 +74,7 @@ export function calendarEntries(contents: Content[], items: PlanItem[], plans: P
   };
   contents.forEach((content) => append("content", content, linked.get(content.id)));
   items.filter((item) => !item.content_item_id).forEach((item) => append("plan", item, item));
-  return result.sort((a, b) => (a.scheduledAt ?? "9999").localeCompare(b.scheduledAt ?? "9999") || a.key.localeCompare(b.key));
+  return result.sort((a, b) => (a.scheduledAt ? calendarDay(a.scheduledAt) : "9999").localeCompare(b.scheduledAt ? calendarDay(b.scheduledAt) : "9999") || a.title.localeCompare(b.title, "ar") || a.key.localeCompare(b.key));
 }
 export function calendarState(entry: CalendarEntry) {
   if (entry.status === "published") return { label: "منشور", tone: "success" as const };
@@ -113,6 +88,6 @@ export function calendarError(error: unknown) {
   if (/period/i.test(message)) return "هذا الموعد خارج فترة الخطة. عدّل فترة الخطة أولًا من إدارة الخطط.";
   if (/published|closed/i.test(message)) return "المحتوى منشور أو مغلق؛ لا يمكن نقل موعده.";
   if (/permission|denied|authenticated|access/i.test(message)) return "حسابك غير مسموح له بتعديل مواعيد هذا المحتوى.";
-  if (/time|date/i.test(message)) return "اختار موعدًا صالحًا بتوقيت القاهرة.";
+  if (/time|date/i.test(message)) return "اختار يومًا صالحًا للنشر.";
   return "تعذّر حفظ الموعد. لم ننقل الكارت؛ جرّب تحديث التقويم.";
 }

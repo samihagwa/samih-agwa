@@ -21,9 +21,13 @@ test("Saturday week and 42-cell month include boundaries",()=>{
   assert.equal(c.calendarMonthDays("2026-09-17").length,42);
   assert.equal(c.addCalendarDays("2026-12-31",1),"2027-01-01");
 });
-test("drop uses 15-minute grid without moving outside the day",()=>{
-  assert.equal(c.calendarWall(c.calendarDropTime("2026-09-17",608)),"2026-09-17T10:15");
-  assert.equal(c.calendarWall(c.calendarDropTime("2026-09-17",1900)),"2026-09-17T23:45");
+test("day-only moves preserve the date across DST and keep legacy clock metadata",()=>{
+  assert.equal(c.calendarDay(c.calendarDateInstant("2026-09-18","2026-09-17T15:00:00Z")),"2026-09-18");
+  assert.equal(c.calendarWall(c.calendarDateInstant("2026-09-18","2026-09-17T15:00:00Z")),"2026-09-18T18:00");
+  assert.equal(c.calendarDateInstant("2026-02-30"),null);
+  assert.equal(c.calendarDateInstant("2026-09-18T20:00"),null);
+  assert.equal(c.calendarDay(c.calendarDateInstant("2026-04-24","2026-04-23T22:30:00Z")),"2026-04-24");
+  assert.equal(c.calendarDateInstant("2026-09-17","2026-09-17T15:00:12Z"),"2026-09-17T15:00:12.000Z");
 });
 test("one request, per-platform independent schedule, no duplicate linked plan row",()=>{
   const slots=[{content_item_id:"c",platform:"instagram",scheduled_at:null,revision:2}];
@@ -38,16 +42,11 @@ test("cancelled or archived requests are absent; published cards are immovable",
   assert.equal(c.calendarEntries([content],[linked],[{...plan,status:"archived"}],[]).length,0);
   assert.ok(c.calendarEntries([{...content,status:"published"}],[],[],[]).every(e=>!e.editable));
 });
-test("overlap lanes do not collide for staggered appointments",()=>{
-  const entries=[0,60,140].map((minute,index)=>({key:String(index),scheduledAt:c.calendarDropTime("2026-09-17",600+minute)}));
-  const lanes=c.calendarLanes(entries);
-  assert.equal(lanes.get("0").count,2);
-  assert.notEqual(lanes.get("0").lane,lanes.get("1").lane);
-  assert.notEqual(lanes.get("1").lane,lanes.get("2").lane);
-});
-test("calendar exposes mobile/keyboard alternative, undo and Cairo time",async()=>{
+test("calendar exposes day-only drag, mobile alternative and undo without hourly gaps",async()=>{
   const ui=await readFile(new URL("../components/planning/ContentCalendar.tsx",import.meta.url),"utf8");
-  for(const contract of ["draggable={editable}","onPointerMove={touchMove}","تغيير الموعد","تراجع عن النقل","calendar-mobile-agenda","توقيت القاهرة","aria-valuenow","datetime-local"])assert.ok(ui.includes(contract),contract);
+  for(const contract of ["draggable={editable}","onPointerMove={touchMove}","تغيير الموعد","تراجع عن النقل","calendar-mobile-agenda","calendar-week-board","aria-valuenow",'type="date"'])assert.ok(ui.includes(contract),contract);
+  assert.doesNotMatch(ui,/datetime-local|calendar-time-grid|HOUR_HEIGHT|calendarTime\(/);
+  for(const file of ["../components/planning/ContentCalendarWorkspace.tsx","../components/content/ContentPublishTimes.tsx"]){const code=await readFile(new URL(file,import.meta.url),"utf8");assert.doesNotMatch(code,/datetime-local|calendarTime\(/);}
 });
 test("calendar SQL protects scopes, optimistic locking and never reschedules tasks",async()=>{
   const sql=await readFile(new URL("../supabase/migrations/20260916234611_content_calendar_slots.sql",import.meta.url),"utf8");

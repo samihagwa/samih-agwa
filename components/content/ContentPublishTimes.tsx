@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { calendarDateLabel, calendarDay, calendarTime, type CalendarSlot } from "../../lib/content-calendar";
+import { calendarDateLabel, calendarDay, type CalendarSlot } from "../../lib/content-calendar";
 import { contentPlatformLabel } from "../../lib/content";
 import { getSupabaseBrowserClient } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
@@ -30,6 +30,6 @@ export function ContentPublishTimes({ item }: { item: Tables<"content_items"> })
   if(!slots)return <p className="request-publish-times" role="status">جارٍ تحميل مواعيد النشر…</p>;
   return <div className="request-publish-times" aria-label="مواعيد النشر حسب المنصة">{[...new Set(item.platforms.map((platform)=>platform.trim().toLowerCase()))].map((platform)=>{
     const slot=slots.find((row)=>row.platform===platform);const time=slot?slot.scheduled_at:item.publish_at;
-    return <span key={platform}><strong>{contentPlatformLabel(platform)}</strong> · {time?`${calendarDateLabel(calendarDay(time))} — ${calendarTime(time)}`:"بدون موعد"}</span>;
+    return <span key={platform}><strong>{contentPlatformLabel(platform)}</strong> · {time?calendarDateLabel(calendarDay(time)):"بدون موعد"}</span>;
   })}</div>;
 }

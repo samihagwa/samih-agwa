@@ -3,7 +3,7 @@
 import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { calendarEntries, calendarError, calendarInstant, calendarWall, type CalendarEntry, type CalendarSlot } from "../../lib/content-calendar";
+import { calendarEntries, calendarError, calendarDateInstant, calendarDay, type CalendarEntry, type CalendarSlot } from "../../lib/content-calendar";
 import { contentProgress, latestDeliveries, safeWebLink } from "../../lib/content-presentation";
 import { contentPlatformLabel } from "../../lib/content";
 import { contentPlanItemKinds, contentPlanItemKindConfig, type ContentPlanItemKind } from "../../lib/planning";
@@ -34,7 +34,7 @@ export function ContentCalendarWorkspace() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createFormKey,setCreateFormKey] = useState(0);
-  const [initialTime] = useState(() => calendarWall(new Date(Date.now()+86400000)));
+  const [initialTime] = useState(() => calendarDay(new Date(Date.now()+86400000)));
   const generation = useRef(0);
   const busy = useRef(false);
   const createRequest = useRef("");
@@ -121,9 +121,9 @@ export function ContentCalendarWorkspace() {
   }
   async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if(!workspace||!session||busy.current)return;
-    const form=new FormData(event.currentTarget); const time=calendarInstant(String(form.get("time")));
+    const form=new FormData(event.currentTarget); const time=calendarDateInstant(String(form.get("time")));
     const platforms=form.getAll("platforms").map(String);
-    if(!time||!platforms.length){setCreateError("حدد موعدًا صالحًا ومنصة واحدة على الأقل.");return;}
+    if(!time||!platforms.length){setCreateError("حدد يوم النشر ومنصة واحدة على الأقل.");return;}
     busy.current=true;setWorking(true);setCreateError("");setError(null);setNotice(null);
     try {
       const result=await getSupabaseBrowserClient().rpc("create_calendar_draft",{target_org:workspace.membership.organization_id,request_id:createRequest.current,item_title:String(form.get("title")).trim(),item_kind:String(form.get("kind")) as ContentPlanItemKind,item_brief:String(form.get("brief")).trim(),item_platforms:platforms,item_time:time,target_plan:String(form.get("plan"))||null});
@@ -137,6 +137,6 @@ export function ContentCalendarWorkspace() {
   if(!workspace)return <div><p role="alert">{error??"يلزم تسجيل الدخول بحساب فريق فعّال."}</p><Button href="/login">تسجيل الدخول</Button>{session?<Button onClick={refresh}>إعادة المحاولة</Button>:null}</div>;
   return <>
     <ContentCalendar entries={entries} canEdit={canEdit} working={working} error={error} notice={notice} details={selected ? details?.key===selected.key ? details.data : {loading:true,progress:0,done:0,total:0,current:"",owner:"",fileUrl:null,requestUrl:""} : null} selectedKey={selectedKey} undoAvailable={Boolean(undo)} onSelect={setSelectedKey} onMove={move} onUndo={()=>{if(undo)void move(undo.entry,undo.time,true);}} onRefresh={refresh} onCreate={()=>{createRequest.current=crypto.randomUUID();setCreateFormKey((value)=>value+1);setCreateError("");setCreateOpen(true);}}/>
-    <dialog ref={dialog} className="calendar-create-dialog" onCancel={(event)=>{if(working)event.preventDefault();else setCreateOpen(false);}} onClose={()=>setCreateOpen(false)}><form key={createFormKey} onSubmit={create}><header><h2>إضافة محتوى للتقويم</h2><button className="icon-button" type="button" disabled={working} aria-label="إغلاق" onClick={()=>setCreateOpen(false)}><X size={18}/></button></header><p>الطلبات الموجودة تظهر هنا تلقائيًا. أضف هنا فكرة جديدة وموعدها فقط.</p><label>عنوان المحتوى<input name="title" minLength={3} maxLength={180} required/></label><div className="calendar-form-pair"><label>نوع المحتوى<select name="kind">{contentPlanItemKinds.map((kind)=><option key={kind} value={kind}>{contentPlanItemKindConfig[kind].label}</option>)}</select></label><label>موعد النشر — القاهرة<input name="time" type="datetime-local" defaultValue={initialTime} required/></label></div><label>المطلوب / الفكرة<textarea name="brief" minLength={5} maxLength={2000} rows={3} required placeholder="وصف بسيط للمحتوى المقترح"/></label><fieldset><legend>المنصات</legend><div className="calendar-platform-checkboxes">{platformOptions.map((platform)=><label key={platform}><input type="checkbox" name="platforms" value={platform} defaultChecked={platform==="instagram"}/>{contentPlatformLabel(platform)}</label>)}</div></fieldset><label>المنتج / الخطة<select name="plan"><option value="">بدون خطة محددة — تنظيم تلقائي حسب الربع</option>{workspace.plans.filter((plan)=>plan.status!=="archived").map((plan)=><option key={plan.id} value={plan.id}>{plan.offer||plan.name} ({plan.starts_on} — {plan.ends_on})</option>)}</select></label>{createError?<p className="form-notice error" role="alert">{createError}</p>:null}<div className="calendar-dialog-actions"><Button type="submit" disabled={working}>{working?"جارٍ الحفظ…":"إضافة للتقويم"}</Button><Button variant="ghost" type="button" disabled={working} onClick={()=>setCreateOpen(false)}>إلغاء</Button></div><a className="text-button" href="/content?create=reel">عندي المادة الخام وأريد إنشاء طلب تنفيذ</a></form></dialog>
+    <dialog ref={dialog} className="calendar-create-dialog" onCancel={(event)=>{if(working)event.preventDefault();else setCreateOpen(false);}} onClose={()=>setCreateOpen(false)}><form key={createFormKey} onSubmit={create}><header><h2>إضافة محتوى للتقويم</h2><button className="icon-button" type="button" disabled={working} aria-label="إغلاق" onClick={()=>setCreateOpen(false)}><X size={18}/></button></header><p>الطلبات الموجودة تظهر هنا تلقائيًا. أضف هنا فكرة جديدة وموعدها فقط.</p><label>عنوان المحتوى<input name="title" minLength={3} maxLength={180} required/></label><div className="calendar-form-pair"><label>نوع المحتوى<select name="kind">{contentPlanItemKinds.map((kind)=><option key={kind} value={kind}>{contentPlanItemKindConfig[kind].label}</option>)}</select></label><label>يوم النشر<input name="time" type="date" defaultValue={initialTime} required/></label></div><label>المطلوب / الفكرة<textarea name="brief" minLength={5} maxLength={2000} rows={3} required placeholder="وصف بسيط للمحتوى المقترح"/></label><fieldset><legend>المنصات</legend><div className="calendar-platform-checkboxes">{platformOptions.map((platform)=><label key={platform}><input type="checkbox" name="platforms" value={platform} defaultChecked={platform==="instagram"}/>{contentPlatformLabel(platform)}</label>)}</div></fieldset><label>المنتج / الخطة<select name="plan"><option value="">بدون خطة محددة — تنظيم تلقائي حسب الربع</option>{workspace.plans.filter((plan)=>plan.status!=="archived").map((plan)=><option key={plan.id} value={plan.id}>{plan.offer||plan.name} ({plan.starts_on} — {plan.ends_on})</option>)}</select></label>{createError?<p className="form-notice error" role="alert">{createError}</p>:null}<div className="calendar-dialog-actions"><Button type="submit" disabled={working}>{working?"جارٍ الحفظ…":"إضافة للتقويم"}</Button><Button variant="ghost" type="button" disabled={working} onClick={()=>setCreateOpen(false)}>إلغاء</Button></div><a className="text-button" href="/content?create=reel">عندي المادة الخام وأريد إنشاء طلب تنفيذ</a></form></dialog>
   </>;
 }
