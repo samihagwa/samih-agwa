@@ -6,7 +6,7 @@ const protectedRoutes = [
   ["/tasks", "كل شخص يعرف دوره"],
   ["/tasks/example", "المهمة واضحة من الطلب حتى التنفيذ"],
   ["/content", "من الفكرة إلى النشر"],
-  ["/planning", "نعرف لماذا وماذا ومتى"],
+  ["/planning", "تقويم المحتوى"],
   ["/scripts", "فكرتك تبقى اسكريبت"],
   ["/scripts/example", "النسخة التي سيتكلم بها"],
   ["/publishing", "جدولة Telegram بلا نشر مكرر"],

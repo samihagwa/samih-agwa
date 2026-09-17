@@ -18,6 +18,7 @@ import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 import { TeamCapacityCalendar } from "./TeamCapacityCalendar";
+import { ContentCalendarWorkspace } from "./ContentCalendarWorkspace";
 
 type Organization = Tables<"organizations">;
 type Membership = Tables<"memberships">;
@@ -111,6 +112,11 @@ function contentMatchesPlanKind(content: ContentItem, kind: ContentPlanItemKind)
 }
 
 export function PlanningWorkspace() {
+  const [toolsOpen, setToolsOpen] = useState(() => typeof window !== "undefined" && (new URLSearchParams(window.location.search).has("manage") || Boolean(currentUuidDeepLink("plan_item", "plan-item"))));
+  return <><ContentCalendarWorkspace /><details className="calendar-planning-tools" open={toolsOpen} onToggle={(event) => setToolsOpen(event.currentTarget.open)}><summary>إدارة الخطط والإرسال للتنفيذ</summary>{toolsOpen ? <PlanningTools /> : null}</details></>;
+}
+
+function PlanningTools() {
   const configured = isSupabaseConfigured();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(configured);

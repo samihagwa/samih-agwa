@@ -17,7 +17,7 @@ const groups: Array<{ label: string; items: NavItem[] }> = [
   { label: "إدارة المحتوى", items: [
     { id: "content", href: "/content", label: "طلبات المحتوى", icon: Clapperboard },
     { id: "scripts", href: "/scripts", label: "السكريبتات", icon: FilePenLine },
-    { id: "planning", href: "/planning", label: "الخطة والتقويم", icon: CalendarRange },
+    { id: "planning", href: "/planning", label: "تقويم المحتوى", icon: CalendarRange },
     { id: "campaigns", href: "/campaigns", label: "الحملات والإطلاقات", icon: Rocket },
     { id: "publishing", href: "/publishing", label: "النشر التلقائي", icon: Send },
   ] },

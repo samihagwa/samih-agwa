@@ -11,6 +11,7 @@ import { Button } from "../ui/Button";
 import { EmojiTextarea } from "../ui/EmojiTextarea";
 import { RequestText } from "../ui/RequestText";
 import { ContentProgress } from "./ContentLibrary";
+import { ContentPublishTimes } from "./ContentPublishTimes";
 
 type Props = {
   item: Tables<"content_items">; tasks: Tables<"tasks">[]; assets: Tables<"content_assets">[];
@@ -77,7 +78,7 @@ export function ContentRequestView({ item, tasks, assets, deliveries, revisions,
 
   return <article className="request-file" id={`content-${item.id}`}>
     <Button href={backHref} variant="ghost"><ArrowRight size={16} />{backHref === "/tasks" ? "العودة لمهامي" : "طلبات المحتوى"}</Button>
-    <header className="request-file-heading"><div><h1>{item.title}</h1><p>{item.format === "post" ? "منشور" : "ريل"} · {item.platforms.join(" · ")} · موعد النشر {formatDateTime(item.publish_at)}</p></div>
+    <header className="request-file-heading"><div><h1>{item.title}</h1><p>{item.format === "post" ? "منشور" : "ريل"}</p><ContentPublishTimes item={item}/></div>
       {canEdit ? <Button type="button" variant="ghost" onClick={() => { setDraft(canonical); setEditVersion(item.version); setFormError(""); setEditing(!editing); }} disabled={working}><Pencil size={15} />{editing ? "إلغاء التعديل" : "تعديل الطلب"}</Button> : null}
     </header>
     <ContentProgress tasks={tasks} status={item.status} />

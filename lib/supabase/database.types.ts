@@ -14,6 +14,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      content_calendar_slots: {
+        Row: { id: string; organization_id: string; content_item_id: string | null; plan_item_id: string | null; platform: string; scheduled_at: string | null; revision: number; updated_at: string }
+        Insert: { id?: string; organization_id: string; content_item_id?: string | null; plan_item_id?: string | null; platform: string; scheduled_at?: string | null; revision?: number; updated_at?: string }
+        Update: { scheduled_at?: string | null; revision?: number; updated_at?: string }
+        Relationships: []
+      }
       account_access_requests: {
         Row: {
           approved_role: Database["public"]["Enums"]["app_role"] | null
@@ -4703,6 +4709,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      move_content_calendar_slot: {
+        Args: { source_kind: string; source_id: string; target_platform: string; target_time: string | null; expected_revision: number; expected_time: string | null }
+        Returns: Database["public"]["Tables"]["content_calendar_slots"]["Row"]
+      }
+      create_calendar_draft: {
+        Args: { target_org: string; request_id: string; item_title: string; item_kind: Database["public"]["Enums"]["content_plan_item_kind"]; item_brief: string; item_platforms: string[]; item_time: string; target_plan: string | null }
+        Returns: string
+      }
       change_task_attention: {
         Args: { target_task_id: string; target_action: string; expected_revision: number; message?: string | null; reason?: string | null; promised_at?: string | null }
         Returns: Database["public"]["Tables"]["task_attention"]["Row"]

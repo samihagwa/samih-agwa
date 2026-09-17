@@ -29,7 +29,7 @@ test("shared navigation exposes grouped permission-aware operating areas while e
   assert.doesNotMatch(shell, /ContentSectionNav/);
   assert.match(shell, /<header className="topbar">/);
   assert.match(shell, /<SidebarNav allowedSections=\{allowedSections\}/);
-  assert.match(access, /\{ id: "planning", label: "الخطة وتقويم المحتوى", href: "\/planning" \}/);
+  assert.match(access, /\{ id: "planning", label: "تقويم المحتوى", href: "\/planning" \}/);
   assert.match(access, /\{ id: "content", label: "طلبات التنفيذ", href: "\/content" \}/);
   assert.match(access, /\{ id: "campaigns", label: "الحملات والإطلاقات", href: "\/campaigns" \}/);
 });

@@ -3,7 +3,7 @@ import type { Tables } from "./supabase/database.types";
 export const workspaceSectionDefinitions = [
   { id: "dashboard", label: "مركز القيادة", href: "/" },
   { id: "tasks", label: "المهام", href: "/tasks" },
-  { id: "planning", label: "الخطة وتقويم المحتوى", href: "/planning" },
+  { id: "planning", label: "تقويم المحتوى", href: "/planning" },
   { id: "content", label: "طلبات التنفيذ", href: "/content" },
   { id: "scripts", label: "استوديو الاسكريبتات", href: "/scripts" },
   { id: "publishing", label: "النشر التلقائي", href: "/publishing" },

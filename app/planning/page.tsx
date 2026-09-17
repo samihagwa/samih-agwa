@@ -1,18 +1,10 @@
 import type { Metadata } from "next";
 import { PlanningWorkspace } from "../../components/planning/PlanningWorkspace";
-import { PageHeader } from "../../components/ui/PageHeader";
-import { StatusBadge } from "../../components/ui/StatusBadge";
 
-export const metadata: Metadata = { title: "الخطة وتقويم المحتوى" };
+export const metadata: Metadata = { title: "تقويم المحتوى" };
 
 export default function PlanningPage() {
   return <main className="page-stack">
-    <PageHeader
-      eyebrow="التخطيط الربع سنوي"
-      title="نعرف لماذا وماذا ومتى قبل إرسال أي شغل"
-      description="الخطة والتقويم يحددان القرار والموعد فقط؛ وعند الإرسال يتحول البند إلى نفس طلب التنفيذ بدون إعادة كتابة أو بورد مكرر."
-      actions={<StatusBadge tone="success">خطة ← تقويم ← تنفيذ</StatusBadge>}
-    />
     <PlanningWorkspace />
   </main>;
 }

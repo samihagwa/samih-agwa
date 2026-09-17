@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { WorkspaceSection } from "../../lib/access";
 
 const views = [
-  { id: "planning", href: "/planning", label: "الخطة — للمدير", icon: CalendarRange },
+  { id: "planning", href: "/planning", label: "تقويم المحتوى", icon: CalendarRange },
   { id: "content", href: "/content", label: "طلبات المحتوى", icon: Clapperboard },
   { id: "campaigns", href: "/campaigns", label: "الإطلاقات — للمدير", icon: Rocket },
 ] satisfies Array<{ id: Extract<WorkspaceSection, "planning" | "content" | "campaigns">; href: string; label: string; icon: typeof CalendarRange }>;
