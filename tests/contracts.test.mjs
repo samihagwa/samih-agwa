@@ -469,12 +469,11 @@ test("script studio is private to each assignee, versioned, AI-assisted, and exp
   assert.match(editor, /حذف نهائي/);
   assert.match(editor, /إما تُنشأ المهام كلها معًا/);
   assert.match(editor, /functions\.invoke/);
-  assert.match(editor, /بدون قصة شخصية — الافتراضي/);
-  assert.match(editor, /generation_direction/);
-  assert.match(editor, /selected_story/);
+  assert.match(editor, /ScriptWritingAssistant/);
+  assert.match(editor, /scope: "writing_chat"/);
+  assert.match(editor, /JSON.stringify\(writingDraft\(formRef.current\)\) !== base/);
   assert.match(editor, /اعتمد النص كعينة لصوتي/);
-  assert.match(editor, /اقترح 3 زوايا للفكرة/);
-  assert.match(editor, /3 بدائل كاملة/);
+  assert.doesNotMatch(editor, /احفظ الفكرة أولًا حتى نبني الزوايا/);
   assert.match(editor, /الحارس استبعد/);
   assert.match(editor, /3 اقتراحات للغلاف/);
   assert.match(editor, /3 اقتراحات للكابشن/);
@@ -565,7 +564,7 @@ test("script lifecycle filters use persisted script states and linked production
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  for (const filter of ["idea", "draft", "ready_to_record", "production", "recorded", "published", "archived"]) {
+  for (const filter of ["idea", "draft", "ready_to_record", "recorded", "published", "archived"]) {
     assert.match(workspace, new RegExp(`value: "${filter}"`));
   }
   assert.match(workspace, /scriptDraftStage\(script\) === "idea"/);
@@ -627,7 +626,7 @@ test("AI providers are owner-managed, Vault-backed, testable, and provider-agnos
   assert.match(settings, /API مخصص/);
   assert.match(settings, /اتركه فارغًا للاحتفاظ بالمفتاح الحالي/);
   assert.doesNotMatch(settings, /service_role/i);
-  assert.match(editor, /بدون قصة شخصية — الافتراضي/);
+  assert.match(editor, /ScriptWritingAssistant/);
   assert.match(types, /ai_providers:/);
   assert.match(types, /ai_api_protocol/);
   assert.match(config, /\[functions\.ai-provider-commands\][\s\S]*verify_jwt = true/);

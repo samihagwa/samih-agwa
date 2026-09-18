@@ -1,5 +1,6 @@
 import { createSupabaseContext } from "npm:@supabase/server@1.4.1";
 import { corsHeaders } from "npm:@supabase/supabase-js@2.112.3/cors";
+import { writingChatInput, writingChatInstructions } from "../_shared/script-writing-chat.ts";
 import {
   extractProviderText,
   fetchProviderJson,
@@ -11,7 +12,7 @@ import {
 
 const responseHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const modes = new Set(["idea", "reference", "improve"]);
-const scopes = new Set(["script_variants", "hooks", "angles", "single_draft", "rewrite_excerpt", "production_pack", "recording", "editing", "thumbnail", "caption"]);
+const scopes = new Set(["writing_chat", "script_variants", "hooks", "angles", "single_draft", "rewrite_excerpt", "production_pack", "recording", "editing", "thumbnail", "caption"]);
 const writingScopes = new Set(["script_variants", "hooks"]);
 const rewriteActions = new Set(["my_voice", "shorten", "simplify", "chart_example", "stronger_hook", "target_duration"]);
 const productionScopes = new Set(["production_pack", "recording", "editing", "thumbnail", "caption"]);
@@ -30,6 +31,10 @@ type ProductionOutput = {
 };
 
 const schemas: Record<string, Record<string, unknown>> = {
+  writing_chat: {
+    type: "object", additionalProperties: false, required: ["reply", "suggested_script"],
+    properties: { reply: { type: "string", minLength: 1, maxLength: 6000 }, suggested_script: { type: "string", maxLength: 30000 } },
+  },
   angles: {
     type: "object", additionalProperties: false, required: ["angles"],
     properties: { angles: { type: "array", minItems: 3, maxItems: 3, items: {
@@ -371,12 +376,12 @@ function productionInstructions(scope: string) {
 بدائل الغلاف لازم تختلف في الزاوية البصرية والنص، وكل بديل يشرح صلته بجملة أو فكرة حقيقية من الاسكريبت. بدائل الكابشن لازم تكون جاهزة للنشر، بصوت البراند، ومن غير اختراع ادعاءات أو أرقام. ممنوع «مش مجرد... ده/دي...» وكل banned_phrases. المستخدم سيختار بديلًا بعلامة صح؛ لا تعتبر أي بديل معتمدًا. التعليمات عملية ومختصرة وواضحة لصاحب التسجيل والمونتير والمصمم. CTA المنفصل بيانات تقنية مستخرجة من نهاية النص، وليس نصًا ثانيًا على المستخدم مراجعته. أعد JSON فقط حسب المخطط.`;
 }
 function providerBody(provider: AiProviderRuntime, mode: string, scope: string, aiContext: unknown) {
-  const instructions = scope === "rewrite_excerpt"
+  const instructions = scope === "writing_chat" ? writingChatInstructions : scope === "rewrite_excerpt"
     ? "أنت مساعد كتابة للاسكريبتات العربية. أعد صياغة النص المحدد وحده حسب rewrite_action، مع إبقاء المعنى والحقائق وروح الكاتب. إن كان الإجراء chart_example ولا يوجد مثال موثّق في المدخل، قدم مثالًا افتراضيًا واضحًا بلا رقم أو نتيجة تداول، ولا تقدمه كواقعة حقيقية. لا تضف قصة شخصية أو نتائج أو أرقامًا أو وعودًا. لا تكتب الاسكريبت كاملًا إن كان المدخل فقرة. لا تعتمد النص أو تحفظه؛ أعِد rewritten_text فقط. قواعد البصمة الصريحة تتقدم على العينات. أعد JSON فقط."
     : scope === "angles" ? "من الفكرة فقط اقترح ثلاث زوايا مختلفة فعلًا: عنوان قصير، هوك، والفكرة الأساسية لكل واحدة. لا تكتب مسودة كاملة أو كابشنًا أو مشهدًا. ممنوع اختراع قصص شخصية أو أرقام تداول أو نتائج. راع قواعد صوت الكاتب، وأعد JSON حسب المخطط."
       : scope === "single_draft" ? "اكتب مسودة واحدة فقط باللهجة المصرية الطبيعية وفق الزاوية المختارة selected_angle. الكلام قابل للتعديل أمام الكاميرا، بلا نتائج أو قصص أو أرقام مختلقة. لا تنتج ثلاث بدائل ولا تحفظ أو تعتمد أي شيء. لا تنسخ النص من مرجع خارجي، وأعد JSON حسب المخطط."
     : writingScopes.has(scope) ? writingInstructions(mode, scope) : productionInstructions(scope);
-  const schema = schemas[scope]; const input = `السياق المعتمد:\n${JSON.stringify(aiContext).slice(0, 70000)}`;
+  const schema = schemas[scope]; const input = `سياق الطلب وبياناته:\n${scope === "writing_chat" ? JSON.stringify(aiContext) : JSON.stringify(aiContext).slice(0, 70000)}`;
   if (provider.protocol === "openai_responses") {
     return { model: provider.model, store: false, instructions, input, text: { format: { type: "json_schema", name: `market_whales_${scope}`, strict: true, schema } } };
   }
@@ -404,6 +409,8 @@ export default {
     const expectedVersion = Number(body.expected_edit_version);
     const targetCount = [scriptId, researchId, contentId].filter(Boolean).length;
     if (targetCount !== 1 || !modes.has(mode) || !scopes.has(scope)) return jsonResponse({ message: "حدد الفكرة ونوع مساعدة AI المطلوب." }, 400);
+    const chat = scope === "writing_chat" ? writingChatInput(body) : null;
+    if (scope === "writing_chat" && (!scriptId || !chat)) return jsonResponse({ message: "اكتب طلبًا أقصر أو ابدأ محادثة جديدة؛ لم يتغير النص." }, 400);
     if (scope === "rewrite_excerpt" && (!scriptId || !rewriteActions.has(rewriteAction) || selectedText.length < 2 || selectedText.length > 30000)) return jsonResponse({ message: "حدد نصًا وإجراءً مناسبين لمساعد الكتابة." }, 400);
     if (scope === "single_draft" && (!scriptId || selectedAngle.length < 5 || selectedAngle.length > 1700)) return jsonResponse({ message: "اختر زاوية كتابة أولًا." }, 400);
     if (scope === "angles" && !scriptId) return jsonResponse({ message: "احفظ فكرتك أولًا لتختار زاوية الكتابة." }, 400);
@@ -425,7 +432,9 @@ export default {
     if (contextError || !aiContext) return jsonResponse({ message: "ليس لديك صلاحية للتوليد أو العنصر لم يعد قابلًا للتعديل." }, 403);
 
     const contextObject = aiContext as Record<string, unknown>; const contextScript = record(contextObject.script);
-    if ((scriptId || contentId) && Number(contextScript.edit_version) !== expectedVersion) return jsonResponse({ message: `${contentId ? "ملف المحتوى" : "الاسكريبت"} اتعدل. حدّث الصفحة قبل استخدام AI.` }, 409);
+    // Chat is preview-only against an explicit draft snapshot, so autosave cannot invalidate it.
+    // All server writes and legacy scopes retain their version check.
+    if (scope !== "writing_chat" && (scriptId || contentId) && Number(contextScript.edit_version) !== expectedVersion) return jsonResponse({ message: `${contentId ? "ملف المحتوى" : "الاسكريبت"} اتعدل. حدّث الصفحة قبل استخدام AI.` }, 409);
     if (!contentId && productionScopes.has(scope) && contextScript.status !== "ready_to_record") return jsonResponse({ message: "اعتمد النص النهائي «جاهز للتصوير» أولًا، وبعدها أنشئ تعليمات التنفيذ." }, 400);
 
     const providerRpc = researchId ? "get_script_research_ai_provider_runtime" : contentId ? "get_content_ai_provider_runtime" : "get_script_ai_provider_runtime";
@@ -438,12 +447,20 @@ export default {
       const { data: samples, error: samplesError } = await context.supabaseAdmin.from("script_voice_samples")
         .select("sample_text").eq("organization_id", text(contextScript.organization_id))
         .eq("owner_id", context.userClaims.id).eq("content_kind", text(contextScript.content_kind))
-        .eq("active", true).order("updated_at", { ascending: false }).limit(2);
+        .eq("active", true).order("updated_at", { ascending: false }).limit(scope === "writing_chat" ? 5 : 2);
       if (samplesError) return jsonResponse({ message: "تعذّر تحميل أمثلة صوتك الخاصة؛ لم نرسل الطلب إلى AI." }, 503);
       relevantSamples = (samples ?? []).map((sample) => text(sample.sample_text));
     }
     const prepared = prepareAiContext(aiContext, mode, scope, selectedStory, generationDirection, relevantSamples);
     if ("error" in prepared) return jsonResponse({ message: prepared.error }, 400);
+    if (chat) {
+      prepared.context.script = { ...prepared.context.script, ...chat.draft };
+      prepared.context.brand_articles = [];
+      prepared.context.voice_profile.calibrated_samples = relevantSamples.map((sample) => sample.slice(0, 4000));
+      prepared.context.voice_profile.writing_rules = prepared.context.voice_profile.writing_rules.map((rule) => rule.slice(0, 500));
+      prepared.context.voice_profile.banned_phrases = prepared.context.voice_profile.banned_phrases.map((phrase) => phrase.slice(0, 300));
+      Object.assign(prepared.context, { conversation: chat.messages });
+    }
     if (scope === "single_draft") Object.assign(prepared.context, { selected_angle: selectedAngle });
     if (scope === "rewrite_excerpt") {
       prepared.context.script = {
@@ -470,7 +487,15 @@ export default {
     let generated: unknown;
     try { generated = JSON.parse(stripJsonFence(extractProviderText(providerResult.json, provider.protocol))); } catch { generated = null; }
     let quality: GenerationQuality | null = null;
-    if (scope === "angles") {
+    if (scope === "writing_chat") {
+      const output = record(generated);
+      const reply = text(output.reply);
+      const candidate = typeof output.suggested_script === "string" ? output.suggested_script.trim() : null;
+      if (!reply || reply.length > 6000 || candidate === null || candidate.length > 30000) return jsonResponse({ message: "رد المساعد غير مكتمل؛ نصك لم يتغير." }, 502);
+      const issues = candidate ? generationIssues({ variants: [{ label: "", hook: "", spoken_script: candidate, cta: "" }], hook_variants: [] }, prepared.guard, "improve") : [];
+      if (issues.length) return jsonResponse({ message: "الاقتراح خالف قواعد بصمتك؛ لم نغير نصك. وضّح للمساعد الصياغة المطلوبة." }, 422);
+      generated = { reply, suggested_script: candidate };
+    } else if (scope === "angles") {
       const angles = record(generated).angles;
       if (!Array.isArray(angles) || angles.length !== 3 || angles.some((raw) => {
         const angle = record(raw);
@@ -554,6 +579,7 @@ export default {
       });
     }
     return jsonResponse({ generated, editVersion, saved: savesProduction,
+      ...(chat ? { voice_context: { sample_count: relevantSamples.length, rules_count: prepared.context.voice_profile.writing_rules.length } } : {}),
       ...(quality ? { quality } : {}), provider: { name: provider.name, model: provider.model } });
   },
 };

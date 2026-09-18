@@ -4,13 +4,13 @@ import { DateInput } from "../ui/DateInput";
 
 import type { Session } from "@supabase/supabase-js";
 import {
-  Archive, ArrowRight, Bot, CheckCircle2, Copy, ExternalLink, Factory, FilePenLine, MoreHorizontal, Plus, MessageSquare, Files,
-  Lightbulb, LoaderCircle, LockKeyhole, Pause, Play, RefreshCw, Save, Sparkles, Trash2, WandSparkles, X,
+  Archive, ArrowRight, CheckCircle2, Copy, ExternalLink, Factory, FilePenLine, MoreHorizontal, Plus, MessageSquare,
+  LoaderCircle, LockKeyhole, Pause, Play, RefreshCw, Save, Trash2, WandSparkles, X,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatScriptDate, lines, scriptContentKindConfig, type ScriptContentKind, type WritableScriptStage, scriptDisplayStatus, scriptInputModeConfig, scriptPlatformConfig } from "../../lib/scripts";
 import { ScriptStatusControl } from "./ScriptStatusControl";
-import { ScriptPages } from "./ScriptPages";
+import { ScriptWritingAssistant, type WritingDraft } from "./ScriptWritingAssistant";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "../../lib/supabase/client";
 import type { Tables } from "../../lib/supabase/database.types";
 import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
@@ -28,7 +28,6 @@ type ReviewComment = Tables<"script_review_comments">;
 type Workspace = { organization: Organization; membership: Membership; people: Person[]; storyBank: string[]; script: Script; versions: ScriptVersion[]; reviewGrants: ReviewGrant[]; reviewComments: ReviewComment[] };
 type WritingMode = "idea" | "reference" | "improve";
 type AiScope = "script_variants" | "hooks" | "angles" | "single_draft" | "rewrite_excerpt" | "production_pack" | "recording" | "editing" | "thumbnail" | "caption";
-type WritingAngle = { title: string; hook: string; core_idea: string };
 type RewriteAction = "my_voice" | "shorten" | "simplify" | "chart_example" | "stronger_hook" | "target_duration";
 const rewriteLabels: Record<RewriteAction, string> = {
   my_voice: "خليها بطريقتي", shorten: "اختصر", simplify: "بسّط",
@@ -92,12 +91,8 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   const [loading, setLoading] = useState(configured);
   const [saving, setSaving] = useState(false);
   const [aiScope, setAiScope] = useState<AiScope | null>(null);
-  const [scriptVariants, setScriptVariants] = useState<ScriptVariant[]>([]);
-  const [angles, setAngles] = useState<WritingAngle[]>([]);
   const [captionOptions, setCaptionOptions] = useState<CaptionOption[]>([]);
   const [thumbnailOptions, setThumbnailOptions] = useState<ThumbnailOption[]>([]);
-  const [generationDirection, setGenerationDirection] = useState("");
-  const [selectedStory, setSelectedStory] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [versionNote, setVersionNote] = useState("");
@@ -108,7 +103,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
   const [thumbnailOwnerId, setThumbnailOwnerId] = useState("");
   const [publishingOwnerId, setPublishingOwnerId] = useState("");
   const [teleprompterOpen, setTeleprompterOpen] = useState(false);
-  const [pagesOpen, setPagesOpen] = useState(false);
+  const commentsRef = useRef<HTMLElement>(null);
   const [copyNotice, setCopyNotice] = useState("");
   const [teleprompterPlaying, setTeleprompterPlaying] = useState(false);
   const [teleprompterFontSize, setTeleprompterFontSize] = useState(40);
@@ -368,7 +363,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         ...form, duration_seconds: Number(form.duration_seconds), hook_variants: lines(form.hook_variants), hashtags: lines(form.hashtags),
         version_note: versionNote,
       });
-      setVersionNote(""); setScriptVariants([]);
+      setVersionNote("");
       setRestorePending(false);
       if (writingHasUnsavedChanges) { setCaptionOptions([]); setThumbnailOptions([]); }
       setNotice(workspace.script.status === "ready_to_record" && writingHasUnsavedChanges
@@ -410,7 +405,6 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     try {
       const result = await invokeFunction("script-ai", {
         script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version, mode, scope,
-        generation_direction: generationDirection, selected_story: selectedStory,
       });
       const generated = result.generated as { variants?: ScriptVariant[]; hook_variants?: string[] } | undefined;
       const variants = Array.isArray(generated?.variants) ? generated.variants : [];
@@ -421,66 +415,12 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
       const guardNotice = removedVariants || removedHooks
         ? ` الحارس استبعد ${removedVariants ? `${removedVariants} نسخة` : ""}${removedVariants && removedHooks ? " و" : ""}${removedHooks ? `${removedHooks} هوك` : ""} لعدم مطابقتها، من غير طلب API إضافي.`
         : "";
-      if (scope === "script_variants") setScriptVariants(variants);
       if (Array.isArray(generated?.hook_variants)) update("hook_variants", generated.hook_variants.join("\n"));
       setNotice(scope === "script_variants"
         ? `عدد البدائل السليمة: ${variants.length}. دي معاينة فقط؛ اختر نسخة ثم احفظها بنفسك، ولم نغيّر الاسكريبت أو طلبات التنفيذ.${guardNotice}`
         : `عدد الهوكات السليمة: ${hooks.length}. ظهرت داخل المحرر ولم تُحفظ بعد.${guardNotice}`);
     } catch (generateError) { setError(generateError instanceof Error ? generateError.message : "تعذّر توليد بدائل الكتابة."); }
     finally { setAiScope(null); }
-  }
-
-  async function generateAngles() {
-    if (!workspace || !form || readOnly || aiScope) return;
-    if (writingHasUnsavedChanges) { setError("احفظ الفكرة أولًا حتى نبني الزوايا على أحدث نسخة."); return; }
-    const title = form.title; const sourceText = form.source_text; const objective = form.objective;
-    setAiScope("angles"); setAngles([]); setScriptVariants([]); setError(null);
-    try {
-      const result = await invokeFunction("script-ai", {
-        script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version,
-        mode: "idea", scope: "angles", generation_direction: generationDirection, selected_story: selectedStory,
-      });
-      const proposed = (result.generated as { angles?: WritingAngle[] } | undefined)?.angles;
-      if (formRef.current?.title !== title || formRef.current?.source_text !== sourceText || formRef.current?.objective !== objective) {
-        setError("الفكرة اتغيرت أثناء التوليد؛ اطلب زوايا جديدة بدل عرض اقتراحات قديمة."); return;
-      }
-      if (!Array.isArray(proposed) || proposed.length !== 3) throw new Error("لم تصل زوايا كاملة.");
-      setAngles(proposed); setNotice("اختر زاوية واحدة، وبعدها نجهز مسودة واحدة تراجعها قبل وضعها في المحرر.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "تعذّر اقتراح الزوايا."); }
-    finally { setAiScope(null); }
-  }
-
-  async function draftFromAngle(angle: WritingAngle) {
-    if (!workspace || !form || readOnly || aiScope) return;
-    if (writingHasUnsavedChanges) { setError("احفظ آخر تعديلات الفكرة أو النص أولًا."); return; }
-    const currentText = form.spoken_script;
-    setAiScope("single_draft"); setScriptVariants([]); setError(null);
-    try {
-      const result = await invokeFunction("script-ai", {
-        script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version,
-        mode: "idea", scope: "single_draft",
-        selected_angle: `${angle.title}\n${angle.hook}\n${angle.core_idea}`,
-        selected_story: selectedStory,
-      });
-      const draft = (result.generated as { draft?: { spoken_script: string; hook: string } } | undefined)?.draft;
-      if (formRef.current?.spoken_script !== currentText) {
-        setError("النص اتعدل أثناء التوليد؛ لم نستبدل تعديلاتك، واطلب المسودة من جديد لو محتاج."); return;
-      }
-      if (!draft?.spoken_script) throw new Error("المسودة لم تصل كاملة.");
-      setScriptVariants([{ label: angle.title, hook: draft.hook, spoken_script: draft.spoken_script, cta: "" }]);
-      setNotice("المسودة ظاهرة للمعاينة فقط؛ اضغط «اختيار هذه النسخة» لو حابب تدخلها المحرر.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "تعذّر توليد المسودة."); }
-    finally { setAiScope(null); }
-  }
-
-  function chooseVariant(variant: ScriptVariant) {
-    if (!form) return;
-    const hooks = lines(`${variant.hook}\n${form.hook_variants}`);
-    const next = { ...form, spoken_script: variant.spoken_script, hook_variants: hooks.join("\n") };
-    formRef.current = next;
-    setForm(next); setAutosaveState("pending");
-    setEditorPanel(null);
-    setNotice(`تم وضع «${variant.label}» داخل المحرر فقط. عدّلها براحتك ثم اضغط حفظ.`);
   }
 
   async function generateProduction(scope: Exclude<AiScope, "script_variants" | "hooks">) {
@@ -490,7 +430,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
     try {
       const result = await invokeFunction("script-ai", {
         script_id: workspace.script.id, expected_edit_version: workspace.script.edit_version,
-        mode: "improve", scope, generation_direction: generationDirection,
+        mode: "improve", scope,
       });
       const generated = result.generated as { caption_options?: CaptionOption[]; thumbnail_options?: ThumbnailOption[] } | undefined;
       const captions = Array.isArray(generated?.caption_options) ? generated.caption_options : [];
@@ -581,7 +521,18 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
 
   function openPanel(panel: typeof editorPanel) {
     if (editorMenu.current) editorMenu.current.open = false;
+    setError(null); setNotice(null);
+    if (panel === "review") {
+      setEditorPanel(null);
+      commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      commentsRef.current?.querySelector("textarea")?.focus({ preventScroll: true });
+      return;
+    }
     setEditorPanel(panel);
+  }
+
+  function writingDraft(current: EditorForm): WritingDraft {
+    return { title: current.title, spoken_script: current.spoken_script, objective: current.objective.slice(0, 3000), source_text: current.source_text.slice(0, 10000), audience: current.audience.slice(0, 500), platform: current.platform, content_kind: current.content_kind };
   }
 
   function insertLine(prefix: string) {
@@ -632,7 +583,7 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         </div></details>
         <Button type="button" variant="ghost" disabled={!form.spoken_script.trim()} onClick={() => { setTeleprompterOpen(true); setTeleprompterPlaying(false); setCopyNotice(""); }}>التليبرومتر</Button>
         <Button type="button" variant="ghost" onClick={() => openPanel("review")}><MessageSquare size={16} /> التعليقات ({workspace.reviewComments.length})</Button>
-        <Button type="button" variant="ghost" onClick={() => setPagesOpen(true)}><Files size={16} /> صفحات داخلية</Button>
+        {!readOnly ? <Button type="button" variant="secondary" onClick={() => openPanel("assistant")}><WandSparkles size={16} /> مساعد الكتابة</Button> : null}
         {!readOnly && workspace.script.status === "draft" ? <Button type="button" disabled={saving || Boolean(aiScope) || writingHasUnsavedChanges || form.spoken_script.trim().length < 20} onClick={() => void changeStatus("ready_to_record")}><CheckCircle2 size={15} /> جاهز للتصوير</Button> : null}
         {!readOnly && workspace.script.status === "ready_to_record" ? <Button type="button" onClick={() => openPanel("production")}><Factory size={15} /> تجهيز التنفيذ</Button> : null}
       </div>
@@ -683,25 +634,6 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
           <label className="span-2"><span>نص أو ملاحظات المصدر</span><textarea className="source-textarea" disabled={readOnly} value={form.source_text} onChange={(event) => update("source_text", event.target.value)} /></label>
         </div>
       {!readOnly ? <Button type="submit" disabled={saving || autosaveState === "saving"}>حفظ التعديلات</Button> : null}</ScriptToolPanel> : null}
-
-      {!readOnly && editorPanel === "assistant" ? <ScriptToolPanel error={error} notice={notice} title="مساعد الكتابة" onClose={() => setEditorPanel(null)}>
-
-        <div className="script-ai-copy"><span className="script-ai-icon"><WandSparkles size={21} /></span><div><p className="overline">مساعد الكتابة</p><h2>اختر الزاوية ثم المسودة</h2><p>التوليد اختياري، وكل نتيجة معاينة فقط: لا تحفظ نسخة ولا تنشئ مهامًا.</p></div></div>
-        <div className="script-ai-guardrails">
-          <label><span>القصة الشخصية</span><select value={selectedStory} onChange={(event) => setSelectedStory(event.target.value)}><option value="">بدون قصة شخصية — الافتراضي</option>{workspace.storyBank.map((story) => <option key={story} value={story}>{story}</option>)}</select><small>{selectedStory ? "سيُسمح بهذه القصة وحدها." : "لن تُستخدم قصة ترامب أو غيرها."}</small></label>
-          <label><span>قولها بطريقتك — اختياري</span><textarea maxLength={1500} value={generationDirection} onChange={(event) => setGenerationDirection(event.target.value)} placeholder="أنا عايز أوصل له إن... ومتقولش..." /><small>التوجيه يطبّق على المعاينة التالية فقط.</small></label>
-        </div>
-        <div className="script-ai-actions">
-          <Button type="button" disabled={Boolean(aiScope) || saving} onClick={() => void generateAngles()}>{aiScope === "angles" ? <LoaderCircle className="spin" size={15} /> : <Lightbulb size={15} />} اقترح 3 زوايا للفكرة</Button>
-        </div>
-        {angles.length ? <div className="script-variants-grid" aria-label="زوايا الكتابة">{angles.map((angle, index) => <article key={`${angle.title}-${index}`}><header><span>زاوية {index + 1}</span><strong>{angle.title}</strong></header><p><strong>الهوك:</strong> {angle.hook}</p><p>{angle.core_idea}</p><Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving} onClick={() => void draftFromAngle(angle)}>اكتب مسودة لهذه الزاوية</Button></article>)}</div> : null}
-        <details className="script-extra-variants"><summary>بدائل كاملة عند الحاجة</summary><div className="script-ai-actions">
-          <Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving} onClick={() => void generateWriting("idea", "script_variants")}><Lightbulb size={15} /> 3 بدائل كاملة</Button>
-          <Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving || !form.source_url} onClick={() => void generateWriting("reference", "script_variants")}><Bot size={15} /> من المرجع بطريقتي</Button>
-          <Button type="button" variant="secondary" disabled={Boolean(aiScope) || saving || form.spoken_script.length < 20} onClick={() => void generateWriting("improve", "script_variants")}><Sparkles size={15} /> بدائل من مسودتي</Button>
-        </div></details>
-        {scriptVariants.length ? <div className="script-variants-grid">{scriptVariants.map((variant, index) => <article key={`${variant.label}-${index}`}><header><span>نسخة {index + 1}</span><strong>{variant.label}</strong></header><p>{variant.spoken_script}</p><Button type="button" variant="secondary" onClick={() => chooseVariant(variant)}>اختيار هذه النسخة</Button></article>)}</div> : null}
-      </ScriptToolPanel> : null}
 
       {editorPanel === "hooks" ? <ScriptToolPanel error={error} notice={notice} title="الهوكات" onClose={() => setEditorPanel(null)}>
         <div className="script-fields-grid"><label className="span-2"><span>بدائل الهوك — واحد في كل سطر</span><textarea disabled={readOnly} value={form.hook_variants} onChange={(event) => update("hook_variants", event.target.value)} />{!readOnly ? <Button type="button" variant="ghost" disabled={Boolean(aiScope) || saving} onClick={() => void generateWriting(form.spoken_script ? "improve" : "idea", "hooks")}>{aiScope === "hooks" ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />} اقتراح هوكات أخرى</Button> : null}</label></div>
@@ -781,16 +713,17 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
       </form> : null}
     </section></ScriptToolPanel> : null}
 
-    {editorPanel === "review" ? <ScriptToolPanel error={error} notice={notice} title="المشاركة والتعليقات" onClose={() => setEditorPanel(null)}>
+    <section ref={commentsRef} className="script-inline-comments" aria-label="تعليقات على السكريبت">
+      <h2>التعليقات <small>({workspace.reviewComments.length})</small></h2>
       <p className="script-field-help">المشاركة اختيارية لهذا السكريبت وحده، ولا تكشف بصمتك أو تتيح تعديل النص.</p>
-      {assignedWriter ? <div className="script-review-share">
+      {assignedWriter ? <details><summary>مشاركة السكريبت للمراجعة</summary><div className="script-review-share">
         <label><span>شارك للمراجعة مع عضو</span><select value={reviewerId} onChange={(event) => setReviewerId(event.target.value)}><option value="">اختر عضوًا</option>{workspace.people.filter((person) => person.id !== workspace.script.assigned_to && (person.role === "owner" || person.allowedSections.includes("scripts"))).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
         <Button type="button" variant="secondary" disabled={!reviewerId || saving || workspace.reviewGrants.some((grant) => grant.reviewer_id === reviewerId)} onClick={() => void setReviewAccess(reviewerId, true)}>مشاركة هذا السكريبت</Button>
         {workspace.reviewGrants.length ? <div className="script-review-grants">{workspace.reviewGrants.map((grant) => <span key={grant.reviewer_id}>{workspace.people.find((person) => person.id === grant.reviewer_id)?.name ?? "عضو"} <Button type="button" variant="ghost" disabled={saving} onClick={() => void setReviewAccess(grant.reviewer_id, false)}>إلغاء الوصول</Button></span>)}</div> : null}
-      </div> : null}
+      </div></details> : null}
       <div className="script-review-comments">{workspace.reviewComments.length ? workspace.reviewComments.map((comment) => <article key={comment.id}><strong>{workspace.people.find((person) => person.id === comment.author_id)?.name ?? "عضو"}</strong><small>{formatScriptDate(comment.created_at)}</small><p>{comment.body}</p></article>) : <p className="tool-empty">لسه مفيش تعليقات.</p>}</div>
       <form onSubmit={(event) => void postReviewComment(event)}><label><span>تعليق للمراجعة</span><textarea value={reviewComment} maxLength={4000} onChange={(event) => setReviewComment(event.target.value)} placeholder="سؤال أو ملاحظة محددة على النص…" /></label><Button type="submit" disabled={!reviewComment.trim() || saving}>إرسال التعليق</Button></form>
-    </ScriptToolPanel> : null}
+    </section>
 
     {editorPanel === "versions" ? <ScriptToolPanel error={error} notice={notice} title="النسخ السابقة والبصمة" onClose={() => setEditorPanel(null)}>      {!readOnly ? <div className="script-save-bar"><label><span>إيه اللي عدّلته؟ — اختياري</span><input value={versionNote} maxLength={500} onChange={(event) => setVersionNote(event.target.value)} placeholder="مثال: غيرت الهوك وقصّرت النص" /><small>الحفظ التلقائي للمسودة لا يضيف نسخة للسجل؛ هذه الملاحظة تخص النسخة المهمة فقط.</small></label><Button type="button" onClick={() => void save()} disabled={saving || autosaveState === "saving" || Boolean(aiScope)}>{saving ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} حفظ نسخة مهمة</Button></div> : null}        {canWriteScript ? <aside className="script-calibration-note"><CheckCircle2 size={18} /><div><strong>هل النص بقى أنت فعلًا بعد تعديلك؟</strong><p>احفظ تعديلك اليدوي أولًا، ثم أضفه إلى بصمتك الخاصة.</p></div><Button type="button" variant="secondary" disabled={saving || Boolean(aiScope) || form.spoken_script.trim().length < 20 || spokenScriptHasUnsavedChanges || !latestVersionIsManual} onClick={() => void approveVoiceSample()}>{spokenScriptHasUnsavedChanges || !latestVersionIsManual ? "احفظ تعديلك أولًا" : "اعتمد النص كعينة لصوتي"}</Button></aside> : null}
       <p className="script-field-help">المسودات المحفوظة تلقائيًا لا تملأ السجل؛ هنا تظهر النسخ المهمة التي اخترت حفظها.</p>
@@ -803,7 +736,10 @@ export function ScriptEditor({ scriptId }: { scriptId: string }) {
         <ol>{workspace.versions.map((version) => <li key={version.id}><span><strong>v{version.version_number.toLocaleString("ar-EG")}</strong><small>{version.source === "ai_generation" ? "حزمة AI" : version.source === "handoff" ? "إرسال للتنفيذ" : "حفظ يدوي"}</small></span><div><strong>{version.note || "بدون ملاحظة"}</strong><small>{formatScriptDate(version.created_at)}</small></div>{!readOnly ? <Button type="button" variant="ghost" disabled={saving || autosaveState === "saving"} onClick={() => { setEditorPanel(null); setRestorePending(true); update("spoken_script", versionText(version)); setVersionNote(`استعادة نص النسخة ${version.version_number}`); setNotice("أعدنا النص للمحرر فقط؛ راجعه ثم اضغط «حفظ نسخة مهمة» ليبقى التاريخ محفوظًا."); window.scrollTo({ top: 0, behavior: "smooth" }); }}>استعادة النص</Button> : null}</li>)}</ol>
       </> : <p className="tool-empty">لا توجد نسخ مسجلة.</p>}
     </ScriptToolPanel> : null}
-    {pagesOpen ? <ScriptPages scriptId={scriptId} readOnly={readOnly} onClose={() => setPagesOpen(false)} /> : null}
+    {!readOnly ? <ScriptWritingAssistant open={editorPanel === "assistant"} onClose={() => setEditorPanel(null)} draft={writingDraft(form)} disabled={saving || Boolean(aiScope)}
+      request={(draft, messages) => invokeFunction("script-ai", { script_id: scriptId, expected_edit_version: workspace.script.edit_version, mode: "improve", scope: "writing_chat", draft, messages })}
+      onApply={(text, base) => { if (!formRef.current || JSON.stringify(writingDraft(formRef.current)) !== base) return false; update("spoken_script", text); return true; }}
+    /> : null}
     {teleprompterOpen ? <dialog ref={teleprompterDialog} className="script-teleprompter" aria-modal="true" aria-label="وضع قراءة الاسكريبت" onCancel={(event) => { event.preventDefault(); setTeleprompterPlaying(false); setTeleprompterOpen(false); }}>
       <div className="script-teleprompter-toolbar">
         <strong>وضع التصوير · {wordCount.toLocaleString("ar-EG")} كلمة</strong>

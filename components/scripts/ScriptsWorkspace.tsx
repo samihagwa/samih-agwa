@@ -32,7 +32,7 @@ type Workspace = {
   productionTasks: Task[];
 };
 type Tab = "scripts" | "voice";
-type ScriptStage = "idea" | "draft" | "ready_to_record" | "production" | "recorded" | "ready_to_publish" | "published" | "archived";
+type ScriptStage = "idea" | "draft" | "ready_to_record" | "recorded" | "ready_to_publish" | "published" | "archived";
 type ScriptFilter = "active" | ScriptStage | "all";
 
 const scriptFilters: { value: ScriptFilter; label: string }[] = [
@@ -40,7 +40,6 @@ const scriptFilters: { value: ScriptFilter; label: string }[] = [
   { value: "idea", label: "فكرة" },
   { value: "draft", label: "قيد الكتابة" },
   { value: "ready_to_record", label: "جاهز للتصوير" },
-  { value: "production", label: "قيد التنفيذ" },
   { value: "recorded", label: "تم التصوير" },
   { value: "ready_to_publish", label: "جاهز للنشر" },
   { value: "published", label: "تم النشر" },
@@ -63,7 +62,7 @@ function scriptCardStatus(script: Script, tasks: Task[]) {
   if (editing?.status === "done") return { label: "تم المونتاج", tone: "success" as const };
   if (editing && ["ready", "in_progress", "review"].includes(editing.status)) return { label: "قيد المونتاج", tone: "info" as const };
   if (recording?.status === "done") return { label: "تم التصوير", tone: "success" as const };
-  return { label: "قيد التنفيذ", tone: "info" as const };
+  return { label: "بانتظار التصوير", tone: "info" as const };
 }
 
 function linkedStep(tasks: Task[], script: Script, step: Task["content_step"]) {
@@ -78,7 +77,8 @@ function scriptStage(script: Script, tasks: Task[]): ScriptStage {
   if (linkedStep(tasks, script, "publishing")?.status === "done") return "published";
   if (["ready", "in_progress", "review"].includes(linkedStep(tasks, script, "publishing")?.status ?? "")) return "ready_to_publish";
   if (linkedStep(tasks, script, "recording")?.status === "done") return "recorded";
-  return "production";
+  // A sent script awaiting recording stays visible without inventing a task state.
+  return "ready_to_record";
 }
 
 function matchesScriptFilter(script: Script, tasks: Task[], filter: ScriptFilter) {
@@ -177,7 +177,7 @@ export function ScriptsWorkspace() {
     return requested === "voice" ? "voice" : "scripts";
   });
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ScriptFilter>("active");
+  const [statusFilter, setStatusFilter] = useState<ScriptFilter>("all");
   const [showCreateScript, setShowCreateScript] = useState(false);
   const [createStage, setCreateStage] = useState<WritableScriptStage>("idea");
   const [createText, setCreateText] = useState("");
@@ -367,7 +367,7 @@ export function ScriptsWorkspace() {
       counts={scriptFilterCounts} stageOf={scriptStage} statusOf={scriptCardStatus}
       workingId={workingScriptId} onStatus={changeScriptStatus} onDelete={deleteScript}
       ideaItems={workspace.research.filter((item) => !item.linked_script_id && ["inbox", "selected"].includes(item.status)).map((item) => <article className="script-board-card" key={item.id} id={`research-${item.id}`} data-direct-target={linkedResearchId === item.id || undefined} tabIndex={-1}><strong>{item.title}</strong><Button type="button" variant="ghost" disabled={saving || !canWriteScripts} onClick={() => void convertResearch(item.id)}>فتح الفكرة للكتابة</Button></article>)}
-      onCreate={(stage = "idea") => { setCreateStage(stage); setCreateText(""); setShowCreateScript(true); }}
+      onCreate={(stage = "idea") => { setError(null); setNotice(null); setCreateStage(stage); setCreateText(""); setShowCreateScript(true); }}
       createForm={showCreateScript && canWriteScripts ? <ScriptToolPanel title="صفحة سكريبت جديدة" error={error} notice={notice} onClose={() => { if (!saving) setShowCreateScript(false); }}><form className="script-inline-create" onSubmit={(event) => void createScript(event)} aria-busy={saving}>
         <div className="script-inline-create-main"><Plus size={18} /><input ref={(node) => { if (node && !saving && !node.value) node.focus(); }} aria-label="فكرة السكريبت الجديد" required minLength={5} maxLength={180} value={scriptForm.title} onChange={(event) => setScriptForm((form) => ({ ...form, title: event.target.value }))} placeholder="اكتب فكرة السكريبت…" disabled={saving} /><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="spin" size={16} /> : null} إنشاء</Button><Button type="button" variant="ghost" disabled={saving} onClick={() => setShowCreateScript(false)}>إلغاء</Button></div>
         <p>صفحة جديدة في: {scriptFilters.find((filter) => filter.value === createStage)?.label}</p>

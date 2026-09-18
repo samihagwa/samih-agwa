@@ -16,7 +16,7 @@ async function sourceModule(url) {
     let target;
     if (specifier.startsWith(".")) {
       const resolved = new URL(specifier, url);
-      const extension = specifier.endsWith("/lib/scripts") ? ".ts" : ".tsx";
+      const extension = (specifier.endsWith("/lib/scripts") || specifier.endsWith("/useScriptBoardDrag")) ? ".ts" : ".tsx";
       target = await sourceModule(new URL(resolved.href + extension));
     } else target = import.meta.resolve(specifier);
     code = code.replaceAll(`from "${specifier}"`, `from "${target}"`);
@@ -32,17 +32,17 @@ const fixtures = Array.from({ length: 18 }, (_, index) => ({
 }));
 const props = { scripts: fixtures, tasks: [], userId: "writer", canWrite: true,
   search: "", onSearch() {}, statusFilter: "active", onFilter() {},
-  filters: [{ value: "active", label: "العمل الحالي" }], counts: new Map([["active", 18]]),
+  filters: [{ value: "active", label: "العمل الحالي" }, { value: "idea", label: "فكرة" }], counts: new Map([["active", 18]]),
   stageOf: () => "idea", statusOf: () => ({ label: "فكرة", tone: "neutral" }),
   workingId: null, async onStatus() {}, async onDelete() {}, onCreate() {}, createForm: null };
 
-test("notebook opens as compact numbered rows with direct document links and bounded pages", () => {
+test("notebook defaults to board with direct links and a keyboard status alternative", () => {
   const html = renderToStaticMarkup(React.createElement(ScriptLibrary, props));
-  assert.equal((html.match(/data-stage="idea"/g) ?? []).length, 15);
+  assert.equal((html.match(/class="script-board-card"/g) ?? []).length, 18);
   assert.match(html, /href="\/scripts\/qa-1"/);
-  assert.match(html, /1–15 \/ 18/);
+  assert.match(html, /aria-pressed="true"[^>]*>.*?بورد/s);
   assert.match(html, /سكريبت جديد/);
-  assert.match(html, /aria-label="الصفحة التالية"/);
+  assert.match(html, /aria-label="تحريك البورد يسارًا"/);
   assert.doesNotMatch(html, /class="script-row-menu"/);
   assert.doesNotMatch(html, /حذف نهائي/);
   assert.match(html, /تغيير حالة فكرة سكريبت 1/);
@@ -50,9 +50,9 @@ test("notebook opens as compact numbered rows with direct document links and bou
 });
 test("review-only and empty lists do not expose creation", () => {
   const html = renderToStaticMarkup(React.createElement(ScriptLibrary, { ...props, scripts: [], canWrite: false }));
-  assert.match(html, /لا توجد سكريبتات مطابقة/);
+  assert.match(html, /بورد السكريبتات/);
   assert.doesNotMatch(html, /class="script-inline-add"/);
-  assert.match(html, /0–0 \/ 0/);
+  assert.doesNotMatch(html, /class="script-board-card"/);
 });
 test("explicit idea/writing choice is persisted without deriving a destructive text change", () => {
   assert.equal(scriptDraftStage({ spoken_script: "" }), "idea");
@@ -64,7 +64,7 @@ test("explicit idea/writing choice is persisted without deriving a destructive t
 test("reviewers get a label instead of status writes and writer selectors expose keyboard alternatives", () => {
   const html = renderToStaticMarkup(React.createElement(ScriptLibrary, { ...props, userId: "reviewer" }));
   assert.doesNotMatch(html, /تغيير حالة/);
-  assert.match(html, /مشاركة للمراجعة/);
+  assert.match(html, /فكرة سكريبت 1/);
 });
 test("board, nested pages and copy use scoped commands with conflict and leave protection", async () => {
   const [board, pages, editor, migration] = await Promise.all([
@@ -73,8 +73,8 @@ test("board, nested pages and copy use scoped commands with conflict and leave p
     readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260917184952_script_board_and_nested_pages.sql", import.meta.url), "utf8"),
   ]);
-  assert.match(board, /onDrop=/);
-  assert.match(board, /canDrop\(script, group\.value\)/);
+  assert.match(board, /onPointerMove=\{pointer.move\}/);
+  assert.match(board, /useScriptBoardDrag\(boardRef, canDrop/);
   assert.match(pages, /expected_version: active\.edit_version/);
   assert.match(pages, /window\.addEventListener\("beforeunload"/);
   assert.match(editor, /navigator\.clipboard\.writeText\(form\.spoken_script\)/);
@@ -86,9 +86,11 @@ test("board, nested pages and copy use scoped commands with conflict and leave p
 test("document tools are on demand, accessible, and retain explicit AI acceptance", async () => {
   const editor = await readFile(new URL("../components/scripts/ScriptEditor.tsx", import.meta.url), "utf8");
   const panel = await readFile(new URL("../components/scripts/ScriptToolPanel.tsx", import.meta.url), "utf8");
-  for (const name of ["properties", "assistant", "hooks", "production", "versions", "review", "actions"]) {
+  for (const name of ["properties", "assistant", "hooks", "production", "versions", "actions"]) {
     assert.match(editor, new RegExp(`editorPanel === "${name}"`));
   }
+  assert.match(editor, /className="script-inline-comments"/);
+  assert.doesNotMatch(editor, /<ScriptPages/);
   assert.match(editor, /spokenTextInput\.current/);
   assert.match(editor, /window\.addEventListener\("beforeunload"/);
   assert.match(editor, /form\.spoken_script !== rewritePreview\.base/);
