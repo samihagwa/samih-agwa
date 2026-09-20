@@ -23,6 +23,7 @@ import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { canManageTasks } from "../../lib/tasks";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
+import { TeamReportSettings } from "./TeamReportSettings";
 
 type Membership = Tables<"memberships">;
 type Organization = Tables<"organizations">;
@@ -384,6 +385,7 @@ export function TeamWorkspace() {
   const onboardingState = acknowledgements(workspace.membership.onboarding_acknowledgements);
 
   return <section className="team-workspace">
+    {owner ? <TeamReportSettings key={workspace.organization.id} organizationId={workspace.organization.id} people={activePeople} /> : null}
     {error ? <p className="form-notice error" role="alert">{error}</p> : null}
     {notice ? <p className="form-notice success" role="status">{notice}</p> : null}
     {linkedMemberId && workspace.people.some((person) => person.id === linkedMemberId) ? <p className="direct-link-notice" role="status"><UsersRound size={15} /> تم فتح العضو المطلوب مباشرة.</p> : linkedMemberId ? <p className="form-notice error" role="alert">العضو المطلوب غير موجود أو ليس ضمن صلاحيات حسابك.</p> : null}
@@ -438,7 +440,7 @@ export function TeamWorkspace() {
       </article>)}</div>
     </section> : null}
 
-    <aside className="presence-privacy-note"><ShieldCheck size={17} /><div><strong>حضور تشغيلي واضح للفريق</strong><p>نسجل القسم الحالي وآخر نبضة كل دقيقة فقط. لا نسجل نقرات أو كتابة أو محتوى شخصيًا، وهذه البيانات ظاهرة كجزء من سياسة العمل وليست مراقبة خفية.</p></div></aside>
+    <aside className="presence-privacy-note"><ShieldCheck size={17} /><div><strong>حضور تشغيلي واضح للفريق</strong><p>نسجل القسم الحالي وآخر نبضة، وملخص الظهور اليومي لتقارير النشاط. لا نسجل نقرات أو ضغطات لوحة المفاتيح. الدخول ليس دليل إنجاز، والتقارير تعتمد على الأعمال المسجلة فقط.</p></div></aside>
 
     <section className="panel team-presence-panel">
       <div className="section-heading"><div><p className="overline">الحضور الآن</p><h2>مين فاتح المنصة وآخر ظهور؟</h2></div><button className="icon-button" type="button" aria-label="تحديث الحضور" onClick={() => void refreshPresence(workspace.organization.id)}><RefreshCw size={16} /></button></div>

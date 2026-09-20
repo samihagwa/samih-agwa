@@ -243,6 +243,7 @@ function workflowNotificationText(row: JsonRecord) {
 }
 
 function workflowNotificationButton(row: JsonRecord) {
+  if (row.notification_kind === "team_report") return "فتح التقرير الكامل";
   const url = String(row.notification_url ?? "");
   if (url.startsWith("/tasks/")) return "فتح المهمة";
   if (url.startsWith("/crm")) return "فتح العميل";
@@ -270,6 +271,20 @@ async function sendWorkflowNotifications(supabase: ReturnType<typeof adminClient
     });
     if (gateError || !maySend) continue;
 
+    // Re-check after the claim gate but before any Telegram HTTP request. The
+    // existing terminal RPC requires the claimed attempt to have been marked.
+    if (row.notification_kind === "team_report") {
+      const { data: allowed, error: permissionError } = await supabase.rpc("authorize_team_report_delivery", { notification_id: notificationId });
+      if (permissionError || !allowed) {
+        await supabase.rpc("complete_telegram_notification_delivery", {
+          target_notification_id: notificationId, target_claim_token: claimToken,
+          target_terminal_status: "failed", target_message_id: null, target_telegram_error_code: null,
+          target_error: "Report delivery permission unavailable or revoked",
+        });
+        failed += 1;
+        continue;
+      }
+    }
     const notificationPath = String(row.notification_url ?? "");
     const targetUrl = notificationPath.startsWith("/") ? `${siteUrl}${notificationPath}` : `${siteUrl}/tasks`;
     try {

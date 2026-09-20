@@ -4719,6 +4719,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      team_reports_command: {
+        Args: { command: string; org: string; payload?: Json }
+        Returns: Json
+      }
       create_board_script: {
         Args: { organization: string; title: string; stage: string; script_text: string; kind: string; source_text: string; duration: number; input_mode: Database["public"]["Enums"]["script_input_mode"] }
         Returns: string

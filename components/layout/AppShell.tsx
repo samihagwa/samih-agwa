@@ -16,6 +16,7 @@ import { LoginWorkspace } from "../auth/LoginWorkspace";
 import { SessionChip } from "../auth/SessionChip";
 import { PresenceReporter } from "../auth/PresenceReporter";
 import { NotificationCenter } from "../auth/NotificationCenter";
+import { TeamReportInbox } from "../team/TeamReportInbox";
 import { Button } from "../ui/Button";
 import { WorkspaceAssistant } from "../assistant/WorkspaceAssistant";
 import { MemberOnboardingGate } from "../team/MemberOnboardingGate";
@@ -179,6 +180,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="topbar-status"><ShieldCheck size={17} /><span>مساحة تشغيل الفريق</span></div>
         </div>
         <div className="topbar-actions">
+          <TeamReportInbox key={`${session.user.id}:${membership.organization_id}:${membership.role}`} organizationId={membership.organization_id} />
           <NotificationCenter />
           <SessionChip />
         </div>
