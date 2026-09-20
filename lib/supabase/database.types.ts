@@ -4719,6 +4719,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      crm_images_command: {
+        Args: { action: string; target_contact: string; payload?: Json }
+        Returns: Json
+      }
       team_reports_command: {
         Args: { command: string; org: string; payload?: Json }
         Returns: Json

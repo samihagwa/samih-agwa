@@ -26,6 +26,7 @@ import { Button } from "../ui/Button";
 import { SegmentedProgress, type SegmentedProgressStep } from "../ui/SegmentedProgress";
 import { StatusBadge } from "../ui/StatusBadge";
 import { CrmPurchaseFields, readCrmPurchase } from "./CrmPurchaseFields";
+import { CrmConversationImages } from "./CrmConversationImages";
 
 type Contact = Tables<"crm_contacts">;
 type Identity = Tables<"crm_identities">;
@@ -443,6 +444,8 @@ export function CrmCustomerWorkspace({ contactId }: { contactId: string }) {
           {showIdentityForm && remainingKinds.length ? <form className="crm-activity-form crm-inline-tool" onSubmit={(event) => void addIdentity(event)}><label><span>نوع الوسيلة</span><select name="identity_kind">{remainingKinds.map((kind) => <option value={kind} key={kind}>{crmIdentityKindConfig[kind].label}</option>)}</select></label><label><span>القيمة</span><input name="identity_value" dir="ltr" required minLength={3} maxLength={320} /></label><label className="crm-checkbox"><input name="make_primary" type="checkbox" /><span>وسيلة أساسية</span></label><Button type="submit" disabled={working !== null}>{working === "identity" ? <LoaderCircle className="spin" size={14} /> : <Save size={14} />} حفظ</Button></form> : null}
           {showLinkForm ? <form className="crm-activity-form crm-inline-tool" onSubmit={(event) => void addConversationLink(event)}><label><span>المنصة</span><select name="channel">{(Object.keys(crmConversationChannelConfig) as CrmConversationChannel[]).map((channel) => <option value={channel} key={channel}>{crmConversationChannelConfig[channel].label}</option>)}</select></label><label><span>لينك المحادثة</span><input name="url" type="url" dir="ltr" required placeholder="https://..." /></label><label><span>اسم اختياري</span><input name="label" maxLength={80} /></label><label className="crm-checkbox"><input name="make_primary" type="checkbox" /><span>لينك أساسي</span></label><Button type="submit" disabled={working !== null}>{working === "link" ? <LoaderCircle className="spin" size={14} /> : <Save size={14} />} حفظ</Button></form> : null}
         </section>
+
+        {canAct ? <CrmConversationImages key={`${contact.id}:${session.user.id}`} contactId={contact.id} userId={session.user.id} canManage={canManageTasks(workspace.membership.role)} /> : null}
 
         {canAct && contact.stage === "lost" ? <section className="panel crm-customer-section crm-reopen-section">
           <div className="section-heading compact"><div><p className="overline">الملف في غير المحولين</p><h2>إعادة فتح العميل</h2><p>الرجوع يبدأ بمتابعة جديدة؛ بعدها تقدر تسجل نتيجة التواصل والتأهيل بشكل طبيعي.</p></div><History size={19} /></div>

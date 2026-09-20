@@ -13,7 +13,7 @@ export function CenteredDialog({ title, onClose, children }: { title: string; on
     return () => { dialog?.close(); document.body.style.overflow = overflow; trigger?.focus(); };
   }, []);
   return <dialog ref={ref} className="centered-report-dialog" aria-label={title} onCancel={event => { event.preventDefault(); onClose(); }}>
-    <header><h2>{title}</h2><Button type="button" variant="ghost" aria-label="إغلاق التقرير" onClick={onClose}><X size={20} /></Button></header>
+    <header><h2>{title}</h2><Button type="button" variant="ghost" aria-label={`إغلاق ${title}`} onClick={onClose}><X size={20} /></Button></header>
     <div className="report-dialog-body">{children}</div>
   </dialog>;
 }

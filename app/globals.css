@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./team-reports.css";
+@import "./crm-images.css";
 
 :root {
   color-scheme: light;
