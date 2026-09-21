@@ -217,7 +217,7 @@ export default {
       );
 
       if (error) {
-        const userError = /Only organization leadership|active organization member|Publish time|title|full request|raw material|Telegram|brand reference|approved brand|stable request/i.test(error.message);
+        const userError = error.code === "22007" || /Only organization leadership|active organization member|Publish time|title|full request|raw material|Telegram|brand reference|approved brand|stable request/i.test(error.message);
         return jsonResponse(
           { message: userError ? error.message : "تعذّر إنشاء طلب المحتوى. لم يتم حفظ أي جزء من العملية." },
           userError ? 400 : 500,

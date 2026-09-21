@@ -2,6 +2,8 @@
 
 The requester can send an urgent nudge to the current assignee. The assignee explicitly acknowledges it, optionally supplying an expected completion time, or requests help with a reason and details. Only the assignee resolves their help request. These signals never start, complete, block, or reschedule the canonical task and never bypass CRM/content dependency rules.
 
+CRM task navigation (2026-09-21): the board and exact task page share `CrmTaskActions`. “فتح ملف العميل” opens the linked customer overview even after task completion, without opening the follow-up form. “سجّل نتيجة المتابعة” is separate and only shown for non-closed tasks to the assignee or execution administrator, never viewers. Customer access remains enforced by existing CRM authorization; task visibility does not grant customer access. Render tests exercise closed/active and permitted/read-only cases.
+
 - One shared UI on the task board and exact task page, including grouped content work.
 - Urgency resends have a server-enforced 15-minute cooldown; duplicate clicks are also guarded in the UI.
 - Acknowledgement is explicit, not a read receipt inferred from viewing a page.

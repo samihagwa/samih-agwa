@@ -35,6 +35,7 @@ import { useWorkspaceAuth } from "../../lib/supabase/use-workspace-auth";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 import { TaskAttentionControls } from "./TaskAttentionControls";
+import { CrmTaskActions } from "./CrmTaskActions";
 import { CarouselImageFields,CarouselImageGallery } from "../content/CarouselImages";
 import { carouselImagesError } from "../../lib/carousel-images";
 
@@ -687,10 +688,10 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
   const linkedHref = task.content_item_id ? `/tasks/content/${task.content_item_id}`
     : task.launch_deliverable_id ? `/campaigns?deliverable=${task.launch_deliverable_id}#deliverable-${task.launch_deliverable_id}`
       : task.launch_id ? `/campaigns?launch=${task.launch_id}#launch-${task.launch_id}`
-        : task.crm_contact_id ? `/crm/${task.crm_contact_id}?action=complete-follow-up#follow-up-result` : null;
+        : task.crm_contact_id ? `/crm/${task.crm_contact_id}` : null;
   const linkedLabel = task.content_item_id ? "فتح ملف المحتوى"
     : task.launch_deliverable_id || task.launch_id ? "فتح ملف الإطلاق"
-      : task.crm_contact_id ? "تم تنفيذ المتابعة — سجّل النتيجة" : null;
+      : task.crm_contact_id ? "فتح ملف العميل" : null;
   const revisionTimeline = [
     ...revisions.map((revision) => ({
       id: `task:${revision.id}`,
@@ -744,7 +745,7 @@ export function TaskDetailWorkspace({ taskId }: { taskId: string }) {
           {task.status === "review" && isAssignee ? <p className="task-review-waiting">أرسلت المهمة للمراجعة. الاعتماد أو طلب التعديل عند طالب المهمة.</p> : null}
           {canRequestRevision ? <Button type="button" variant="secondary" onClick={() => setShowRevisionForm((value) => !value)}><MessageSquareText size={15} /> طلب تعديل</Button> : null}
           {canDiscuss ? <Button type="button" variant="secondary" onClick={() => setDiscussionOpen((value) => !value)}><MessageSquareText size={15} /> عندي سؤال أو مشكلة</Button> : null}
-          {linkedHref && linkedLabel ? <Button href={linkedHref} variant="secondary"><Route size={15} /> {linkedLabel}</Button> : null}
+          {task.crm_contact_id ? <CrmTaskActions contactId={task.crm_contact_id} status={task.status} canComplete={!readOnly && (isAssignee || platformAdmin)} /> : linkedHref && linkedLabel ? <Button href={linkedHref} variant="secondary"><Route size={15} /> {linkedLabel}</Button> : null}
           {canBlockTask && discussionOpen ? <button className="text-button danger-text" type="button" disabled={working} onClick={() => void changeStatus("blocked")}><AlertTriangle size={14} /> أوقف المهمة لحين حل المشكلة</button> : null}
           {!canStartTask && !canOpenDelivery && !canResumeTask && !canApproveTask && !canRequestRevision && !canDiscuss && !linkedHref ? <p className="task-action-note">لا يوجد إجراء مطلوب من حسابك في الحالة الحالية.</p> : null}
         </aside>

@@ -5,6 +5,7 @@ import { EmojiTextarea } from "../ui/EmojiTextarea";
 import { Button } from "../ui/Button";
 import type { QuickIntakePayload } from "./QuickIntakeForm";
 import { contentPlatformLabel } from "../../lib/content";
+import { contentRequestDate } from "../../lib/content-calendar";
 
 export function VisualContentIntake({format,people,currentUserId,defaultPublish,working,onCreate,onCancel}:{
   format:"carousel"|"long_video"; people:{id:string;name:string}[];currentUserId:string;defaultPublish:string;working:boolean;
@@ -22,12 +23,14 @@ export function VisualContentIntake({format,people,currentUserId,defaultPublish,
     const raw=String(values.get("raw")??"").trim();
     if(!platforms.length){setError("اختر منصة واحدة على الأقل.");return;}
     if(brief.trim().length<10){setError("اكتب تفاصيل الطلب بوضوح.");return;}
+    const publishAt=contentRequestDate(String(values.get("publish")??""));
+    if(!publishAt){setError("اختر يوم النشر الحالي أو يومًا قادمًا بتوقيت القاهرة.");return;}
     requestId.current??=crypto.randomUUID();
     setError("");
     const owner=String(values.get("owner"));
     const saved=await onCreate({request_id:requestId.current,request_format:format,request_platforms:platforms,
       content_title:String(values.get("title")).trim(),content_request_text:brief.trim(),
-      target_publish_at:new Date(`${String(values.get("publish"))}T12:00:00`).toISOString(),
+      target_publish_at:publishAt,
       raw_materials:raw?[{kind:carousel?"source":"raw_video",url:raw}]:[],
       editing_owner_id:owner,thumbnail_owner_id:carousel?owner:String(values.get("thumbnail")),
       publishing_owner_id:String(values.get("publisher")),brand_article_ids:[]});

@@ -44,6 +44,12 @@ export function calendarDateInstant(day: string, previous: string | null = null)
   const clock = previous ? calendarWall(previous).slice(11, 16) : "12:00";
   return calendarInstant(`${day}T${clock}`) ?? calendarInstant(`${day}T12:00`);
 }
+// Intake selects a Cairo calendar day, not a browser-local publish hour.
+export function contentRequestDate(day: string, now = new Date()) {
+  const instant = calendarDateInstant(day);
+  if (!instant || day < calendarDay(now)) return null;
+  return instant;
+}
 export function addCalendarDays(day: string, count: number) {
   const date = new Date(`${day}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + count); return date.toISOString().slice(0, 10);
 }

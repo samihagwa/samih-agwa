@@ -1371,8 +1371,10 @@ test("CRM foundation keeps PII behind RLS and follow-ups inside the shared task 
   assert.match(workspace, /crm-create-dialog-backdrop/);
   assert.match(workspace, /aria-modal="true"/);
   assert.match(workspace, /functions\.invoke\("crm-commands"/);
-  assert.match(taskWorkspace, /تم تنفيذ المتابعة — سجّل النتيجة/);
-  assert.match(taskWorkspace, /action=complete-follow-up#follow-up-result/);
+  assert.match(taskWorkspace, /CrmTaskActions/);
+  const crmTaskActions = await readFile(new URL("../components/tasks/CrmTaskActions.tsx", import.meta.url), "utf8");
+  assert.match(crmTaskActions, /فتح ملف العميل/);
+  assert.match(crmTaskActions, /action=complete-follow-up#follow-up-result/);
   assert.doesNotMatch(migration, /'متابعة عميل محتمل[^']*'\s*,\s*contact_full_name/);
   assert.match(contract, /allowedCrmTransitions/);
   assert.match(contract, /tradingview/);

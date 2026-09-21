@@ -10,4 +10,10 @@ The new-request control offers Reels, YouTube video, and Carousel without changi
 - Database regression runs are transaction-scoped and rolled back, including generated tasks and notifications. Tests cover intake retry, ordering, stale updates, permission denial, and publishing dependency.
 - Calendar completion is a separate manual marker, not actual publication or execution-task completion.
 
+## Day-only intake fix (2026-09-21)
+
+Carousel and YouTube intake interpret the selected day in Africa/Cairo, independent of device timezone. Today and future days are accepted; past or invalid days show an Arabic validation error. The private workflow normalizes the deadline to the end of that Cairo day before allocating dependent task deadlines. Existing records, Reel intake, publishing automation, authorization, and retry idempotency are unchanged. The Edge boundary maps date validation (22007) to HTTP 400.
+
+Verification: timezone/DST/midnight unit tests; actual carousel and YouTube workflows exercised in rollback-only transactions, including today's elapsed midnight, past-day rejection, task deadlines, retry, delivery ordering and grants. No test tasks or notifications are committed. Ayman's own browser submission is not part of this automated verification.
+
 Validation: lint, TypeScript, production build, 126 automated tests; service-role database rollback workflow; isolated browser intake/default-owner and image reorder checks. Production UI verification is reported separately from isolated tests.
